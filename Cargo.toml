@@ -1,0 +1,32 @@
+[package]
+name = "snum"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytemuck = { version = "1.9", default-features = false, optional = true }
+libm = { version = "*", default-features = false, optional = true }
+take_mut = { version = "0.2.2", default-features = false }
+
+[dependencies.num-bigint]
+optional = true          # needs std until Rust 1.36
+version = "*"
+default-features = false
+
+[dependencies.num-traits]
+optional = true
+version = "*"
+default-features = false
+
+[features]
+default = ["std"]
+std = []
+libm = ["dep:libm"]
+bytemuck = ["dep:bytemuck"]
+num-bigint = ["dep:num-bigint", "dep:num-traits"]
+
+[package.metadata.docs.rs]
+# Enable all the features when building the docs on docs.rs
+all-features = true
+# define the configuration attribute `docsrs`
+rustdoc-args = ["--cfg", "docsrs"]

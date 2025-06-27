@@ -1,0 +1,623 @@
+//! implements a `Complex<T>` type, that in large parts matches (is a copy of) the complex type of `num_complex`.
+//! However a lot more functionallity is available with weak trait bounds.
+//! This is made possible by implementing `Add<T>` using `Add<&T>`` and vice versa to trick Rusts type system (i.e. work around the bugs).
+
+// TODO can I fix the reference problems by requiring T: Num<Real = T> for the arithmetic operations on references?
+
+use core::fmt;
+use core::ops::*;
+
+use crate::*;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub struct Complex<T> {
+    pub re: T,
+    pub im: T,
+}
+
+impl<T> Complex<T> {
+    pub fn new(re: T, im: T) -> Self {
+        Self { re, im }
+    }
+}
+
+impl<T: Zero> Complex<T> {
+    pub fn real(re: T) -> Self {
+        Self {
+            re,
+            im: Zero::zero(),
+        }
+    }
+    pub fn imag(im: T) -> Self {
+        Self {
+            re: Zero::zero(),
+            im,
+        }
+    }
+}
+
+impl<T: Zero> Zero for Complex<T>
+where
+    for<'a> &'a T: Add<&'a T, Output = T>,
+{
+    fn is_zero(&self) -> bool {
+        self.re.is_zero() && self.im.is_zero()
+    }
+    fn zero() -> Self {
+        Self {
+            re: Zero::zero(),
+            im: Zero::zero(),
+        }
+    }
+}
+
+impl<T: Zero + One> One for Complex<T>
+where
+    for<'a> &'a T: AddMulSub<Output = T>,
+{
+    fn is_one(&self) -> bool {
+        self.re.is_one() && self.im.is_zero()
+    }
+    fn one() -> Self {
+        Self {
+            re: One::one(),
+            im: Zero::zero(),
+        }
+    }
+}
+
+impl<T: Zero + One> Complex<T> {
+    pub fn i() -> Self {
+        Self {
+            re: Zero::zero(),
+            im: One::one(),
+        }
+    }
+}
+
+// Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
+// can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
+// `Complex<T>` is also `Zeroable`
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::Zeroable> bytemuck::Zeroable for Complex<T> {}
+
+// Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
+// can guarantee it contains no *added* padding. Thus, if `T: Pod`,
+// `Complex<T>` is also `Pod`
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::Pod> bytemuck::Pod for Complex<T> {}
+
+impl<T: Zero> From<T> for Complex<T> {
+    fn from(value: T) -> Self {
+        Self {
+            re: value,
+            im: Zero::zero(),
+        }
+    }
+}
+
+impl<T: FromU64 + Zero> FromU64 for Complex<T> {
+    #[inline(always)]
+    fn from_u64(value: u64) -> Self {
+        Complex::from(T::from_u64(value))
+    }
+}
+
+impl<T: Neg<Output = T>> Neg for Complex<T> {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self {
+            re: -self.re,
+            im: -self.im,
+        }
+    }
+}
+
+macro_rules! impl_add {
+    ($Add:ident, $add:ident) => {
+        impl<T> $Add<Complex<T>> for Complex<T>
+        where
+            for<'a> &'a T: $Add<&'a T, Output = T>,
+        {
+            type Output = Complex<T>;
+            fn $add(self, rhs: Complex<T>) -> Self::Output {
+                Self {
+                    re: self.re.$add(&rhs.re),
+                    im: self.im.$add(&rhs.im),
+                }
+            }
+        }
+        impl<'a, T: Clone + $Add<T, Output = T>> $Add<&'a Complex<T>> for &'a Complex<T> {
+            type Output = Complex<T>;
+            fn $add(self, rhs: &'a Complex<T>) -> Self::Output {
+                Complex {
+                    re: self.re.clone().$add(rhs.re.clone()),
+                    im: self.im.clone().$add(rhs.im.clone()),
+                }
+            }
+        }
+    };
+}
+impl_add!(Add, add);
+impl_add!(Sub, sub);
+
+impl<T> Mul<Complex<T>> for Complex<T>
+where
+    for<'a> &'a T: AddMulSub<Output = T>,
+{
+    type Output = Complex<T>;
+    fn mul(self, rhs: Complex<T>) -> Self::Output {
+        Self {
+            re: &(&self.re * &rhs.re) - &(&self.im * &rhs.im),
+            im: &(&self.im * &rhs.re) + &(&self.re * &rhs.im),
+        }
+    }
+}
+impl<'a, T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>>
+    Mul<&'a Complex<T>> for &'a Complex<T>
+{
+    type Output = Complex<T>;
+    fn mul(self, rhs: &'a Complex<T>) -> Self::Output {
+        Complex {
+            re: self.re.clone() * rhs.re.clone() - self.im.clone() * rhs.im.clone(),
+            im: self.im.clone() * rhs.re.clone() + self.re.clone() * rhs.im.clone(),
+        }
+    }
+}
+
+macro_rules! impl_add_real {
+    ($Add: ident, $add: ident) => {
+        impl<T> $Add<T> for Complex<T>
+        where
+            for<'a> &'a T: $Add<&'a T, Output = T>,
+        {
+            type Output = Complex<T>;
+            fn $add(self, rhs: T) -> Self::Output {
+                Self {
+                    re: self.re.$add(&rhs),
+                    im: self.im,
+                }
+            }
+        }
+        impl<'a, T: Clone + $Add<T, Output = T>> $Add<&'a T> for &'a Complex<T> {
+            type Output = Complex<T>;
+            fn $add(self, rhs: &'a T) -> Self::Output {
+                Complex {
+                    re: self.re.clone().$add(rhs.clone()),
+                    im: self.im.clone(),
+                }
+            }
+        }
+        // can't implement the reverse, because Rust doesn't allow it.
+    };
+}
+impl_add_real!(Add, add);
+impl_add_real!(Sub, sub);
+
+macro_rules! impl_mul_real {
+    ($Mul: ident, $mul: ident) => {
+        impl<T> $Mul<T> for Complex<T>
+        where
+            for<'a> &'a T: $Mul<&'a T, Output = T>,
+        {
+            type Output = Complex<T>;
+            fn $mul(self, rhs: T) -> Self::Output {
+                Self {
+                    re: self.re.$mul(&rhs),
+                    im: self.im.$mul(&rhs),
+                }
+            }
+        }
+        impl<'a, T: Clone + $Mul<T, Output = T>> $Mul<&'a T> for &'a Complex<T> {
+            type Output = Complex<T>;
+            fn $mul(self, rhs: &'a T) -> Self::Output {
+                Complex {
+                    re: self.re.clone().$mul(rhs.clone()),
+                    im: self.im.clone().$mul(rhs.clone()),
+                }
+            }
+        }
+    };
+}
+impl_mul_real!(Mul, mul);
+impl_mul_real!(Div, div);
+
+impl<T> Div<Complex<T>> for Complex<T>
+where
+    for<'a> &'a T: AddMulSubDiv<Output = T>,
+{
+    type Output = Complex<T>;
+    fn div(self, rhs: Complex<T>) -> Self::Output {
+        let abs_sqr = &(&rhs.re * &rhs.re) + &(&rhs.im * &rhs.im);
+        Self {
+            re: &(&(&self.re * &rhs.re) - &(&self.im * &rhs.im)) / &abs_sqr,
+            im: &(&(&self.im * &rhs.re) + &(&self.re * &rhs.im)) / &abs_sqr,
+        }
+    }
+}
+impl<
+    'a,
+    T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T> + Div<T, Output = T>,
+> Div<&'a Complex<T>> for &'a Complex<T>
+{
+    type Output = Complex<T>;
+    fn div(self, rhs: &'a Complex<T>) -> Self::Output {
+        let abs_sqr = rhs.re.clone() * rhs.re.clone() + rhs.im.clone() * rhs.im.clone();
+        Complex {
+            re: (self.re.clone() * rhs.re.clone() - self.im.clone() * rhs.im.clone())
+                / abs_sqr.clone(),
+            im: (self.im.clone() * rhs.re.clone() + self.re.clone() * rhs.im.clone()) / abs_sqr,
+        }
+    }
+}
+
+impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>> RemEuclid for Complex<T> {
+    // correct euclidean division, not the stuff that num_complex had!
+    /// euclidean division, such that `|r|^2 <= |b|^2/2` is satisfied for the remainder `r`
+    fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
+        let a = self;
+        //let r = a % b; // isn't the same!
+        // NOTE: this is very performance critical code, yet it needs precise function
+        let b_sqr = b.re.clone() * b.re.clone() + b.im.clone() * b.im.clone(); // avoid some trait bounds
+        if b_sqr <= One::one() {
+            return (a * &b.conj(), Complex { re: T::zero(), im: T::zero() });
+        }
+        let two = T::one() + T::one();
+        // https://stackoverflow.com/a/18067292
+        let rounded_div = |a: T, b: T| {
+            let b2 = b.clone() / two.clone();
+            (if (a < T::zero()) == (b < T::zero()) {
+                a + b2
+            } else {
+                a - b2
+            }) / b
+        };
+        let ab = a * &b.conj();
+        let m = rounded_div(ab.re, b_sqr.clone()); // = (a/b).re().round() (round(1/2) == 1)
+        let n = rounded_div(ab.im, b_sqr); // = (a/b).im().round()
+        let q = Complex { re: m, im: n };
+        let r = a - &(b * &q);
+        // unique euclidean division ensures the following property:
+        //debug_assert!(r.re.clone()*r.re.clone()+r.im.clone()*r.im.clone() <= (b.re.clone()*b.re.clone()+b.im.clone()*b.im.clone()) / two);
+        (q, r)
+    }
+    fn is_valid_euclid(&self) -> bool {
+        self.re >= T::zero()
+    }
+}
+
+impl<T: NumAnalytic<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
+    /// Calculate the principal Arg of self.
+    #[inline]
+    pub fn arg(&self) -> T {
+        self.im.atan2(&self.re)
+    }
+    /// Convert to polar form (r, theta), such that
+    /// `self = r * exp(i * theta)`
+    #[inline]
+    pub fn to_polar(&self) -> (T, T) {
+        // implement abs_sqr without the reference based addition and multiplication to keep trait bound simpler.
+        let abs_sqr = self.re.clone() * self.re.clone() + self.im.clone() * self.im.clone();
+        (abs_sqr.sqrt(), self.arg())
+    }
+    /// Convert a polar representation into a complex number.
+    #[inline]
+    pub fn from_polar(r: T, theta: T) -> Self {
+        Self::new(r.clone() * theta.cos(), r * theta.sin())
+    }
+}
+
+impl<T: Clone + Neg<Output = T>> Conjugate for Complex<T> {
+    #[inline(always)]
+    fn conj(&self) -> Self {
+        Complex {
+            re: self.re.clone(),
+            im: -self.im.clone(),
+        }
+    }
+}
+impl<T: Num<Real = T> + Zero + Neg<Output = T>> Num for Complex<T>
+where
+    for<'a> &'a T: AddMul<Output = T>,
+{
+    type Real = T;
+    #[inline(always)]
+    fn abs_sqr(&self) -> Self::Real {
+        &(&self.re * &self.re) + &(&self.im * &self.im)
+    }
+    #[inline(always)]
+    fn re(&self) -> Self::Real {
+        self.re.clone()
+    }
+    #[inline(always)]
+    fn is_unit(&self) -> bool {
+        // Note, this can easily overflow.
+        self.abs_sqr().is_unit()
+    }
+}
+
+#[cfg(any(feature = "std", feature = "libm"))]
+impl<T: AlgebraicField<Real = T> + NumAnalytic + PartialOrd> NumAlgebraic for Complex<T>
+where
+    Complex<T>: Num<Real = T>,
+    for<'a> &'a T: AddMulSubDiv<Output = T>,
+{
+    #[inline(always)]
+    fn sqrt(&self) -> Self {
+        if (&(&(&(&self.im * &self.im) / &self.re) + &self.re) - &self.re).is_zero() {
+            let sqrt = self.re.abs().sqrt();
+            let im = &self.im / &(&(T::one() + T::one()) * &sqrt);
+            if self.re >= T::zero() {
+                return Complex { im, re: sqrt };
+            } else {
+                // this makes it different for 0.0 and -0.0 !!!
+                return Complex::new(im.abs(), sqrt.copysign(&self.im));
+            }
+        }
+        // Use angle bisection
+        // Note currently it's limited by the types epsilon at 1.0 for re << 0
+        // e.g. in theory (-1.0 + 1e-20 i).sqrt() = (0.5e-20 + i), but rounding will occur here.
+        // However (-1.0f64 + 2e-8 i).sqrt() = (1e-8 + i) still works.
+        let len = self.abs(); // sqrt eval 1
+        let mut half: Complex<T> = self.clone() / len.clone();
+        half.re = half.re + T::one();
+        let fac = (len / half.abs_sqr()).sqrt(); // sqrt eval 2
+        half * fac
+    }
+    /// Computes the principal value of the cube root of `self`.
+    ///
+    /// This function has one branch cut:
+    ///
+    /// * `(-∞, 0)`, continuous from above.
+    ///
+    /// The branch satisfies `-π/3 ≤ arg(cbrt(z)) ≤ π/3`.
+    ///
+    /// Note that this does not match the usual result for the cube root of
+    /// negative real numbers. For example, the real cube root of `-8` is `-2`,
+    /// but the principal complex cube root of `-8` is `1 + i√3`.
+    #[inline]
+    fn cbrt(&self) -> Self {
+        // TODO maybe I want the real result for negative real numbers? It would introduce less rounding errors and formulas should be invariant wrt the choosen root.
+        if self.im.is_zero() {
+            if self.re >= T::zero() {
+                // simple positive real ∛r, and copy `im` for its sign
+                Self::new(self.re.cbrt(), self.im.clone())
+            } else {
+                // ∛(r e^(iπ)) = ∛r e^(iπ/3) = ∛r/2 + i∛r√3/2
+                // ∛(r e^(-iπ)) = ∛r e^(-iπ/3) = ∛r/2 - i∛r√3/2
+                let one = T::one();
+                let two = &one + &one;
+                let three = &two + &one;
+                let re = (-self.re.clone()).cbrt() / two;
+                let im = &three.sqrt() * &re;
+                Self::new(re.clone(), im.copysign(&self.im))
+            }
+        } else if self.re.is_zero() {
+            // ∛(r e^(iπ/2)) = ∛r e^(iπ/6) = ∛r√3/2 + i∛r/2
+            // ∛(r e^(-iπ/2)) = ∛r e^(-iπ/6) = ∛r√3/2 - i∛r/2
+            let one = T::one();
+            let two = &one + &one;
+            let three = &two + &one;
+            let im = self.im.abs().cbrt() / two;
+            let re = &three.sqrt() * &im;
+            Self::new(re, im.copysign(&self.im))
+        } else {
+            // cbrt can NOT be done faster than with polar decomposition.
+            // see: impossibility of the trisection of an angle.
+            // exact formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
+            // Use NumAnalytic here!
+            // alternatively, there would be an extremely fast converging algorithm using sqrt and cbrt.
+            let one = T::one();
+            let three = &one + &one + one;
+            let (r, theta) = self.to_polar();
+            Self::from_polar(r.cbrt(), theta / three)
+        }
+    }
+    #[inline(always)]
+    fn abs(&self) -> Self::Real {
+        // ComplexFloat uses hypot.
+        // Due to the trait bounds, I have to do it by sqrt(), which has slightly worse behavior.
+        // I have e.g. noticed slightly higher errors in eigenvalues.
+        // This is 2x as fast as hypot. In most cases abs_sqr() should be sufficient though.
+        self.abs_sqr().sqrt()
+    }
+    #[inline(always)]
+    fn sign(&self) -> Self {
+        let a = self.abs_sqr();
+        if a.is_zero() {
+            Complex::one()
+        } else {
+            self.clone() / a.sqrt()
+        }
+    }
+    #[inline(always)]
+    fn copysign(&self, sign: &Self) -> Self {
+        let (a, b) = (self.abs_sqr(), sign.abs_sqr());
+        if b.is_zero() {
+            a.sqrt().into()
+        } else {
+            sign.clone() * (a / b).sqrt()
+        }
+    }
+}
+
+// TODO impl<T: NumAnalytic> NumAnalytic for Complex<T> { }
+
+#[macro_export]
+macro_rules! complex {
+    ($x:literal + $y:literal i) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    ($x:literal - $y:literal i) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    ($x:literal + $y:literal j) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    ($x:literal - $y:literal j) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    (($x:expr) + ($y:expr) i) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    (($x:expr) - ($y:expr) i) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    (($x:expr) + ($y:expr) j) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    (($x:expr) - ($y:expr) j) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    ($x:literal + ($y:expr) i) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    ($x:literal - ($y:expr) i) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    ($x:literal + ($y:expr) j) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    ($x:literal - ($y:expr) j) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    (($x:expr) + $y:literal i) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    (($x:expr) - $y:literal i) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    (($x:expr) + $y:literal j) => {
+        $crate::complex::Complex::new($x, $y)
+    };
+    (($x:expr) - $y:literal j) => {
+        $crate::complex::Complex::new($x, -$y)
+    };
+    ($x:literal i) => {
+        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+    };
+    ($x:literal j) => {
+        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+    };
+    (($x:expr) i) => {
+        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+    };
+    (($x:expr) j) => {
+        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+    };
+    ($x:expr) => {
+        $x.into()
+    };
+}
+
+macro_rules! write_complex {
+    ($f:ident, $t:expr, $prefix:expr, $re:expr, $im:expr, $T:ident) => {{
+        let abs_re = if $re < Zero::zero() {
+            $T::zero() - $re.clone()
+        } else {
+            $re.clone()
+        };
+        let abs_im = if $im < Zero::zero() {
+            $T::zero() - $im.clone()
+        } else {
+            $im.clone()
+        };
+
+        return if let Some(prec) = $f.precision() {
+            fmt_re_im(
+                $f,
+                $re < $T::zero(),
+                $im < $T::zero(),
+                format_args!(concat!("{:.1$", $t, "}"), abs_re, prec),
+                format_args!(concat!("{:.1$", $t, "}"), abs_im, prec),
+            )
+        } else {
+            fmt_re_im(
+                $f,
+                $re < $T::zero(),
+                $im < $T::zero(),
+                format_args!(concat!("{:", $t, "}"), abs_re),
+                format_args!(concat!("{:", $t, "}"), abs_im),
+            )
+        };
+
+        fn fmt_re_im(
+            f: &mut fmt::Formatter<'_>,
+            re_neg: bool,
+            im_neg: bool,
+            real: fmt::Arguments<'_>,
+            imag: fmt::Arguments<'_>,
+        ) -> fmt::Result {
+            let prefix = if f.alternate() { $prefix } else { "" };
+            let sign = if re_neg {
+                "-"
+            } else if f.sign_plus() {
+                "+"
+            } else {
+                ""
+            };
+
+            if im_neg {
+                fmt_complex(
+                    f,
+                    format_args!(
+                        "{}{pre}{re}-{pre}{im}i",
+                        sign,
+                        re = real,
+                        im = imag,
+                        pre = prefix
+                    ),
+                )
+            } else {
+                fmt_complex(
+                    f,
+                    format_args!(
+                        "{}{pre}{re}+{pre}{im}i",
+                        sign,
+                        re = real,
+                        im = imag,
+                        pre = prefix
+                    ),
+                )
+            }
+        }
+
+        #[cfg(feature = "std")]
+        // Currently, we can only apply width using an intermediate `String` (and thus `std`)
+        fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
+            use std::string::ToString;
+            if let Some(width) = f.width() {
+                write!(f, "{0: >1$}", complex.to_string(), width)
+            } else {
+                write!(f, "{}", complex)
+            }
+        }
+
+        #[cfg(not(feature = "std"))]
+        fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
+            write!(f, "{}", complex)
+        }
+    }};
+}
+
+// string conversions
+macro_rules! impl_display {
+    ($Display: ident, $s: literal, $pre: literal) => {
+        impl<T> fmt::$Display for Complex<T>
+        where
+            T: fmt::$Display + Clone + Zero + PartialOrd + Sub<T, Output = T>,
+        {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write_complex!(f, $s, $pre, self.re, self.im, T)
+            }
+        }
+    };
+}
+impl_display!(Display, "", "");
+impl_display!(LowerExp, "e", "");
+impl_display!(UpperExp, "E", "");
+impl_display!(LowerHex, "x", "0x");
+impl_display!(UpperHex, "X", "0x");
+impl_display!(Octal, "o", "0o");
+impl_display!(Binary, "b", "0b");
