@@ -831,7 +831,7 @@ mod complex {
         assert!(!set.contains(&(a + b + c)));
     }
 
-    /*#[test]
+    #[test]
     fn test_sum() {
         let v = vec![_0_1i, _1_0i];
         assert_eq!(v.iter().sum::<Complex64>(), _1_1i);
@@ -843,7 +843,7 @@ mod complex {
         let v = vec![_0_1i, _1_0i];
         assert_eq!(v.iter().product::<Complex64>(), _0_1i);
         assert_eq!(v.into_iter().product::<Complex64>(), _0_1i);
-    }*/
+    }
 
     #[test]
     fn test_zero() {
@@ -1999,52 +1999,43 @@ mod rational {
         assert_eq!(_1_NEG2, Ratio::from((1, -2)));
     }
 
-    /*#[test]
+    #[test]
     fn ratio_iter_sum() {
-        // generic function to assure the iter method can be called
-        // for any Iterator with Item = Ratio<impl Add<T, Output = T>>
-        fn iter_sums<T: core::ops::Add<T, Output = T> + Clone>(slice: &[Ratio<T>]) -> [Ratio<T>; 3] {
-            let mut manual_sum = Ratio::new(T::zero(), T::one());
-            for ratio in slice {
-                manual_sum = manual_sum + ratio;
-            }
-            [manual_sum, slice.iter().sum(), slice.iter().cloned().sum()]
-        }
         // collect into array so test works on no_std
         let mut nums = [Ratio::new(0, 1); 1000];
         for (i, r) in (0..1000).map(|n| Ratio::new(n, 500)).enumerate() {
             nums[i] = r;
         }
-        let sums = iter_sums(&nums[..]);
+        let slice = &nums[..];
+        let mut manual_sum = Ratio::zero();
+        for ratio in slice {
+            manual_sum = &manual_sum + ratio;
+        }
+        let sums = [manual_sum, slice.iter().sum(), slice.iter().cloned().sum()];
         assert_eq!(sums[0], sums[1]);
         assert_eq!(sums[0], sums[2]);
     }
 
     #[test]
     fn ratio_iter_product() {
-        // generic function to assure the iter method can be called
-        // for any Iterator with Item = Ratio<impl Mul<T, Output = T>>
-        fn iter_products<T: core::ops::Mul<T, Output = T> + Clone>(slice: &[Ratio<T>]) -> [Ratio<T>; 3] {
-            let mut manual_prod = Ratio::new(T::one(), T::one());
-            for ratio in slice {
-                manual_prod = manual_prod * ratio;
-            }
-            [
-                manual_prod,
-                slice.iter().product(),
-                slice.iter().cloned().product(),
-            ]
-        }
-
         // collect into array so test works on no_std
         let mut nums = [Ratio::new(0, 1); 1000];
         for (i, r) in (0..1000).map(|n| Ratio::new(n, 500)).enumerate() {
             nums[i] = r;
         }
-        let products = iter_products(&nums[..]);
+        let slice = &nums[..];
+        let mut manual_prod = Ratio::one();
+        for ratio in slice {
+            manual_prod = &manual_prod * ratio;
+        }
+        let products = [
+            manual_prod,
+            slice.iter().product(),
+            slice.iter().cloned().product(),
+        ];
         assert_eq!(products[0], products[1]);
         assert_eq!(products[0], products[2]);
-    }*/
+    }
 
     #[test]
     fn test_num_zero() {

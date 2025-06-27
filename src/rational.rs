@@ -1,12 +1,10 @@
 //! Custom rational type, which allows much more generic types based on [RemEuclid] and handles division by zero like floats without panic.
 
-// TODO implement the operations for all reference combinations by forwarding.
-// TODO implement rem, but not RemEuclid -> no recursion happening here?!?
-
 use core::{
     cmp::Ordering,
-    fmt::*,
+    fmt,
     hash::{Hash, Hasher},
+    iter::{Product, Sum},
     ops::*,
 };
 use take_mut::take;
@@ -158,7 +156,7 @@ impl<T: Zero + One> Default for Ratio<T> {
 
 impl<T: Cancel> Zero for Ratio<T>
 where
-    for<'a> &'a T: AddMulSubDiv<Output = T>,
+    for<'a> &'a T: AddMul<Output = T>,
 {
     fn zero() -> Self {
         Self {
@@ -173,7 +171,7 @@ where
 
 impl<T: PartialEq + Cancel> One for Ratio<T>
 where
-    for<'a> &'a T: Mul<&'a T, Output = T> + Div<&'a T, Output = T>,
+    for<'a> &'a T: Mul<&'a T, Output = T>,
 {
     fn one() -> Self {
         Self {
@@ -238,8 +236,6 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ra
 impl<T: Clone + Zero + Eq + Sub<T, Output = T> + RemEuclid> Eq for Ratio<T> {}
 
 impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T>
-where
-    for<'a> &'a T: Div<&'a T, Output = T>,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if !self.is_finite() || !other.is_finite() {
@@ -326,7 +322,7 @@ where
 }
 impl<T: Cancel + Ord> Ord for Ratio<T>
 where
-    for<'a> &'a T: Mul<&'a T, Output = T> + Div<&'a T, Output = T>,
+    for<'a> &'a T: Mul<&'a T, Output = T>,
 {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap() // may panic!
@@ -552,7 +548,8 @@ impl<'a, T: Cancel + Div<Output = T>> Rem for &'a Ratio<T> {
 }
 impl<T: Cancel> Rem<T> for Ratio<T>
 where
-    for<'a> &'a T: Div<Output = T>, {
+    for<'a> &'a T: Div<Output = T>,
+{
     type Output = Ratio<T>;
     /// remainder like for floats, not the division remainder, but rather a modulo function.
     fn rem(self, rhs: T) -> Self::Output {
@@ -607,9 +604,49 @@ macro_rules! forward_assign_impl {
     };
 }
 forward_assign_impl!(
-    AddAssign, Add, add_assign, add, SubAssign, Sub, sub_assign, sub, MulAssign, Mul, mul_assign, mul, DivAssign, Mul,
-    div_assign, div, RemAssign, Div, rem_assign, rem
+    AddAssign, Add, add_assign, add, SubAssign, Sub, sub_assign, sub, MulAssign, Mul, mul_assign,
+    mul, DivAssign, Mul, div_assign, div, RemAssign, Div, rem_assign, rem
 );
+
+impl<T: Cancel> Sum for Ratio<T>
+where
+    for<'a> &'a T: AddMul<Output = T>,
+{
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.fold(Self::zero(), |acc, c| acc + c)
+    }
+}
+impl<'a, T: Cancel> Sum<&'a Ratio<T>> for Ratio<T> {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = &'a Ratio<T>>,
+    {
+        iter.fold(Self::new_raw(T::zero(), T::one()), |acc, c| &acc + c)
+    }
+}
+
+impl<T: Cancel> Product for Ratio<T>
+where
+    for<'a> &'a T: Mul<Output = T>,
+{
+    fn product<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.fold(Self::one(), |acc, c| acc * c)
+    }
+}
+impl<'a, T: Cancel> Product<&'a Ratio<T>> for Ratio<T> {
+    fn product<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = &'a Ratio<T>>,
+    {
+        iter.fold(Self::new_raw(T::one(), T::one()), |acc, c| &acc * c)
+    }
+}
 
 impl<T: Num + Cancel> Num for Ratio<T>
 where
@@ -681,10 +718,10 @@ impl<T: Clone + Zero + RemEuclid + Hash> Hash for Ratio<T> {
 
 // String conversions
 macro_rules! impl_formatting {
-    ($fmt_trait:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
-        impl<T: $fmt_trait + Clone + One> $fmt_trait for Ratio<T> {
+    ($Display:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
+        impl<T: fmt::$Display + Clone + One> fmt::$Display for Ratio<T> {
             #[cfg(feature = "std")]
-            fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let pre_pad = if self.denom.is_one() {
                     std::format!($fmt_str, self.numer)
                 } else {
@@ -701,7 +738,7 @@ macro_rules! impl_formatting {
                 }
             }
             #[cfg(not(feature = "std"))]
-            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let plus = if f.sign_plus() && self.numer >= T::zero() {
                     "+"
                 } else {
@@ -740,6 +777,27 @@ impl_formatting!(LowerHex, "0x", "{:x}", "{:#x}");
 impl_formatting!(UpperHex, "0x", "{:X}", "{:#X}");
 impl_formatting!(LowerExp, "", "{:e}", "{:#e}");
 impl_formatting!(UpperExp, "", "{:E}", "{:#E}");
+
+#[cfg(feature = "serde")]
+impl<T: serde::Serialize> serde::Serialize for Ratio<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        (&self.numer, &self.denom).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Ratio<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (numer, denom) = serde::Deserialize::deserialize(deserializer)?;
+        Ok(Self::new_raw(numer, denom))
+    }
+}
 
 // TODO add `from_float` for specific types, e.g. `Ratio<i64>::from_float(f: f64)`, `Ratio<i32>::from_float(f: f32)`
 // TODO add `approximate_float`

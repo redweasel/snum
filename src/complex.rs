@@ -6,6 +6,7 @@
 
 use crate::*;
 use core::fmt;
+use core::iter::{Product, Sum};
 use core::ops::*;
 use take_mut::take;
 
@@ -388,10 +389,60 @@ forward_assign_impl!(
     div_assign,
     div,
     RemAssign,
-    (Add, Mul, Sub, Div, Rem), (One),
+    (Add, Mul, Sub, Div, Rem),
+    (One),
     rem_assign,
     rem
 );
+
+impl<T: Zero + Add<Output = T>> Sum for Complex<T> {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.fold(Self::new(T::zero(), T::zero()), |acc, c| Self {
+            re: acc.re.add(c.re),
+            im: acc.im.add(c.im),
+        })
+    }
+}
+impl<'a, T: Zero> Sum<&'a Complex<T>> for Complex<T>
+where
+    for<'b> &'b T: Add<Output = T>,
+{
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = &'a Complex<T>>,
+    {
+        iter.fold(Self::new(T::zero(), T::zero()), |acc, c| Self {
+            re: (&acc.re).add(&c.re),
+            im: (&acc.im).add(&c.im),
+        })
+    }
+}
+
+impl<T: Zero + One> Product for Complex<T>
+where
+    for<'a> &'a T: AddMulSub<Output = T>,
+{
+    fn product<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.fold(Self::new(T::one(), T::zero()), |acc, c| acc * c)
+    }
+}
+impl<'a, T: Clone + Zero + One> Product<&'a Complex<T>> for Complex<T>
+where
+    for<'b> &'b T: AddMulSub<Output = T>,
+{
+    fn product<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = &'a Complex<T>>,
+    {
+        iter.fold(Self::new(T::one(), T::zero()), |acc, c| acc * c.clone())
+    }
+}
 
 impl<T: NumAnalytic<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
     /// Calculate the principal Arg of self.
@@ -969,3 +1020,24 @@ impl_display!(LowerHex, "x", "0x");
 impl_display!(UpperHex, "X", "0x");
 impl_display!(Octal, "o", "0o");
 impl_display!(Binary, "b", "0b");
+
+#[cfg(feature = "serde")]
+impl<T: serde::Serialize> serde::Serialize for Complex<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        (&self.re, &self.im).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Complex<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (re, im) = serde::Deserialize::deserialize(deserializer)?;
+        Ok(Self::new(re, im))
+    }
+}

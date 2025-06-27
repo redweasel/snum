@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bytemuck = { version = "1.9", default-features = false, optional = true }
-libm = { version = "*", default-features = false, optional = true }
 take_mut = { version = "0.2.2", default-features = false }
+libm = { version = "*", default-features = false, optional = true }
+bytemuck = { version = "1.9", default-features = false, optional = true }
+serde = { version = "1.0", default-features = false, optional = true }
 
 [dependencies.num-bigint]
 optional = true          # needs std until Rust 1.36
@@ -24,6 +25,7 @@ std = []
 libm = ["dep:libm"]
 bytemuck = ["dep:bytemuck"]
 num-bigint = ["dep:num-bigint", "dep:num-traits"]
+serde = ["dep:serde"]
 
 [package.metadata.docs.rs]
 # Enable all the features when building the docs on docs.rs
