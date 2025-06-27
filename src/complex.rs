@@ -4,10 +4,10 @@
 
 // TODO can I fix the reference problems by requiring T: Num<Real = T> for the arithmetic operations on references?
 
+use crate::*;
 use core::fmt;
 use core::ops::*;
-
-use crate::*;
+use take_mut::take;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[repr(C)]
@@ -17,7 +17,7 @@ pub struct Complex<T> {
 }
 
 impl<T> Complex<T> {
-    pub fn new(re: T, im: T) -> Self {
+    pub const fn new(re: T, im: T) -> Self {
         Self { re, im }
     }
 }
@@ -72,6 +72,15 @@ impl<T: Zero + One> Complex<T> {
         Self {
             re: Zero::zero(),
             im: One::one(),
+        }
+    }
+}
+
+impl<T: Neg<Output = T>> Complex<T> {
+    pub fn mul_i(self) -> Self {
+        Self {
+            re: -self.im,
+            im: self.re,
         }
     }
 }
@@ -222,8 +231,9 @@ macro_rules! impl_mul_real {
 }
 impl_mul_real!(Mul, mul);
 impl_mul_real!(Div, div);
+impl_mul_real!(Rem, rem);
 
-impl<T> Div<Complex<T>> for Complex<T>
+impl<T> Div for Complex<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
@@ -231,28 +241,69 @@ where
     fn div(self, rhs: Complex<T>) -> Self::Output {
         let abs_sqr = &(&rhs.re * &rhs.re) + &(&rhs.im * &rhs.im);
         Self {
-            re: &(&(&self.re * &rhs.re) - &(&self.im * &rhs.im)) / &abs_sqr,
-            im: &(&(&self.im * &rhs.re) + &(&self.re * &rhs.im)) / &abs_sqr,
+            re: &(&(&self.re * &rhs.re) + &(&self.im * &rhs.im)) / &abs_sqr,
+            im: &(&(&self.im * &rhs.re) - &(&self.re * &rhs.im)) / &abs_sqr,
         }
     }
 }
-impl<
-    'a,
-    T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T> + Div<T, Output = T>,
-> Div<&'a Complex<T>> for &'a Complex<T>
+impl<'a, T: Clone + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T>> Div
+    for &'a Complex<T>
 {
     type Output = Complex<T>;
     fn div(self, rhs: &'a Complex<T>) -> Self::Output {
         let abs_sqr = rhs.re.clone() * rhs.re.clone() + rhs.im.clone() * rhs.im.clone();
         Complex {
-            re: (self.re.clone() * rhs.re.clone() - self.im.clone() * rhs.im.clone())
+            re: (self.re.clone() * rhs.re.clone() + self.im.clone() * rhs.im.clone())
                 / abs_sqr.clone(),
-            im: (self.im.clone() * rhs.re.clone() + self.re.clone() * rhs.im.clone()) / abs_sqr,
+            im: (self.im.clone() * rhs.re.clone() - self.re.clone() * rhs.im.clone()) / abs_sqr,
         }
     }
 }
 
-impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>> RemEuclid for Complex<T> {
+impl<T: Clone + Neg<Output = T> + Add<Output = T> + Mul<Output = T> + Div<Output = T>> Complex<T> {
+    pub fn recip(self) -> Self {
+        let abs_sqr = self.re.clone() * self.re.clone() + self.im.clone() * self.im.clone();
+        Complex {
+            re: self.re / abs_sqr.clone(),
+            im: -self.im / abs_sqr,
+        }
+    }
+}
+
+impl<T: Clone + One> Rem for Complex<T>
+where
+    for<'a> &'a T: AddMulSubDiv<Output = T> + Rem<&'a T, Output = T>,
+{
+    type Output = Complex<T>;
+    fn rem(self, rhs: Self) -> Self::Output {
+        let Complex { re, im } = self.clone() / rhs.clone();
+        let gaussian = Complex::new(&re - &(&re % &T::one()), &im - &(&im % &T::one()));
+        self - rhs * gaussian
+    }
+}
+
+impl<
+    'a,
+    T: Clone
+        + One
+        + Add<Output = T>
+        + Mul<Output = T>
+        + Sub<Output = T>
+        + Div<Output = T>
+        + Rem<Output = T>,
+> Rem for &'a Complex<T>
+{
+    type Output = Complex<T>;
+    fn rem(self, rhs: Self) -> Self::Output {
+        let Complex { re, im } = self / rhs;
+        let gaussian = Complex::new(re.clone() - (re % T::one()), im.clone() - (im % T::one()));
+        self - &(rhs * &gaussian)
+    }
+}
+
+impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>>
+    RemEuclid for Complex<T>
+{
     // correct euclidean division, not the stuff that num_complex had!
     /// euclidean division, such that `|r|^2 <= |b|^2/2` is satisfied for the remainder `r`
     fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
@@ -261,7 +312,13 @@ impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> +
         // NOTE: this is very performance critical code, yet it needs precise function
         let b_sqr = b.re.clone() * b.re.clone() + b.im.clone() * b.im.clone(); // avoid some trait bounds
         if b_sqr <= One::one() {
-            return (a * &b.conj(), Complex { re: T::zero(), im: T::zero() });
+            return (
+                a * &b.conj(),
+                Complex {
+                    re: T::zero(),
+                    im: T::zero(),
+                },
+            );
         }
         let two = T::one() + T::one();
         // https://stackoverflow.com/a/18067292
@@ -286,6 +343,55 @@ impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> +
         self.re >= T::zero()
     }
 }
+
+macro_rules! forward_assign_impl {
+    ($($AddAssign:ident, ($($Add:ident),*), $(($One:ident),)? $add_assign:ident, $add:ident),+) => {
+        $(impl<T: Clone $(+ $One)?> $AddAssign for Complex<T>
+            where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
+            fn $add_assign(&mut self, rhs: Complex<T>) {
+                take(self, |x| x.$add(rhs));
+            }
+        }
+        impl<T: Clone $(+ $One)?> $AddAssign<T> for Complex<T>
+            where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
+            fn $add_assign(&mut self, rhs: T) {
+                take(self, |x| x.$add(rhs));
+            }
+        }
+        impl<'a, T: Clone $(+ $One)? $(+ $Add<Output = T>)+> $AddAssign<&'a Complex<T>> for Complex<T> {
+            fn $add_assign(&mut self, rhs: &'a Complex<T>) {
+                take(self, |x| (&x).$add(rhs));
+            }
+        }
+        impl<'a, T: Clone $(+ $One)? $(+ $Add<Output = T>)+> $AddAssign<&'a T> for Complex<T> {
+            fn $add_assign(&mut self, rhs: &'a T) {
+                take(self, |x| (&x).$add(rhs));
+            }
+        })+
+    };
+}
+forward_assign_impl!(
+    AddAssign,
+    (Add),
+    add_assign,
+    add,
+    SubAssign,
+    (Sub),
+    sub_assign,
+    sub,
+    MulAssign,
+    (Add, Mul, Sub),
+    mul_assign,
+    mul,
+    DivAssign,
+    (Add, Mul, Sub, Div),
+    div_assign,
+    div,
+    RemAssign,
+    (Add, Mul, Sub, Div, Rem), (One),
+    rem_assign,
+    rem
+);
 
 impl<T: NumAnalytic<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
     /// Calculate the principal Arg of self.
@@ -345,7 +451,15 @@ where
 {
     #[inline(always)]
     fn sqrt(&self) -> Self {
-        if (&(&(&(&self.im * &self.im) / &self.re) + &self.re) - &self.re).is_zero() {
+        if self.is_zero() {
+            return Self {
+                re: T::zero(),
+                im: self.im.clone(),
+            }; // copy imaginary zero sign
+        }
+        if !self.re.is_zero()
+            && (&(&(&(&self.im * &self.im) / &self.re) + &self.re) - &self.re).is_zero()
+        {
             let sqrt = self.re.abs().sqrt();
             let im = &self.im / &(&(T::one() + T::one()) * &sqrt);
             if self.re >= T::zero() {
@@ -442,7 +556,241 @@ where
     }
 }
 
-// TODO impl<T: NumAnalytic> NumAnalytic for Complex<T> { }
+// NumAnalytic implementation with very few conditionals (only based on zero check)
+impl<T: NumAnalytic + AlgebraicField<Real = T> + PartialOrd> NumAnalytic for Complex<T>
+where
+    for<'a> &'a T: AddMulSubDiv<Output = T>,
+{
+    #[inline]
+    fn sin(&self) -> Self {
+        Self {
+            re: self.re.sin() * self.im.cosh(),
+            im: self.re.cos() * self.im.sinh(),
+        }
+    }
+
+    #[inline]
+    fn cos(&self) -> Self {
+        Self {
+            re: self.re.cos() * self.im.cosh(),
+            im: -self.re.sin() * self.im.sinh(),
+        }
+    }
+
+    #[inline]
+    fn tan(&self) -> Self {
+        let x = self + self;
+        let d = x.re.cos() + x.im.cosh();
+        Self {
+            re: &x.re.sin() / &d,
+            im: &x.im.sinh() / &d,
+        }
+    }
+
+    /// Computes the principal value of the inverse sine of `self`.
+    ///
+    /// This function has two branch cuts:
+    ///
+    /// * `(-∞, -1)`, continuous from above.
+    /// * `(1, ∞)`, continuous from below.
+    ///
+    /// The branch satisfies `-π/2 ≤ Re(asin(z)) ≤ π/2`.
+    #[inline]
+    fn asin(&self) -> Self {
+        // formula: arcsin(z) = -i ln(sqrt(1-z^2) + iz)
+        -(self.clone().mul_i() + (-(self * self - T::one())).sqrt())
+            .ln()
+            .mul_i()
+    }
+
+    /// Computes the principal value of the inverse cosine of `self`.
+    ///
+    /// This function has two branch cuts:
+    ///
+    /// * `(-∞, -1)`, continuous from above.
+    /// * `(1, ∞)`, continuous from below.
+    ///
+    /// The branch satisfies `0 ≤ Re(acos(z)) ≤ π`.
+    #[inline]
+    fn acos(&self) -> Self {
+        // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
+        -(self + &(-(self * self - T::one())).sqrt().mul_i())
+            .ln()
+            .mul_i()
+    }
+
+    /// Computes the principal value of the inverse tangent of `self`.
+    ///
+    /// This function has two branch cuts:
+    ///
+    /// * `(-∞i, -i]`, continuous from the left.
+    /// * `[i, ∞i)`, continuous from the right.
+    ///
+    /// The branch satisfies `-π/2 ≤ Re(atan(z)) ≤ π/2`.
+    #[inline]
+    fn atan(&self) -> Self {
+        // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
+        let one = T::one();
+        let two = &one + &one;
+        let si = self.clone().mul_i();
+        ((-(&si - &one)).ln() - (&si + &one).ln()).mul_i() / two
+    }
+
+    /// Compute the principal value of the extended inverse tangent.
+    /// For real x > 0, this is equivalent to arctan(y/x), where `y = self`.
+    ///
+    /// This function has branchcuts defined by the implicit equations:
+    /// y * x* - y* * sqrt(x^2 + y^2) purely imaginary and |y| >= |x + sqrt(x^2 + y^2)|
+    fn atan2(&self, x: &Self) -> Self {
+        // to get this without conditionals, implement it as
+        // formula: 2*arctan(y / (x + (x*x + y*y).sqrt()))
+        let res = (self / &(x + &(x * x + self * self).sqrt())).atan();
+        &res + &res
+    }
+
+    #[inline]
+    fn exp(&self) -> Self {
+        let r = self.re.exp();
+        if r.is_zero() {
+            return Self::zero();
+        }
+        if self.im.is_zero() {
+            return Self::real(r);
+        }
+        Self {
+            re: &r * &self.im.cos(),
+            im: &r * &self.im.sin(),
+        }
+    }
+
+    #[inline]
+    fn exp_m1(&self) -> Self {
+        let r = self.re.exp_m1();
+        let two = T::one() + T::one();
+        let s = (&self.im / &two).sin() * two;
+        // (r + 1) * cos - 1 = r * cos + (cos - 1) // lossy at im~0
+        // cos - 1 = -2sin(im/2)^2 // precise at im~0
+        Self {
+            re: &r * &(&T::one() - &s) - s,
+            im: (r + T::one()) * self.im.sin(),
+        }
+    }
+
+    /// Computes the principal value of natural logarithm of `self`.
+    ///
+    /// This function has one branch cut:
+    ///
+    /// * `(-∞, 0]`, continuous from above.
+    ///
+    /// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.
+    #[inline]
+    fn ln(&self) -> Self {
+        let (r, phi) = self.to_polar();
+        Self {
+            re: r.ln(),
+            im: phi,
+        }
+    }
+
+    /// Computes the principal value of natural logarithm of `self + 1`.
+    ///
+    /// This function has one branch cut:
+    ///
+    /// * `(-∞, -1]`, continuous from above.
+    ///
+    /// The branch satisfies `-π ≤ arg(ln(z+1)) ≤ π`.
+    #[inline]
+    fn ln_1p(&self) -> Self {
+        // no good way to write this without conditionals...
+        (self + &T::one()).ln()
+    }
+
+    #[inline]
+    fn sinh(&self) -> Self {
+        Self {
+            re: self.re.sinh() * self.im.cos(),
+            im: self.re.cosh() * self.im.sin(),
+        }
+    }
+
+    #[inline]
+    fn cosh(&self) -> Self {
+        Self {
+            re: self.re.cosh() * self.im.cos(),
+            im: self.re.sinh() * self.im.sin(),
+        }
+    }
+
+    #[inline]
+    fn tanh(&self) -> Self {
+        // formula: tanh(a + bi) = (sinh(2a) + i*sin(2b))/(cosh(2a) + cos(2b))
+        let x = self + self;
+        let d = x.re.cosh() + x.im.cos();
+        Self {
+            re: &x.re.sinh() / &d,
+            im: &x.im.sin() / &d,
+        }
+    }
+
+    /// Computes the principal value of inverse hyperbolic sine of `self`.
+    ///
+    /// This function has two branch cuts:
+    ///
+    /// * `(-∞i, -i)`, continuous from the left.
+    /// * `(i, ∞i)`, continuous from the right.
+    ///
+    /// The branch satisfies `-π/2 ≤ Im(asinh(z)) ≤ π/2`.
+    #[inline]
+    fn asinh(&self) -> Self {
+        // formula: arcsinh(z) = ln(z + sqrt(1+z^2))
+        (self + &(self * self + T::one()).sqrt()).ln()
+    }
+
+    /// Computes the principal value of inverse hyperbolic cosine of `self`.
+    ///
+    /// This function has one branch cut:
+    ///
+    /// * `(-∞, 1)`, continuous from above.
+    ///
+    /// The branch satisfies `-π ≤ Im(acosh(z)) ≤ π` and `0 ≤ Re(acosh(z)) < ∞`.
+    #[inline]
+    fn acosh(&self) -> Self {
+        // formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
+        let one = &T::one();
+        let two = &(one + one);
+        let res = &((&(self + one) / two).sqrt() + (&(self - one) / two).sqrt()).ln();
+        res + res
+    }
+
+    /// Computes the principal value of inverse hyperbolic tangent of `self`.
+    ///
+    /// This function has two branch cuts:
+    ///
+    /// * `(-∞, -1]`, continuous from above.
+    /// * `[1, ∞)`, continuous from below.
+    ///
+    /// The branch satisfies `-π/2 ≤ Im(atanh(z)) ≤ π/2`.
+    #[inline]
+    fn atanh(&self) -> Self {
+        // formula: arctanh(z) = (ln(1+z) - ln(1-z))/2
+        let one = &T::one();
+        let two = one + one;
+        ((self + one).ln() - (&Complex::one() - self).ln()) / two
+    }
+
+    /// Raises `self` to a complex power.
+    #[inline]
+    fn pow(&self, exp: &Self) -> Self {
+        // a slight branch here to handle the zero cases
+        if exp.is_zero() {
+            return Self::one();
+        }
+        if self.is_zero() {
+            return Self::zero();
+        }
+        (&self.ln() * exp).exp()
+    }
+}
 
 #[macro_export]
 macro_rules! complex {

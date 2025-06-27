@@ -129,11 +129,828 @@ pub fn test_sqrt() {
     );
 }
 
+// TODO test more Complex<> NumAlgebraic implementation
+
+#[test]
+fn test_gcd() {
+    let a = 19 * 17 * 5 * 3;
+    let b = 19 * 5 * 3;
+    assert_eq!(lcm(a, b), a);
+    assert_eq!(lcm(b, a), a);
+    assert_eq!(lcm(-a, b), a);
+    assert_eq!(lcm(-b, a), a);
+    assert_eq!(lcm(a, -b), a);
+    assert_eq!(lcm(b, -a), a);
+    assert_eq!(lcm(-a, -b), a);
+    assert_eq!(lcm(-b, -a), a);
+    assert_eq!(gcd(a, b), b);
+    assert_eq!(gcd(b, a), b);
+    assert_eq!(gcd(-a, b), b);
+    assert_eq!(gcd(-b, a), b);
+    assert_eq!(gcd(a, -b), b);
+    assert_eq!(gcd(b, -a), b);
+    assert_eq!(gcd(-a, -b), b);
+    assert_eq!(gcd(-b, -a), b);
+    let c = 19 * 5 * 3 * 7;
+    assert_eq!(gcd(a, c), b);
+    assert_eq!(gcd(c, a), b);
+    assert_eq!(gcd(-a, c), b);
+    assert_eq!(gcd(-c, a), b);
+    assert_eq!(gcd(a, -c), b);
+    assert_eq!(gcd(c, -a), b);
+    assert_eq!(gcd(-a, -c), b);
+    assert_eq!(gcd(-c, -a), b);
+}
+
+#[allow(non_upper_case_globals)]
+mod complex {
+    use crate::complex::*;
+    use crate::*;
+    use core::f64;
+    use std::string::{String, ToString};
+    use std::*;
+
+    type Complex64 = Complex<f64>;
+
+    pub const _0_0i: Complex64 = Complex::new(0.0, 0.0);
+    pub const _1_0i: Complex64 = Complex::new(1.0, 0.0);
+    pub const _1_1i: Complex64 = Complex::new(1.0, 1.0);
+    pub const _0_1i: Complex64 = Complex::new(0.0, 1.0);
+    pub const _neg1_1i: Complex64 = Complex::new(-1.0, 1.0);
+    pub const _05_05i: Complex64 = Complex::new(0.5, 0.5);
+    pub const all_consts: [Complex64; 5] = [_0_0i, _1_0i, _1_1i, _neg1_1i, _05_05i];
+    pub const _4_2i: Complex64 = Complex::new(4.0, 2.0);
+    pub const _1_infi: Complex64 = Complex::new(1.0, f64::INFINITY);
+    pub const _neg1_infi: Complex64 = Complex::new(-1.0, f64::INFINITY);
+    pub const _1_nani: Complex64 = Complex::new(1.0, f64::NAN);
+    pub const _neg1_nani: Complex64 = Complex::new(-1.0, f64::NAN);
+    pub const _inf_0i: Complex64 = Complex::new(f64::INFINITY, 0.0);
+    pub const _neginf_1i: Complex64 = Complex::new(f64::NEG_INFINITY, 1.0);
+    pub const _neginf_neg1i: Complex64 = Complex::new(f64::NEG_INFINITY, -1.0);
+    pub const _inf_1i: Complex64 = Complex::new(f64::INFINITY, 1.0);
+    pub const _inf_neg1i: Complex64 = Complex::new(f64::INFINITY, -1.0);
+    pub const _neginf_infi: Complex64 = Complex::new(f64::NEG_INFINITY, f64::INFINITY);
+    pub const _inf_infi: Complex64 = Complex::new(f64::INFINITY, f64::INFINITY);
+    pub const _neginf_nani: Complex64 = Complex::new(f64::NEG_INFINITY, f64::NAN);
+    pub const _inf_nani: Complex64 = Complex::new(f64::INFINITY, f64::NAN);
+    pub const _nan_0i: Complex64 = Complex::new(f64::NAN, 0.0);
+    pub const _nan_1i: Complex64 = Complex::new(f64::NAN, 1.0);
+    pub const _nan_neg1i: Complex64 = Complex::new(f64::NAN, -1.0);
+    pub const _nan_nani: Complex64 = Complex::new(f64::NAN, f64::NAN);
+
+    #[test]
+    fn test_consts() {
+        // check our constants are what Complex::new creates
+        fn test(c: Complex64, r: f64, i: f64) {
+            assert_eq!(c, Complex::new(r, i));
+        }
+        test(_0_0i, 0.0, 0.0);
+        test(_1_0i, 1.0, 0.0);
+        test(_1_1i, 1.0, 1.0);
+        test(_neg1_1i, -1.0, 1.0);
+        test(_05_05i, 0.5, 0.5);
+
+        assert_eq!(_0_0i, Zero::zero());
+        assert_eq!(_1_0i, One::one());
+    }
+
+    #[test]
+    fn test_arg() {
+        fn test(c: Complex64, arg: f64) {
+            assert!((c.arg() - arg).abs() < 1.0e-6)
+        }
+        test(_1_0i, 0.0);
+        test(_1_1i, 0.25 * f64::consts::PI);
+        test(_neg1_1i, 0.75 * f64::consts::PI);
+        test(_05_05i, 0.25 * f64::consts::PI);
+    }
+
+    #[test]
+    fn test_polar_conv() {
+        fn test(c: Complex64) {
+            let (r, theta) = c.to_polar();
+            assert!((c - Complex::from_polar(r, theta)).abs() < 1e-6);
+        }
+        for &c in all_consts.iter() {
+            test(c);
+        }
+    }
+
+    pub(crate) fn close(a: Complex64, b: Complex64) -> bool {
+        close_to_tol(a, b, 1e-10)
+    }
+
+    fn close_to_tol(a: Complex64, b: Complex64, tol: f64) -> bool {
+        // returns true if a and b are reasonably close
+        let close = (a == b) || (a - b).abs() < tol;
+        if !close {
+            println!("{:?} != {:?}", a, b);
+        }
+        close
+    }
+
+    // Version that also works if re or im are +inf, -inf, or nan
+    fn close_naninf(a: Complex64, b: Complex64) -> bool {
+        close_naninf_to_tol(a, b, 1.0e-10)
+    }
+
+    fn close_naninf_to_tol(a: Complex64, b: Complex64, tol: f64) -> bool {
+        let mut close = true;
+
+        // Compare the real parts
+        if a.re.is_finite() {
+            if b.re.is_finite() {
+                close = (a.re == b.re) || (a.re - b.re).abs() < tol;
+            } else {
+                close = false;
+            }
+        } else if (a.re.is_nan() && !b.re.is_nan())
+            || (a.re.is_infinite()
+                && a.re.is_sign_positive()
+                && !(b.re.is_infinite() && b.re.is_sign_positive()))
+            || (a.re.is_infinite()
+                && a.re.is_sign_negative()
+                && !(b.re.is_infinite() && b.re.is_sign_negative()))
+        {
+            close = false;
+        }
+
+        // Compare the imaginary parts
+        if a.im.is_finite() {
+            if b.im.is_finite() {
+                close &= (a.im == b.im) || (a.im - b.im).abs() < tol;
+            } else {
+                close = false;
+            }
+        } else if (a.im.is_nan() && !b.im.is_nan())
+            || (a.im.is_infinite()
+                && a.im.is_sign_positive()
+                && !(b.im.is_infinite() && b.im.is_sign_positive()))
+            || (a.im.is_infinite()
+                && a.im.is_sign_negative()
+                && !(b.im.is_infinite() && b.im.is_sign_negative()))
+        {
+            close = false;
+        }
+
+        if close == false {
+            println!("{:?} != {:?}", a, b);
+        }
+        close
+    }
+
+    #[test]
+    fn test_exp() {
+        assert!(close(_1_0i.exp(), _1_0i * f64::consts::E));
+        assert!(close(_0_0i.exp(), _1_0i));
+        assert!(close(_0_1i.exp(), Complex::new(1.0.cos(), 1.0.sin())));
+        assert!(close(_05_05i.exp() * _05_05i.exp(), _1_1i.exp()));
+        assert!(close((_0_1i * (-f64::consts::PI)).exp(), _1_0i * (-1.0)));
+        for &c in all_consts.iter() {
+            // e^conj(z) = conj(e^z)
+            assert!(close(c.conj().exp(), c.exp().conj()));
+            // e^(z + 2 pi i) = e^z
+            assert!(close(c.exp(), (c + _0_1i * (f64::consts::PI * 2.0)).exp()));
+        }
+
+        // The test values below were taken from https://en.cppreference.com/w/cpp/numeric/complex/exp
+        assert!(close_naninf(_1_infi.exp(), _nan_nani));
+        assert!(close_naninf(_neg1_infi.exp(), _nan_nani));
+        assert!(close_naninf(_1_nani.exp(), _nan_nani));
+        assert!(close_naninf(_neg1_nani.exp(), _nan_nani));
+        assert!(close_naninf(_inf_0i.exp(), _inf_0i));
+        //assert!(close_naninf(_neginf_1i.exp(), Complex::cis(1.0) * 0.0));
+        //assert!(close_naninf(_neginf_neg1i.exp(), Complex::cis(-1.0) * 0.0));
+        //assert!(close_naninf(_inf_1i.exp(), Complex::cis(1.0) * f64::INFINITY));
+        //assert!(close_naninf(_inf_neg1i.exp(),Complex::cis(-1.0) * f64::INFINITY));
+        assert!(close_naninf(_neginf_infi.exp(), _0_0i)); // Note: ±0±0i: signs of zeros are unspecified
+        //assert!(close_naninf(_inf_infi.exp(), _inf_nani)); // Note: ±∞+NaN*i: sign of the real part is unspecified
+        assert!(close_naninf(_neginf_nani.exp(), _0_0i)); // Note: ±0±0i: signs of zeros are unspecified
+        //assert!(close_naninf(_inf_nani.exp(), _inf_nani)); // Note: ±∞+NaN*i: sign of the real part is unspecified
+        assert!(close_naninf(_nan_0i.exp(), _nan_0i));
+        assert!(close_naninf(_nan_1i.exp(), _nan_nani));
+        assert!(close_naninf(_nan_neg1i.exp(), _nan_nani));
+        assert!(close_naninf(_nan_nani.exp(), _nan_nani));
+    }
+
+    #[test]
+    fn test_ln() {
+        assert!(close(_1_0i.ln(), _0_0i));
+        assert!(close(_0_1i.ln(), _0_1i * (f64::consts::PI / 2.0)));
+        assert!(close(_0_0i.ln(), Complex::new(f64::NEG_INFINITY, 0.0)));
+        assert!(close(
+            (_neg1_1i * _05_05i).ln(),
+            _neg1_1i.ln() + _05_05i.ln()
+        ));
+        for &c in all_consts.iter() {
+            // ln(conj(z() = conj(ln(z))
+            assert!(close(c.conj().ln(), c.ln().conj()));
+            // for this branch, -pi <= arg(ln(z)) <= pi
+            assert!(-f64::consts::PI <= c.ln().arg() && c.ln().arg() <= f64::consts::PI);
+        }
+    }
+
+    #[test]
+    fn test_powc() {
+        let a = Complex::new(2.0, -3.0);
+        let b = Complex::new(3.0, 0.0);
+        //assert!(close(a.pow(b), a.powf(b.re)));
+        //assert!(close(b.pow(a), a.expf(b.re)));
+        let c = Complex::new(1.0 / 3.0, 0.1);
+        assert!(close_to_tol(
+            a.pow(&c),
+            Complex::new(1.65826, -0.33502),
+            1e-5
+        ));
+        let z = Complex::new(0.0, 0.0);
+        assert!(close(z.pow(&b), z));
+        //assert!(z.pow(&Complex64::new(0., f64::INFINITY)).re.is_nan());
+        //assert!(z.pow(&Complex64::new(10., f64::INFINITY)).re.is_nan());
+        //assert!(z.pow(&_inf_infi).re.is_nan());
+        assert!(close(z.pow(&Complex64::new(f64::INFINITY, 0.)), z));
+        //assert!(z.pow(&Complex64::new(-1., 0.)).re.is_infinite());
+        //assert!(z.pow(&Complex64::new(-1., 0.)).im.is_nan());
+
+        for c in all_consts.iter() {
+            assert_eq!(c.pow(&_0_0i), _1_0i);
+        }
+        assert_eq!(_nan_nani.pow(&_0_0i), _1_0i);
+    }
+
+    #[test]
+    fn test_sqrt() {
+        assert!(close(_0_0i.sqrt(), _0_0i));
+        assert!(close(_1_0i.sqrt(), _1_0i));
+        assert!(close(Complex::new(-1.0, 0.0).sqrt(), _0_1i));
+        assert!(close(Complex::new(-1.0, -0.0).sqrt(), _0_1i * (-1.0)));
+        assert!(close(_0_1i.sqrt(), _05_05i * (2.0.sqrt())));
+        for &c in all_consts.iter() {
+            // sqrt(conj(z() = conj(sqrt(z))
+            assert!(close(c.conj().sqrt(), c.sqrt().conj()));
+            // for this branch, -pi/2 <= arg(sqrt(z)) <= pi/2
+            assert!(
+                -f64::consts::FRAC_PI_2 <= c.sqrt().arg()
+                    && c.sqrt().arg() <= f64::consts::FRAC_PI_2
+            );
+            // sqrt(z) * sqrt(z) = z
+            assert!(close(c.sqrt() * c.sqrt(), c));
+        }
+    }
+
+    #[test]
+    fn test_sqrt_real() {
+        for n in (0..100).map(f64::from) {
+            // √(n² + 0i) = n + 0i
+            let n2 = n * n;
+            assert_eq!(Complex64::new(n2, 0.0).sqrt(), Complex64::new(n, 0.0));
+            // √(-n² + 0i) = 0 + ni
+            assert_eq!(Complex64::new(-n2, 0.0).sqrt(), Complex64::new(0.0, n));
+            // √(-n² - 0i) = 0 - ni
+            assert_eq!(Complex64::new(-n2, -0.0).sqrt(), Complex64::new(0.0, -n));
+        }
+    }
+
+    #[test]
+    fn test_sqrt_imag() {
+        for n in (0..100).map(f64::from) {
+            // √(0 + n²i) = n e^(iπ/4)
+            let n2 = n * n;
+            assert!(close(
+                Complex64::new(0.0, n2).sqrt(),
+                Complex64::from_polar(n, f64::consts::FRAC_PI_4)
+            ));
+            // √(0 - n²i) = n e^(-iπ/4)
+            assert!(close(
+                Complex64::new(0.0, -n2).sqrt(),
+                Complex64::from_polar(n, -f64::consts::FRAC_PI_4)
+            ));
+        }
+    }
+
+    #[test]
+    fn test_cbrt() {
+        assert!(close(_0_0i.cbrt(), _0_0i));
+        assert!(close(_1_0i.cbrt(), _1_0i));
+        assert!(close(
+            Complex::new(-1.0, 0.0).cbrt(),
+            Complex::new(0.5, 0.75.sqrt())
+        ));
+        assert!(close(
+            Complex::new(-1.0, -0.0).cbrt(),
+            Complex::new(0.5, -(0.75.sqrt()))
+        ));
+        assert!(close(_0_1i.cbrt(), Complex::new(0.75.sqrt(), 0.5)));
+        assert!(close(_0_1i.conj().cbrt(), Complex::new(0.75.sqrt(), -0.5)));
+        for &c in all_consts.iter() {
+            // cbrt(conj(z() = conj(cbrt(z))
+            assert!(close(c.conj().cbrt(), c.cbrt().conj()));
+            // for this branch, -pi/3 <= arg(cbrt(z)) <= pi/3
+            assert!(
+                -f64::consts::FRAC_PI_3 <= c.cbrt().arg()
+                    && c.cbrt().arg() <= f64::consts::FRAC_PI_3
+            );
+            // cbrt(z) * cbrt(z) cbrt(z) = z
+            assert!(close(c.cbrt() * c.cbrt() * c.cbrt(), c));
+        }
+    }
+
+    #[test]
+    fn test_cbrt_real() {
+        for n in (0..100).map(f64::from) {
+            // ∛(n³ + 0i) = n + 0i
+            let n3 = n * n * n;
+            assert!(close(
+                Complex64::new(n3, 0.0).cbrt(),
+                Complex64::new(n, 0.0)
+            ));
+            // ∛(-n³ + 0i) = n e^(iπ/3)
+            assert!(close(
+                Complex64::new(-n3, 0.0).cbrt(),
+                Complex64::from_polar(n, f64::consts::FRAC_PI_3)
+            ));
+            // ∛(-n³ - 0i) = n e^(-iπ/3)
+            assert!(close(
+                Complex64::new(-n3, -0.0).cbrt(),
+                Complex64::from_polar(n, -f64::consts::FRAC_PI_3)
+            ));
+        }
+    }
+
+    #[test]
+    fn test_cbrt_imag() {
+        for n in (0..100).map(f64::from) {
+            // ∛(0 + n³i) = n e^(iπ/6)
+            let n3 = n * n * n;
+            assert!(close(
+                Complex64::new(0.0, n3).cbrt(),
+                Complex64::from_polar(n, f64::consts::FRAC_PI_6)
+            ));
+            // ∛(0 - n³i) = n e^(-iπ/6)
+            assert!(close(
+                Complex64::new(0.0, -n3).cbrt(),
+                Complex64::from_polar(n, -f64::consts::FRAC_PI_6)
+            ));
+        }
+    }
+
+    #[test]
+    fn test_sin() {
+        assert!(close(_0_0i.sin(), _0_0i));
+        assert!(close((_1_0i * f64::consts::PI * 2.0).sin(), _0_0i));
+        assert!(close(_0_1i.sin(), _0_1i * 1.0.sinh()));
+        for &c in all_consts.iter() {
+            // sin(conj(z)) = conj(sin(z))
+            assert!(close(c.conj().sin(), c.sin().conj()));
+            // sin(-z) = -sin(z)
+            assert!(close((c * -1.0).sin(), c.sin() * -1.0));
+        }
+    }
+
+    #[test]
+    fn test_cos() {
+        assert!(close(_0_0i.cos(), _1_0i));
+        assert!(close((_1_0i * f64::consts::PI * 2.0).cos(), _1_0i));
+        assert!(close(_0_1i.cos(), _1_0i * (1.0.cosh())));
+        for &c in all_consts.iter() {
+            // cos(conj(z)) = conj(cos(z))
+            assert!(close(c.conj().cos(), c.cos().conj()));
+            // cos(-z) = cos(z)
+            assert!(close((c * -1.0).cos(), c.cos()));
+        }
+    }
+
+    #[test]
+    fn test_tan() {
+        assert!(close(_0_0i.tan(), _0_0i));
+        assert!(close((_1_0i * f64::consts::PI / 4.0).tan(), _1_0i));
+        assert!(close((_1_0i * f64::consts::PI).tan(), _0_0i));
+        for &c in all_consts.iter() {
+            // tan(conj(z)) = conj(tan(z))
+            assert!(close(c.conj().tan(), c.tan().conj()));
+            // tan(-z) = -tan(z)
+            assert!(close((c * -1.0).tan(), c.tan() * (-1.0)));
+        }
+    }
+
+    #[test]
+    fn test_asin() {
+        assert!(close(_0_0i.asin(), _0_0i));
+        assert!(close(_1_0i.asin(), _1_0i * (f64::consts::PI / 2.0)));
+        assert!(close(
+            (_1_0i * -1.0).asin(),
+            _1_0i * (-f64::consts::PI / 2.0)
+        ));
+        assert!(close(_0_1i.asin(), _0_1i * ((1.0 + 2.0.sqrt()).ln())));
+        for &c in all_consts.iter() {
+            // asin(conj(z)) = conj(asin(z))
+            assert!(close(c.conj().asin(), c.asin().conj()));
+            // asin(-z) = -asin(z)
+            assert!(close((c * -1.0).asin(), c.asin() * -1.0));
+            // for this branch, -pi/2 <= asin(z).re <= pi/2
+            assert!(-f64::consts::PI / 2.0 <= c.asin().re && c.asin().re <= f64::consts::PI / 2.0);
+        }
+    }
+
+    #[test]
+    fn test_acos() {
+        assert!(close(_0_0i.acos(), _1_0i * (f64::consts::PI / 2.0)));
+        assert!(close(_1_0i.acos(), _0_0i));
+        assert!(close((_1_0i * -1.0).acos(), _1_0i * f64::consts::PI));
+        assert!(close(
+            _0_1i.acos(),
+            Complex::new(f64::consts::PI / 2.0, (2.0.sqrt() - 1.0).ln())
+        ));
+        for &c in all_consts.iter() {
+            // acos(conj(z)) = conj(acos(z))
+            assert!(close(c.conj().acos(), c.acos().conj()));
+            // for this branch, 0 <= acos(z).re <= pi
+            assert!(0.0 <= c.acos().re && c.acos().re <= f64::consts::PI);
+        }
+    }
+
+    #[test]
+    fn test_atan() {
+        assert!(close(_0_0i.atan(), _0_0i));
+        assert!(close(_1_0i.atan(), _1_0i * (f64::consts::PI / 4.0)));
+        assert!(close(
+            (_1_0i * -1.0).atan(),
+            _1_0i * (-f64::consts::PI / 4.0)
+        ));
+        assert!(close(_0_1i.atan(), Complex::new(0.0, f64::INFINITY)));
+        for &c in all_consts.iter() {
+            // atan(conj(z)) = conj(atan(z))
+            assert!(close(c.conj().atan(), c.atan().conj()));
+            // atan(-z) = -atan(z)
+            assert!(close((c * -1.0).atan(), c.atan() * -1.0));
+            // for this branch, -pi/2 <= atan(z).re <= pi/2
+            assert!(-f64::consts::PI / 2.0 <= c.atan().re && c.atan().re <= f64::consts::PI / 2.0);
+        }
+    }
+
+    #[test]
+    fn test_sinh() {
+        assert!(close(_0_0i.sinh(), _0_0i));
+        assert!(close(
+            _1_0i.sinh(),
+            _1_0i * ((f64::consts::E - 1.0 / f64::consts::E) / 2.0)
+        ));
+        assert!(close(_0_1i.sinh(), _0_1i * (1.0.sin())));
+        for &c in all_consts.iter() {
+            // sinh(conj(z)) = conj(sinh(z))
+            assert!(close(c.conj().sinh(), c.sinh().conj()));
+            // sinh(-z) = -sinh(z)
+            assert!(close((c * -1.0).sinh(), c.sinh() * -1.0));
+        }
+    }
+
+    #[test]
+    fn test_cosh() {
+        assert!(close(_0_0i.cosh(), _1_0i));
+        assert!(close(
+            _1_0i.cosh(),
+            _1_0i * ((f64::consts::E + 1.0 / f64::consts::E) / 2.0)
+        ));
+        assert!(close(_0_1i.cosh(), _1_0i * 1.0.cos()));
+        for &c in all_consts.iter() {
+            // cosh(conj(z)) = conj(cosh(z))
+            assert!(close(c.conj().cosh(), c.cosh().conj()));
+            // cosh(-z) = cosh(z)
+            assert!(close((c * -1.0).cosh(), c.cosh()));
+        }
+    }
+
+    #[test]
+    fn test_tanh() {
+        assert!(close(_0_0i.tanh(), _0_0i));
+        assert!(close(
+            _1_0i.tanh(),
+            _1_0i * ((f64::consts::E.powi(2) - 1.0) / (f64::consts::E.powi(2) + 1.0))
+        ));
+        assert!(close(_0_1i.tanh(), _0_1i * (1.0.tan())));
+        for &c in all_consts.iter() {
+            // tanh(conj(z)) = conj(tanh(z))
+            assert!(close(c.conj().tanh(), c.tanh().conj()));
+            // tanh(-z) = -tanh(z)
+            assert!(close((c * -1.0).tanh(), c.tanh() * -1.0));
+        }
+    }
+
+    #[test]
+    fn test_asinh() {
+        assert!(close(_0_0i.asinh(), _0_0i));
+        assert!(close(_1_0i.asinh(), _1_0i * (1.0 + 2.0.sqrt()).ln()));
+        assert!(close(_0_1i.asinh(), _0_1i * (f64::consts::PI / 2.0)));
+        assert!(close(
+            _0_1i.asinh() * -1.0,
+            _0_1i * (-f64::consts::PI / 2.0)
+        ));
+        for &c in all_consts.iter() {
+            // asinh(conj(z)) = conj(asinh(z))
+            assert!(close(c.conj().asinh(), c.asinh().conj()));
+            // asinh(-z) = -asinh(z)
+            assert!(close((c * -1.0).asinh(), c.asinh() * -1.0));
+            // for this branch, -pi/2 <= asinh(z).im <= pi/2
+            assert!(
+                -f64::consts::PI / 2.0 <= c.asinh().im && c.asinh().im <= f64::consts::PI / 2.0
+            );
+        }
+    }
+
+    #[test]
+    fn test_acosh() {
+        assert!(close(_0_0i.acosh(), _0_1i * (f64::consts::PI / 2.0)));
+        assert!(close(_1_0i.acosh(), _0_0i));
+        assert!(close((Complex::new(-1., 0.)).acosh(), _0_1i * f64::consts::PI));
+        assert!(close((_1_0i * -1.0).acosh(), -_0_1i * f64::consts::PI)); // zero sign is used!
+        for &c in all_consts.iter() {
+            // acosh(conj(z)) = conj(acosh(z))
+            assert!(close(c.conj().acosh(), c.acosh().conj()));
+            // for this branch, -pi <= acosh(z).im <= pi and 0 <= acosh(z).re
+            assert!(
+                -f64::consts::PI <= c.acosh().im
+                    && c.acosh().im <= f64::consts::PI
+                    && 0.0 <= c.cosh().re
+            );
+        }
+    }
+
+    #[test]
+    fn test_atanh() {
+        assert!(close(_0_0i.atanh(), _0_0i));
+        assert!(close(_0_1i.atanh(), _0_1i * (f64::consts::PI / 4.0)));
+         assert!(close(_1_0i.atanh(), Complex::new(f64::INFINITY, 0.0)));
+        for &c in all_consts.iter() {
+            // atanh(conj(z)) = conj(atanh(z))
+            assert!(close(c.conj().atanh(), c.atanh().conj()));
+            // atanh(-z) = -atanh(z)
+            assert!(close((c * -1.0).atanh(), c.atanh() * -1.0));
+            // for this branch, -pi/2 <= atanh(z).im <= pi/2
+            assert!(
+                -f64::consts::PI / 2.0 <= c.atanh().im && c.atanh().im <= f64::consts::PI / 2.0
+            );
+        }
+    }
+
+    #[test]
+    fn test_exp_ln() {
+        for &c in all_consts.iter() {
+            // e^ln(z) = z
+            assert!(close(c.ln().exp(), c));
+        }
+    }
+
+    #[test]
+    fn test_trig_to_hyperbolic() {
+        for &c in all_consts.iter() {
+            // sin(iz) = i sinh(z)
+            assert!(close((_0_1i * c).sin(), _0_1i * c.sinh()));
+            // cos(iz) = cosh(z)
+            assert!(close((_0_1i * c).cos(), c.cosh()));
+            // tan(iz) = i tanh(z)
+            assert!(close((_0_1i * c).tan(), _0_1i * c.tanh()));
+        }
+    }
+
+    #[test]
+    fn test_trig_identities() {
+        for &c in all_consts.iter() {
+            // tan(z) = sin(z)/cos(z)
+            assert!(close(c.tan(), c.sin() / c.cos()));
+            // tan(z) = sin(z)/cos(z)
+            assert!(close(c.tan(), &c.sin() / &c.cos()));
+            // sin(z)^2 + cos(z)^2 = 1
+            assert!(close(c.sin() * c.sin() + c.cos() * c.cos(), _1_0i));
+
+            // sin(asin(z)) = z
+            assert!(close(c.asin().sin(), c));
+            // cos(acos(z)) = z
+            assert!(close(c.acos().cos(), c));
+            // tan(atan(z)) = z
+            // i and -i are branch points
+            if c != _0_1i && c != _0_1i * (-1.0) {
+                assert!(close(c.atan().tan(), c));
+            }
+
+            // sin(z) = (e^(iz) - e^(-iz))/(2i)
+            assert!(close(
+                ((_0_1i * c).exp() - (_0_1i * c).exp().recip()) / (_0_1i * 2.0),
+                c.sin()
+            ));
+            // cos(z) = (e^(iz) + e^(-iz))/2
+            assert!(close(
+                ((_0_1i * c).exp() + (_0_1i * c).exp().recip()) / 2.0,
+                c.cos()
+            ));
+            // tan(z) = i (1 - e^(2iz))/(1 + e^(2iz))
+            assert!(close(
+                _0_1i * (_1_0i - (_0_1i * c * 2.0).exp()) / (_1_0i + (_0_1i * c * 2.0).exp()),
+                c.tan()
+            ));
+        }
+    }
+
+    #[test]
+    fn test_hyperbolic_identites() {
+        for &c in all_consts.iter() {
+            // tanh(z) = sinh(z)/cosh(z)
+            assert!(close(c.tanh(), c.sinh() / c.cosh()));
+            // cosh(z)^2 - sinh(z)^2 = 1
+            assert!(close(c.cosh() * c.cosh() - c.sinh() * c.sinh(), _1_0i));
+
+            // sinh(asinh(z)) = z
+            assert!(close(c.asinh().sinh(), c));
+            // cosh(acosh(z)) = z
+            assert!(close(c.acosh().cosh(), c));
+            // tanh(atanh(z)) = z
+            // 1 and -1 are branch points
+            if c != _1_0i && c != _1_0i * (-1.0) {
+                assert!(close(c.atanh().tanh(), c));
+            }
+
+            // sinh(z) = (e^z - e^(-z))/2
+            assert!(close((c.exp() - c.exp().recip()) / 2.0, c.sinh()));
+            // cosh(z) = (e^z + e^(-z))/2
+            assert!(close((c.exp() + c.exp().recip()) / 2.0, c.cosh()));
+            // tanh(z) = ( e^(2z) - 1)/(e^(2z) + 1)
+            assert!(close(
+                ((c * 2.0).exp() - _1_0i) / ((c * 2.0).exp() + _1_0i),
+                c.tanh()
+            ));
+        }
+    }
+
+    #[test]
+    fn test_to_string() {
+        fn test(c: Complex64, s: String) {
+            assert_eq!(c.to_string(), s);
+        }
+        test(_0_0i, "0+0i".to_string());
+        test(_1_0i, "1+0i".to_string());
+        test(_0_1i, "0+1i".to_string());
+        test(_1_1i, "1+1i".to_string());
+        test(_neg1_1i, "-1+1i".to_string());
+        test(-_neg1_1i, "1-1i".to_string());
+        test(_05_05i, "0.5+0.5i".to_string());
+    }
+
+    #[test]
+    fn test_string_formatting() {
+        let a = Complex::new(1.23456, 123.456);
+        assert_eq!(format!("{}", a), "1.23456+123.456i");
+        assert_eq!(format!("{:.2}", a), "1.23+123.46i");
+        assert_eq!(format!("{:.2e}", a), "1.23e0+1.23e2i");
+        assert_eq!(format!("{:+.2E}", a), "+1.23E0+1.23E2i");
+        #[cfg(feature = "std")]
+        assert_eq!(format!("{:+20.2E}", a), "     +1.23E0+1.23E2i");
+
+        let b = Complex::new(0x80, 0xff);
+        assert_eq!(format!("{:X}", b), "80+FFi");
+        assert_eq!(format!("{:#x}", b), "0x80+0xffi");
+        assert_eq!(format!("{:+#b}", b), "+0b10000000+0b11111111i");
+        assert_eq!(format!("{:+#o}", b), "+0o200+0o377i");
+        #[cfg(feature = "std")]
+        assert_eq!(format!("{:+#16o}", b), "   +0o200+0o377i");
+
+        let c = Complex::new(-10, -10000);
+        assert_eq!(format!("{}", c), "-10-10000i");
+        #[cfg(feature = "std")]
+        assert_eq!(format!("{:16}", c), "      -10-10000i");
+    }
+
+    #[test]
+    fn test_hashset() {
+        use std::collections::HashSet;
+        let a = Complex::new(0i32, 0i32);
+        let b = Complex::new(1i32, 0i32);
+        let c = Complex::new(0i32, 1i32);
+
+        let set: HashSet<_> = [a, b, c].iter().cloned().collect();
+        assert!(set.contains(&a));
+        assert!(set.contains(&b));
+        assert!(set.contains(&c));
+        assert!(!set.contains(&(a + b + c)));
+    }
+
+    /*#[test]
+    fn test_sum() {
+        let v = vec![_0_1i, _1_0i];
+        assert_eq!(v.iter().sum::<Complex64>(), _1_1i);
+        assert_eq!(v.into_iter().sum::<Complex64>(), _1_1i);
+    }
+
+    #[test]
+    fn test_prod() {
+        let v = vec![_0_1i, _1_0i];
+        assert_eq!(v.iter().product::<Complex64>(), _0_1i);
+        assert_eq!(v.into_iter().product::<Complex64>(), _0_1i);
+    }*/
+
+    #[test]
+    fn test_zero() {
+        let zero = Complex64::zero();
+        assert!(zero.is_zero());
+
+        let mut c = Complex::new(1.23, 4.56);
+        assert!(!c.is_zero());
+        assert_eq!(c + zero, c);
+
+        c.set_zero();
+        assert!(c.is_zero());
+    }
+
+    #[test]
+    fn test_one() {
+        let one = Complex64::one();
+        assert!(one.is_one());
+
+        let mut c = Complex::new(1.23, 4.56);
+        assert!(!c.is_one());
+        assert_eq!(c * one, c);
+
+        c.set_one();
+        assert!(c.is_one());
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_const() {
+        const R: f64 = 12.3;
+        const I: f64 = -4.5;
+        const C: Complex64 = Complex::new(R, I);
+
+        assert_eq!(C.re, 12.3);
+        assert_eq!(C.im, -4.5);
+    }
+
+    // Test both a + b and a += b
+    macro_rules! test_a_op_b {
+        ($a:ident + $b:expr, $answer:expr) => {
+            assert_eq!($a + $b, $answer);
+            let mut x = $a;
+            x += $b;
+            assert_eq!(x, $answer);
+        };
+        ($a:ident - $b:expr, $answer:expr) => {
+            assert_eq!($a - $b, $answer);
+            let mut x = $a;
+            x -= $b;
+            assert_eq!(x, $answer);
+        };
+        ($a:ident * $b:expr, $answer:expr) => {
+            assert_eq!($a * $b, $answer);
+            let mut x = $a;
+            x *= $b;
+            assert_eq!(x, $answer);
+        };
+        ($a:ident / $b:expr, $answer:expr) => {
+            assert_eq!($a / $b, $answer);
+            let mut x = $a;
+            x /= $b;
+            assert_eq!(x, $answer);
+        };
+        ($a:ident % $b:expr, $answer:expr) => {
+            assert_eq!($a % $b, $answer);
+            let mut x = $a;
+            x %= $b;
+            assert_eq!(x, $answer);
+        };
+    }
+    macro_rules! test_op {
+        ($a:ident $op:tt $b:expr, $answer:expr) => {
+            test_a_op_b!($a $op $b, $answer);
+        };
+    }
+
+    #[test]
+    fn test_div() {
+        test_op!(_neg1_1i / _0_1i, _1_1i);
+        for &c in all_consts.iter() {
+            if c != Zero::zero() {
+                test_op!(c / c, _1_0i);
+            }
+        }
+        assert_eq!(_4_2i / 0.5, Complex::new(8.0, 4.0));
+    }
+
+    #[test]
+    fn test_rem() {
+        test_op!(_neg1_1i % _0_1i, _0_0i);
+        test_op!(_4_2i % _0_1i, _0_0i);
+        test_op!(_05_05i % _0_1i, _05_05i);
+        test_op!(_05_05i % _1_1i, _05_05i);
+        assert_eq!((_4_2i + _05_05i) % _0_1i, _05_05i);
+        assert_eq!((_4_2i + _05_05i) % _1_1i, _05_05i);
+        assert_eq!(_4_2i % 2.0, Complex::new(0.0, 0.0));
+        assert_eq!(_4_2i % 3.0, Complex::new(1.0, 2.0));
+        assert_eq!(_neg1_1i % 2.0, _neg1_1i);
+        assert_eq!(-_4_2i % 3.0, Complex::new(-1.0, -2.0));
+    }
+}
+
 #[cfg(all(test, feature = "std"))]
 mod rational {
     use crate::complex::Complex;
     use crate::*;
-    use libm::ldexp;
     #[cfg(feature = "num-bigint")]
     use num_bigint::*;
     #[cfg(feature = "num-bigint")]
@@ -182,13 +999,6 @@ mod rational {
             (n.denom).to_bigint().unwrap(),
         )
     }
-    #[cfg(not(feature = "num-bigint"))]
-    pub fn to_big(n: Rational64) -> Rational64 {
-        Ratio::new(
-            (n.numer).to_bigint().unwrap(),
-            (n.denom).to_bigint().unwrap(),
-        )
-    }
 
     #[cfg(feature = "std")]
     fn hash<T: std::hash::Hash>(x: &T) -> u64 {
@@ -216,8 +1026,10 @@ mod rational {
         assert_eq!(r3, r.reduced_full().into());
         assert_eq!(r, r2);
         let r = Ratio::new(Complex::new(1, 2), Complex::new(1, -1));
-        let r2 = Ratio::new(Complex::new(-1, 3), Complex::real(2)); // = (-1+3i)/2
+        let r2 = Ratio::new(Complex::new(-1, 3), Complex::real(2)); // = (-1+3i)/2 but represented differently, as 2 is not prime
         assert_eq!(r, r2);
+        assert_eq!(r2.re(), -_1_2);
+        assert_eq!((r2 * Complex::i()).re(), -_3_2);
     }
 
     #[test]
@@ -561,8 +1373,7 @@ mod rational {
     }
 
     mod arith {
-        use super::{_0, _1, _1_2, _2, _3_2, _5_2, _MAX, _MAX_M1, _MIN, _MIN_P1, _NEG1_2, to_big};
-        use super::{Ratio, Rational64};
+        use super::*;
 
         #[test]
         fn test_add() {
@@ -571,6 +1382,7 @@ mod rational {
                 let mut x = a;
                 x += b;
                 assert_eq!(x, c);
+                #[cfg(feature = "num-bigint")]
                 assert_eq!(to_big(a) + to_big(b), to_big(c));
                 //assert_eq!(a.checked_add(&b), Some(c));
                 //assert_eq!(to_big(a).checked_add(&to_big(b)), Some(to_big(c)));
@@ -616,6 +1428,7 @@ mod rational {
                 let mut x = a;
                 x -= b;
                 assert_eq!(x, c);
+                #[cfg(feature = "num-bigint")]
                 assert_eq!(to_big(a) - to_big(b), to_big(c));
                 //assert_eq!(a.checked_sub(&b), Some(c));
                 //assert_eq!(to_big(a).checked_sub(&to_big(b)), Some(to_big(c)));
@@ -653,6 +1466,7 @@ mod rational {
                 let mut x = a;
                 x *= b;
                 assert_eq!(x, c);
+                #[cfg(feature = "num-bigint")]
                 assert_eq!(to_big(a) * to_big(b), to_big(c));
                 //assert_eq!(a.checked_mul(&b), Some(c));
                 //assert_eq!(to_big(a).checked_mul(&to_big(b)), Some(to_big(c)));
@@ -677,14 +1491,14 @@ mod rational {
                 // make big = max/2, but also divisible by 2
                 let big = T::MAX / 4 * 2;
                 let _1_big: Ratio<T> = Ratio::new(1, big);
-                let _2_3: Ratio<T> = Ratio::new(2, 3);
+                let _2_3_: Ratio<T> = Ratio::new(2, 3);
                 //assert_eq!(None, big.checked_mul(&_3));
                 let expected = Ratio::new(1 as T, big / 2 * 3);
-                assert_eq!(expected, _1_big * _2_3);
-                //assert_eq!(Some(expected), _1_big.checked_mul(&_2_3));
+                assert_eq!(expected, _1_big * _2_3_);
+                //assert_eq!(Some(expected), _1_big.checked_mul(&_2_3_));
                 assert_eq!(expected, {
                     let mut tmp = _1_big;
-                    tmp *= _2_3;
+                    tmp *= _2_3_;
                     tmp
                 });
 
@@ -715,6 +1529,7 @@ mod rational {
                     },
                     c
                 );
+                #[cfg(feature = "num-bigint")]
                 assert_eq!(to_big(a) / to_big(b), to_big(c));
                 //assert_eq!(a.checked_div(&b), Some(c));
                 //assert_eq!(to_big(a).checked_div(&to_big(b)), Some(to_big(c)));
@@ -761,13 +1576,14 @@ mod rational {
             });
         }
 
-        /*#[test]
+        #[test]
         fn test_rem() {
             fn test(a: Rational64, b: Rational64, c: Rational64) {
                 assert_eq!(a % b, c);
                 let mut x = a;
                 x %= b;
                 assert_eq!(x, c);
+                #[cfg(feature = "num-bigint")]
                 assert_eq!(to_big(a) % to_big(b), to_big(c))
             }
             fn test_assign(a: Rational64, b: i64, c: Rational64) {
@@ -790,22 +1606,23 @@ mod rational {
             // tests that Ratio(1,2) % Ratio(1, T::max_value()) equals 0
             // for each integer type. Previously, this calculation would overflow.
             for_integers!({
-                let two = T::one() + T::one();
+                let two = 2 as T;
                 // value near to maximum, but divisible by two
                 let max_div2 = T::max_value() / two * two;
-                let _1_max: Ratio<T> = Ratio::new(T::one(), max_div2);
-                let _1_two: Ratio<T> = Ratio::new(T::one(), two);
-                assert!(T::is_zero(&(_1_two % _1_max).numer));
+                let _1_max: Ratio<T> = Ratio::new(1, max_div2);
+                let _1_two: Ratio<T> = Ratio::new(1, two);
+                assert_eq!(&0, &(_1_two % _1_max).numer);
                 let mut tmp: Ratio<T> = _1_two;
                 tmp %= _1_max;
-                assert!(T::is_zero(&tmp.numer));
+                assert_eq!(&0, &tmp.numer);
             });
-        }*/
+        }
 
         #[test]
         fn test_neg() {
             fn test(a: Rational64, b: Rational64) {
                 assert_eq!(-a, b);
+                #[cfg(feature = "num-bigint")]
                 assert_eq!(-to_big(a), to_big(b))
             }
 
@@ -1344,40 +2161,4 @@ mod rational {
         );
         assert_eq!(Ratio::<i32>::new_raw(0, 0).to_f64(), None);
     }*/
-
-    #[test]
-    fn test_ldexp() {
-        use core::f64::{INFINITY, MAX_EXP, MIN_EXP, NAN, NEG_INFINITY};
-        assert_eq!(ldexp(1.0, 0), 1.0);
-        assert_eq!(ldexp(1.0, 1), 2.0);
-        assert_eq!(ldexp(0.0, 1), 0.0);
-        assert_eq!(ldexp(-0.0, 1), -0.0);
-
-        // Cases where ldexp is equivalent to multiplying by 2^exp because there's no over- or
-        // underflow.
-        assert_eq!(ldexp(3.5, 5), 3.5 * 2f64.powi(5));
-        assert_eq!(ldexp(1.0, MAX_EXP - 1), 2f64.powi(MAX_EXP - 1));
-        assert_eq!(ldexp(2.77, MIN_EXP + 3), 2.77 * 2f64.powi(MIN_EXP + 3));
-
-        // Case where initial value is subnormal
-        assert_eq!(ldexp(5e-324, 4), 5e-324 * 2f64.powi(4));
-        assert_eq!(ldexp(5e-324, 200), 5e-324 * 2f64.powi(200));
-
-        // Near underflow (2^exp is too small to represent, but not x*2^exp)
-        assert_eq!(ldexp(4.0, MIN_EXP - 3), 2f64.powi(MIN_EXP - 1));
-
-        // Near overflow
-        assert_eq!(ldexp(0.125, MAX_EXP + 3), 2f64.powi(MAX_EXP));
-
-        // Overflow and underflow cases
-        assert_eq!(ldexp(1.0, MIN_EXP - 54), 0.0);
-        assert_eq!(ldexp(-1.0, MIN_EXP - 54), -0.0);
-        assert_eq!(ldexp(1.0, MAX_EXP), INFINITY);
-        assert_eq!(ldexp(-1.0, MAX_EXP), NEG_INFINITY);
-
-        // Special values
-        assert_eq!(ldexp(INFINITY, 1), INFINITY);
-        assert_eq!(ldexp(NEG_INFINITY, 1), NEG_INFINITY);
-        assert!(ldexp(NAN, 1).is_nan());
-    }
 }

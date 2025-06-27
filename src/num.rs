@@ -205,7 +205,7 @@ pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
     /// absolute value squared
     #[must_use]
     fn abs_sqr(&self) -> Self::Real;
-    /// check if the element has a multiplicative inverse
+    /// check if the element has a multiplicative inverse `x * 1/x * x = x` (1/x might not be unique).
     #[must_use]
     fn is_unit(&self) -> bool;
 }
@@ -262,9 +262,13 @@ pub trait NumAnalytic: NumAlgebraic {
     #[must_use]
     fn cosh(&self) -> Self;
     #[must_use]
+    fn tanh(&self) -> Self;
+    #[must_use]
     fn asinh(&self) -> Self;
     #[must_use]
     fn acosh(&self) -> Self;
+    #[must_use]
+    fn atanh(&self) -> Self;
     #[must_use]
     fn pow(&self, exp: &Self) -> Self;
 }
@@ -380,8 +384,7 @@ where
         if self == b {
             if self.is_zero() {
                 return (T::zero(), T::zero());
-            }
-            else {
+            } else {
                 return (T::one(), T::one());
             }
         }
@@ -401,7 +404,10 @@ where
 /// Calculates the Least Common Multiple (LCM) of the number and
 /// `other`. The result is always `result.is_valid_euclid() == true` (usually that means >= 0).
 #[must_use]
-pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + RemEuclid>(mut a: T, mut b: T) -> T {
+pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + RemEuclid>(
+    mut a: T,
+    mut b: T,
+) -> T {
     if !a.is_valid_euclid() {
         a = T::zero() - a;
     }
@@ -412,36 +418,6 @@ pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + RemEuc
 }
 
 // TODO add extended gcd
-
-pub trait IntPow {
-    /// take the power of an integer and panic, if anything is out of range.
-    fn ipow(&self, base: i32) -> Self;
-}
-macro_rules! impl_int_pow {
-    ($($T:ty),+) => {
-        $(impl IntPow for $T {
-            fn ipow(&self, base: i32) -> Self {
-                let base: $T = base.try_into().unwrap();
-                base.pow((*self).try_into().unwrap())
-            }
-        })+
-    };
-}
-impl_int_pow!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
-);
-macro_rules! impl_int_pow_float {
-    ($($T:ty),+) => {
-        $(impl IntPow for $T {
-            fn ipow(&self, base: i32) -> Self {
-                let base: $T = base as $T; // accept small errors, as the result will be probably be NaN anyway in those cases.
-                base.powf(*self)
-            }
-        })+
-    };
-}
-impl_int_pow_float!(f32, f64);
-
 
 macro_rules! signed_num_type {
     ($($type:ty),+) => {
@@ -510,7 +486,9 @@ macro_rules! num_float_type {
             }
             #[inline(always)]
             fn is_unit(&self) -> bool {
-                self != &0.0
+                // every number has an (approximate) inverse, except for 0 and non finite values.
+                // inverse in the sense, that x * (1.0 / x) = 1.0
+                self != &0.0 && self.is_finite()
             }
         }
         #[cfg(any(feature = "std", feature = "libm"))]
@@ -546,8 +524,10 @@ macro_rules! num_float_type {
             forward_math_impl!($type, ln_1p);
             forward_math_impl!($type, sinh);
             forward_math_impl!($type, cosh);
+            forward_math_impl!($type, tanh);
             forward_math_impl!($type, asinh);
             forward_math_impl!($type, acosh);
+            forward_math_impl!($type, atanh);
             #[inline(always)]
             fn pow(&self, exp: &Self) -> Self {
                 #[cfg(feature = "std")]

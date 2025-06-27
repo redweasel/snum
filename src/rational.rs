@@ -62,7 +62,7 @@ impl<T: Zero + One> Ratio<T>
 where
     for<'a> &'a T: Rem<&'a T, Output = T>,
 {
-    /// Returns the fractional part of a number, with division rounded towards zero.
+    /// Returns the fractional part of a number, with division rounded towards zero. (based on [Rem])
     ///
     /// Satisfies `self == self.trunc() + self.fract()`.
     #[inline]
@@ -390,10 +390,10 @@ macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
         impl<T: Cancel> $Add for Ratio<T>
         where
-            for<'a> &'a T: Mul<&'a T, Output = T> + $Add<&'a T, Output = T>,
+            for<'a> &'a T: Mul<&'a T, Output = T> + $Add<&'a T, Output = T>, // TODO can I move this $Add to the owned version?
         {
             type Output = Ratio<T>;
-            fn $add(self, rhs: Ratio<T>) -> Self::Output {
+            fn $add(self, rhs: Self) -> Self::Output {
                 // avoid overflows by computing the gcd early (in each operation)
                 let (a, b) = self.denom.clone().cancel(rhs.denom.clone());
                 Ratio {
@@ -404,7 +404,7 @@ macro_rules! impl_add {
         }
         impl<'a, T: Cancel + $Add<T, Output = T>> $Add for &'a Ratio<T> {
             type Output = Ratio<T>;
-            fn $add(self, rhs: &'a Ratio<T>) -> Self::Output {
+            fn $add(self, rhs: Self) -> Self::Output {
                 // avoid overflows by computing the gcd early (in each operation)
                 let (a, b) = self.denom.clone().cancel(rhs.denom.clone());
                 Ratio {
@@ -442,7 +442,7 @@ where
     for<'a> &'a T: Mul<Output = T>,
 {
     type Output = Ratio<T>;
-    fn mul(mut self, mut rhs: Ratio<T>) -> Self::Output {
+    fn mul(mut self, mut rhs: Self) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
         // TODO add feature flag to reduce the gcd usage here, as this is excessive, but necessary for many cases.
         (self.denom, rhs.numer) = self.denom.cancel(rhs.numer);
@@ -456,7 +456,7 @@ where
 }
 impl<'a, T: Cancel> Mul for &'a Ratio<T> {
     type Output = Ratio<T>;
-    fn mul(self, rhs: &'a Ratio<T>) -> Self::Output {
+    fn mul(self, rhs: Self) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
         let (sd, rn) = self.denom.clone().cancel(rhs.numer.clone());
         let (sn, rd) = self.numer.clone().cancel(rhs.denom.clone());
@@ -498,20 +498,17 @@ where
     for<'a> &'a T: Mul<&'a T, Output = T>,
 {
     type Output = Ratio<T>;
-    fn div(self, rhs: Ratio<T>) -> Self::Output {
+    fn div(self, rhs: Self) -> Self::Output {
         self * rhs.recip()
     }
 }
 impl<'a, T: Cancel> Div for &'a Ratio<T> {
     type Output = Ratio<T>;
-    fn div(self, rhs: &'a Ratio<T>) -> Self::Output {
+    fn div(self, rhs: Self) -> Self::Output {
         self * &rhs.clone().recip()
     }
 }
-impl<T: Cancel> Div<T> for Ratio<T>
-where
-    for<'a> &'a T: Mul<&'a T, Output = T>, // TODO unnecessary trait bound
-{
+impl<T: Cancel> Div<T> for Ratio<T> {
     type Output = Ratio<T>;
     fn div(self, rhs: T) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
@@ -534,47 +531,84 @@ impl<'a, T: Cancel> Div<&'a T> for &'a Ratio<T> {
     }
 }
 
-// TODO implement normal Rem
+impl<T: Cancel> Rem for Ratio<T>
+where
+    for<'a> &'a T: Div<Output = T>,
+{
+    type Output = Ratio<T>;
+    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    fn rem(self, rhs: Self) -> Self::Output {
+        let f = &self / &rhs;
+        &self - &(&rhs * &(&f.numer / &f.denom))
+    }
+}
+impl<'a, T: Cancel + Div<Output = T>> Rem for &'a Ratio<T> {
+    type Output = Ratio<T>;
+    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    fn rem(self, rhs: Self) -> Self::Output {
+        let f = self / rhs;
+        self - &(rhs * &(f.numer / f.denom))
+    }
+}
+impl<T: Cancel> Rem<T> for Ratio<T>
+where
+    for<'a> &'a T: Div<Output = T>, {
+    type Output = Ratio<T>;
+    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    fn rem(self, rhs: T) -> Self::Output {
+        let f = &self / &rhs;
+        &self - &(rhs * (&f.numer / &f.denom))
+    }
+}
+impl<'a, T: Cancel + Div<Output = T>> Rem<&'a T> for &'a Ratio<T> {
+    type Output = Ratio<T>;
+    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    fn rem(self, rhs: &'a T) -> Self::Output {
+        let f = self / rhs;
+        self - &(rhs.clone() * (f.numer / f.denom))
+    }
+}
 
 impl<T: Cancel> RemEuclid for Ratio<T> {
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
         let f = self / div;
-        (f, T::zero().into())
+        (f, T::zero().into()) // always exactly divisible
     }
     fn is_valid_euclid(&self) -> bool {
-        self.numer.is_zero() && self.denom.is_zero()
+        // only the finite 0 is a possible output of `div_rem_euclid`
+        self.numer.is_zero() && !self.denom.is_zero()
     }
 }
 
 macro_rules! forward_assign_impl {
-    ($($AddAssign:ident, $add_assign:ident, $add:ident),+) => {
+    ($($AddAssign:ident, $Add:ident, $add_assign:ident, $add:ident),+) => {
         $(impl<T: Cancel> $AddAssign for Ratio<T>
-            where for<'a> &'a T: AddMulSub<Output = T> {
+            where for<'a> &'a T: AddMul<Output = T> + $Add<Output = T> {
             fn $add_assign(&mut self, rhs: Ratio<T>) {
                 take(self, |x| x.$add(rhs));
             }
         }
         impl<T: Cancel> $AddAssign<T> for Ratio<T>
-            where for<'a> &'a T: AddMulSub<Output = T> {
+            where for<'a> &'a T: AddMul<Output = T> + $Add<Output = T> {
             fn $add_assign(&mut self, rhs: T) {
                 take(self, |x| x.$add(rhs));
             }
         }
-        impl<'a, T: Cancel> $AddAssign<&'a Ratio<T>> for Ratio<T> {
+        impl<'a, T: Cancel + $Add<Output = T>> $AddAssign<&'a Ratio<T>> for Ratio<T> {
             fn $add_assign(&mut self, rhs: &'a Ratio<T>) {
-                take(self, |x| x.$add(rhs));
+                take(self, |x| (&x).$add(rhs));
             }
         }
-        impl<'a, T: Cancel> $AddAssign<&'a T> for Ratio<T> {
+        impl<'a, T: Cancel + $Add<Output = T>> $AddAssign<&'a T> for Ratio<T> {
             fn $add_assign(&mut self, rhs: &'a T) {
-                take(self, |x| x.$add(rhs));
+                take(self, |x| (&x).$add(rhs));
             }
         })+
     };
 }
 forward_assign_impl!(
-    AddAssign, add_assign, add, SubAssign, sub_assign, sub, MulAssign, mul_assign, mul, DivAssign,
-    div_assign, div
+    AddAssign, Add, add_assign, add, SubAssign, Sub, sub_assign, sub, MulAssign, Mul, mul_assign, mul, DivAssign, Mul,
+    div_assign, div, RemAssign, Div, rem_assign, rem
 );
 
 impl<T: Num + Cancel> Num for Ratio<T>
