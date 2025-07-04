@@ -49,12 +49,42 @@ mod num;
 pub mod complex;
 pub mod rational;
 pub mod float;
+pub mod extension;
 mod from;
 mod power;
+mod continued_fractions;
 
 pub use num::*;
 pub use from::*;
 pub use power::*;
+pub use continued_fractions::*;
 
 #[cfg(test)]
 mod tests;
+
+// More ideas for useful things:
+/*
+/// trait for numbers, where the N-th power can be represented using terms of order N-1 and less.
+/// E.g. `i^2 = -1` or `sqrt(2)^2 = 2`. More complicated examples are the factor-ring `R[x]/(x^3+1-x)`,
+/// where `x^3=x-1`. To use this, create a custom type and implement this trait on it.
+pub trait Factor<T, const N: usize> {
+    fn factor(x: &T) -> [T; N];
+}
+
+/// trait to compute the squared part of a number.
+pub trait SquareFree: Sized {
+    /// decomposes `self` into a square free part `x` and the rest, such that `self=x*y^2`.
+    /// Returns (x, y)
+    fn square_free_factorisation(&self) -> (Self, Self);
+}
+
+// mostly useful for number theory.
+pub trait PartialSqrt: Sized {
+    /// Computes the square root if possible.
+    fn partial_sqrt(&self) -> Option<Self>;
+}
+
+// type for a*b^N with fixed N? similar to fractions!
+// type for mobius transforms (mostly number theory and complex analysis -> into the polynomial package?)
+// type for polynomial roots: `AlgebraicNum` (addition, multiplication and division are again roots of polynomials -> polynomial package)
+*/

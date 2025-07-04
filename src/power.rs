@@ -1,16 +1,15 @@
-use crate::{One, Zero};
-use core::ops::{Add, Mul};
+use crate::{One, Zero, Num};
+use core::ops::{Add, Mul, Div};
 
-pub trait Power {
+pub trait PowerU {
     /// Compute the power with an unsigned integer exponent.
-    /// 
+    ///
     /// Runtime complexity: O(log n) calls of `mul`.
     fn powu(&self, n: u64) -> Self;
 }
 
-impl<T: Clone> Power for T
+impl<T: Clone + One> PowerU for T
 where
-    Self: One,
     for<'a> &'a Self: Mul<&'a Self, Output = Self>,
 {
     fn powu(&self, n: u64) -> Self {
@@ -32,12 +31,33 @@ where
         p
     }
 }
+pub trait PowerI {
+    /// Compute the power with an unsigned integer exponent.
+    ///
+    /// Runtime complexity: O(log n) calls of `mul`.
+    fn powi(&self, n: i64) -> Self;
+}
+
+impl<T: Num + One + Div<Output = T>> PowerI for T
+where
+    for<'a> &'a Self: Mul<&'a Self, Output = Self>,
+{
+    fn powi(&self, n: i64) -> Self {
+        let x = if n < 0 {
+            assert!(self.is_unit());
+            T::one() / self.clone()
+        } else {
+            self.clone()
+        };
+        x.powu(n.unsigned_abs())
+    }
+}
 
 pub trait IntMul {
     /// Multiply with an unsigned integer.
-    /// 
+    ///
     /// Runtime complexity: O(log n) calls of `add`.
-    /// 
+    ///
     /// This is rarely the best solution.
     fn mulu(&self, n: u64) -> Self;
 }

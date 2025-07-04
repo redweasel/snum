@@ -302,30 +302,30 @@ impl<
     }
 }
 
-impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>>
+impl<T: Num + RemEuclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>>
     RemEuclid for Complex<T>
 {
-    // correct euclidean division, not the stuff that num_complex had!
-    /// euclidean division, such that `|r|^2 <= |b|^2/2` is satisfied for the remainder `r`
+    /// Euclidean division of complex numbers, such that `|r|^2 <= |b|^2/2`
+    /// is satisfied for the remainder `r` with non negative real part.
     fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
+        if b.re.is_zero() && b.im.is_zero() {
+            // invalid division -> invalid result, which still holds up the equation self = q * div + r = r;
+            return (T::zero().into(), self.clone());
+        }
         let a = self;
-        //let r = a % b; // isn't the same!
         // NOTE: this is very performance critical code, yet it needs precise function
         let b_sqr = b.re.clone() * b.re.clone() + b.im.clone() * b.im.clone(); // avoid some trait bounds
-        if b_sqr <= One::one() {
+        if b_sqr.is_unit() {
             return (
-                a * &b.conj(),
-                Complex {
-                    re: T::zero(),
-                    im: T::zero(),
-                },
+                &(a * &b.conj()) / &b_sqr,
+                T::zero().into(),
             );
         }
         let two = T::one() + T::one();
         // https://stackoverflow.com/a/18067292
         let rounded_div = |a: T, b: T| {
             let b2 = b.clone() / two.clone();
-            (if (a < T::zero()) == (b < T::zero()) {
+            (if a.is_valid_euclid() == b.is_valid_euclid() { // TODO is there a better way to do this?
                 a + b2
             } else {
                 a - b2
@@ -341,7 +341,9 @@ impl<T: Clone + Zero + One + PartialOrd + Neg<Output = T> + Sub<T, Output = T> +
         (q, r)
     }
     fn is_valid_euclid(&self) -> bool {
-        self.re >= T::zero()
+        // this has nothing to do anymore with negative/positive,
+        // as the remainder algorithm also returns values with negative real part.
+        true
     }
 }
 

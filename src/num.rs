@@ -2,10 +2,14 @@ use core::{fmt::Debug, ops::*};
 
 // TODO Zero and Conjugate could have derive macros just like Clone
 // TODO add powi to the definition of a Field.
-// TODO consider a `CommutativeAdd` and `CommutativeMul` trait,
+// TODO consider `CommutativeAdd` and `CommutativeMul` traits,
 // which are just markers to make clear, that commutativity is given,
 // so algorithms don't have to say in their description,
 // whether they work for non commutative rings as well.
+// TODO similarly add a `TrueDiv` trait, so integers can no longer be used with `Field`.
+// anything that previously worked with `Field` and now doesn't, needs to use `Ring` with `RemEuclid`.
+// Note, that is_unit can already provide a way to check if a division is a true division, however those checks should be in `debug_assert!()`.
+// TODO consider moving `Real` to Conjugate.
 
 /// Defines an additive identity element for `Self`.
 ///
@@ -294,13 +298,25 @@ where
     }
 }
 
-/// like [Rem<T, Output = T>] but with euclidean division, so the remainder `r` is bounded by the denominator `d` e.g. with `|r| <= |d|`.
-/// A valid (but trivial) implementation would be, to always return zero.
+/// like [Rem<T, Output = T>] but with euclidean division.
 pub trait RemEuclid: Sized {
-    /// Compute the euclidean division and remainder.
+    /// Compute the euclidean division `q` and remainder `r` of `self`, such that `self = q * div + r`.
+    /// 
+    /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `div` with `|r| < |div|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
+    /// - If the divisor is a unit, the remainder is also required to be 0.
+    /// - If the number is signed, the positive sign solution is returned. In all cases `is_valid_euclid` needs to be true on the result remainder,
+    /// - The result must make the Euclidean algorithm to compute the gcd convergent.
+    /// - Division by zero may panic, or return the invalid value `(q=0, r=self)`.
+    /// 
+    /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as `|r|` might be larger than `|div|`.
+    /// For fields on the other hand, the implementation `(q=self/div, r=0)` IS valid, however fields may also implement a
+    /// different notion of division here based on modulo, as that also fulfills the condition, but not with minimal `r`.
+    /// Note, that even if only `r=0` is returned, `is_valid_euclid` still has to consider all positive numbers to be valid,
+    /// due to it's condition that x or -x need to be valid.
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self);
     /// Return, whether the number could be the result of a euclidean remainder.
     /// Note, that zero is always "valid euclid".
+    /// 
     /// For all x: x or -x need to be "valid euclid".
     fn is_valid_euclid(&self) -> bool;
 }

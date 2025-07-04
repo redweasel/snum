@@ -9,7 +9,7 @@ use core::{
 };
 use take_mut::take;
 
-use crate::num::*;
+use crate::{IntoDiscrete, num::*};
 use crate::{FromU64, complex::Complex};
 
 /// A fraction, or rational number `p/q`.
@@ -72,38 +72,43 @@ where
         }
     }
 }
-impl<T: Cancel + PartialOrd> Ratio<T>
+impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T>
 where
     for<'a> &'a T: Mul<&'a T, Output = T> + Div<&'a T, Output = T>,
 {
+    type Output = T;
     /// rounds to the next integer towards -oo, using [RemEuclid].
-    #[inline]
-    pub fn floor(&self) -> Self {
-        self.numer.div_rem_euclid(&self.denom).0.into()
-    }
-    /// rounds to the next integer towards +oo, using [RemEuclid].
-    #[inline]
-    pub fn ceil(&self) -> Self {
-        let (q, r) = self.numer.div_rem_euclid(&self.denom);
-        if r.is_zero() {
-            q.into()
-        } else {
-            (q + T::one()).into()
+    fn floor(&self) -> T {
+        if !self.is_finite() {
+            panic!("Called floor on non finite rational");
         }
+        // TODO there is no guarantee, that this is the correct floor...
+        // e.g. for Complex<i32> this will NOT do the floor in both components.
+        if self.denom >= T::zero() {
+            self.numer.div_rem_euclid(&self.denom)
+        } else {
+            (T::zero() - self.numer.clone()).div_rem_euclid(&(T::zero() - self.denom.clone()))
+        }
+        .0
     }
     /// rounds to the closest integer, breaking ties by rounding away from zero.
-    #[inline]
-    pub fn round(&self) -> Self {
-        let t1 = self.floor().numer;
-        let t2 = t1.clone() + T::one();
+    fn round(&self) -> T {
+        if !self.is_finite() {
+            panic!("Called round on non finite rational");
+        }
+        let mut t1 = self.floor();
+        let mut t2 = t1.clone() + T::one();
+        if self.denom < T::zero() {
+            (t1, t2) = (t2, t1);
+        }
         let d1 = self.numer.clone() - &t1 * &self.denom;
         let d2 = &t2 * &self.denom - self.numer.clone();
         if t1 >= T::zero() {
             // round up
-            Ratio::from(if d1 < d2 { t1 } else { t2 })
+            if d1 < d2 { t1 } else { t2 }
         } else {
             // round down
-            Ratio::from(if d1 <= d2 { t1 } else { t2 })
+            if d1 <= d2 { t1 } else { t2 }
         }
     }
 }
@@ -136,6 +141,7 @@ impl<T: Cancel> Ratio<T> {
 impl<T: Num + Cancel + Div<Output = T>> Ratio<T> {
     /// reduce, not only by canceling, but also by dividing by the denominator, if it has a representable inverse.
     pub fn reduced_full(self) -> Self {
+        // TODO maybe use div_rem_euclid instead of Div?
         let (mut numer, mut denom) = self.numer.cancel(self.denom);
         if denom.is_unit() {
             numer = numer / denom;
@@ -198,7 +204,7 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ra
                 false
             };
         }
-        // Compare as floored integers and remainders
+        // Compare by comparing the continued fraction expansion. TODO make iterative using continued fractions iterator.
         // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
         // when negative denominators are used, so the denominators have to be checked.
         let a = if self.denom.is_valid_euclid() {
@@ -235,8 +241,7 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ra
 }
 impl<T: Clone + Zero + Eq + Sub<T, Output = T> + RemEuclid> Eq for Ratio<T> {}
 
-impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T>
-{
+impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if !self.is_finite() || !other.is_finite() {
             if self.is_nan() || other.is_nan() {
@@ -257,6 +262,7 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T>
             return Some(s.cmp(&o));
         }
         // very smart way to write this function from `num_rational`
+        // compare by comparing the continued fraction expansion. TODO make iterative using continued fractions iterator.
         if self.denom == other.denom {
             // With equal denominators, the numerators can be compared
             let ord = self.numer.partial_cmp(&other.numer);
@@ -568,12 +574,17 @@ impl<'a, T: Cancel + Div<Output = T>> Rem<&'a T> for &'a Ratio<T> {
 
 impl<T: Cancel> RemEuclid for Ratio<T> {
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
+        // always exactly divisible.
         let f = self / div;
-        (f, T::zero().into()) // always exactly divisible
+        (f, T::zero().into())
+        // alternative: rational division as integers
+        // -> bring them to the same denominator, then do the remainder
+        // problem: overflows easily.
     }
     fn is_valid_euclid(&self) -> bool {
-        // only the finite 0 is a possible output of `div_rem_euclid`
-        self.numer.is_zero() && !self.denom.is_zero()
+        // only the finite 0 is a possible output of `div_rem_euclid`, however either x or -x need to be valid,
+        // so use rem_euclid on the numerator and call some more numbers valid euclid.
+        self.numer.is_valid_euclid() && !self.denom.is_zero()
     }
 }
 
@@ -739,11 +750,12 @@ macro_rules! impl_formatting {
             }
             #[cfg(not(feature = "std"))]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let plus = if f.sign_plus() && self.numer >= T::zero() {
-                    "+"
+                let plus = ""; /*if f.sign_plus() && self.numer >= T::zero() {
+                "+"
                 } else {
-                    ""
-                };
+                ""
+                };*/
+                // + not currently supported in no_std environment.
                 if self.denom.is_one() {
                     if f.alternate() {
                         write!(f, concat!("{}", $fmt_alt), plus, self.numer)
@@ -799,6 +811,5 @@ impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Ratio<T> {
     }
 }
 
-// TODO add `from_float` for specific types, e.g. `Ratio<i64>::from_float(f: f64)`, `Ratio<i32>::from_float(f: f32)`
-// TODO add `approximate_float`
+// TODO add `approximate_float` (see [crate::continued_fractions])
 // both of the above can be essentially copied from `num_rational`.

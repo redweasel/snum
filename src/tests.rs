@@ -1,6 +1,10 @@
 use super::*;
-use crate::complex::*;
-use std::*;
+use crate::{
+    complex::*,
+    extension::{Sqrt, SqrtExt},
+    rational::Ratio,
+};
+use std::{io::Write, *};
 
 #[test]
 pub fn test_macros() {
@@ -129,6 +133,82 @@ pub fn test_sqrt() {
     );
 }
 
+#[test]
+fn test_euclid() {
+    for i in -5i64..=5 {
+        for j in -5..=5 {
+            for a in -5..=5 {
+                for b in -5..=5 {
+                    //println!("{i} {j} {a} {b}");
+                    if i != 0 || j != 0 {
+                        let x = Complex::new(a, b);
+                        let d = Complex::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(r.abs_sqr() <= d.abs_sqr() / 2);
+
+                        let x = SqrtExt::<_, Sqrt<_, 2>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 2>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(
+                            r.abs_sqr() < d.abs_sqr(),
+                            "({x})/({d}) -> ({q}, {r}) [ab={}, b_sqr={}]",
+                            x * d.conj_ext(),
+                            d.abs_sqr_ext()
+                        );
+                        //assert!(r.abs_sqr_ext().abs() < d.abs_sqr_ext().abs());
+
+                        let x = SqrtExt::<_, Sqrt<_, 3>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 3>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(
+                            r.abs_sqr() < d.abs_sqr(),
+                            "({x})/({d}) -> ({q}, {r}) [ab={}, b_sqr={}]",
+                            x * d.conj_ext(),
+                            d.abs_sqr_ext()
+                        );
+                        //assert!(r.abs_sqr_ext().abs() < d.abs_sqr_ext().abs());
+
+                        let x = SqrtExt::<_, Sqrt<_, 5>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 5>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(r.abs_sqr() < d.abs_sqr());
+
+                        let x = SqrtExt::<_, Sqrt<_, 6>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 6>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(r.abs_sqr() < d.abs_sqr());
+
+                        let x = SqrtExt::<_, Sqrt<_, 7>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 7>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(r.abs_sqr() < d.abs_sqr());
+                    }
+                    if i != 0 && j != 0 && b != 0 {
+                        let x = Ratio::new(a, b);
+                        let d = Ratio::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
+                        assert!(r.abs_sqr() < d.abs_sqr());
+                    }
+                }
+            }
+        }
+    }
+}
+
 // TODO test more Complex<> NumAlgebraic implementation
 
 #[test]
@@ -160,6 +240,31 @@ fn test_gcd() {
     assert_eq!(gcd(c, -a), b);
     assert_eq!(gcd(-a, -c), b);
     assert_eq!(gcd(-c, -a), b);
+    for i in -7i64..=7 {
+        for j in -7..=7 {
+            for a in -7..=7 {
+                for b in -7..=7 {
+                    const N: u64 = 6; // fails for N=5
+                    let x = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
+                    let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
+                    //print!("{x}, {d} -> ");
+                    //let _ = std::io::stdout().flush();
+                    let _g = gcd(x, d); // may fail with overflow if the gcd doesn't converge.
+                    //println!("{}", g);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_rem_for_gcd() {
+    let mut a = SqrtExt::<i64, Sqrt<_, 3>>::new(-1, -7);
+    let mut b = SqrtExt::<_, Sqrt<_, 3>>::new(-7, -7);
+    while !b.is_zero() {
+        (b, a) = (a.div_rem_euclid(&b).1, b); // fails here by overflowing
+        println!("{a}, {b}");
+    }
 }
 
 #[allow(non_upper_case_globals)]
@@ -660,7 +765,10 @@ mod complex {
     fn test_acosh() {
         assert!(close(_0_0i.acosh(), _0_1i * (f64::consts::PI / 2.0)));
         assert!(close(_1_0i.acosh(), _0_0i));
-        assert!(close((Complex::new(-1., 0.)).acosh(), _0_1i * f64::consts::PI));
+        assert!(close(
+            (Complex::new(-1., 0.)).acosh(),
+            _0_1i * f64::consts::PI
+        ));
         assert!(close((_1_0i * -1.0).acosh(), -_0_1i * f64::consts::PI)); // zero sign is used!
         for &c in all_consts.iter() {
             // acosh(conj(z)) = conj(acosh(z))
@@ -678,7 +786,7 @@ mod complex {
     fn test_atanh() {
         assert!(close(_0_0i.atanh(), _0_0i));
         assert!(close(_0_1i.atanh(), _0_1i * (f64::consts::PI / 4.0)));
-         assert!(close(_1_0i.atanh(), Complex::new(f64::INFINITY, 0.0)));
+        assert!(close(_1_0i.atanh(), Complex::new(f64::INFINITY, 0.0)));
         for &c in all_consts.iter() {
             // atanh(conj(z)) = conj(atanh(z))
             assert!(close(c.conj().atanh(), c.atanh().conj()));
@@ -984,8 +1092,10 @@ mod rational {
     pub const _NEG1_NEG2: Rational64 = Ratio::new_raw(-1, -2);
     pub const _1_3: Rational64 = Ratio::new_raw(1, 3);
     pub const _NEG1_3: Rational64 = Ratio::new_raw(-1, 3);
+    pub const _1_NEG3: Rational64 = Ratio::new_raw(1, -3);
     pub const _2_3: Rational64 = Ratio::new_raw(2, 3);
     pub const _NEG2_3: Rational64 = Ratio::new_raw(-2, 3);
+    pub const _2_NEG3: Rational64 = Ratio::new_raw(2, -3);
     pub const _MIN: Rational64 = Ratio::new_raw(i64::MIN, 1);
     pub const _MIN_P1: Rational64 = Ratio::new_raw(i64::MIN + 1, 1);
     pub const _MAX: Rational64 = Ratio::new_raw(i64::MAX, 1);
@@ -1744,44 +1854,57 @@ mod rational {
 
     #[test]
     fn test_round() {
-        assert_eq!(_1_3.ceil(), _1);
-        assert_eq!(_1_3.floor(), _0);
-        assert_eq!(_1_3.round(), _0);
+        let __0 = 0i64;
+        let __1 = 1i64;
+        assert_eq!(_1_3.ceil(), __1);
+        assert_eq!(_1_3.floor(), __0);
+        assert_eq!(_1_3.round(), __0);
         assert_eq!(_1_3.trunc(), _0);
 
-        assert_eq!(_NEG1_3.ceil(), _0);
-        assert_eq!(_NEG1_3.floor(), -_1);
-        assert_eq!(_NEG1_3.round(), _0);
+        assert_eq!(_NEG1_3.ceil(), __0);
+        assert_eq!(_NEG1_3.floor(), -__1);
+        assert_eq!(_NEG1_3.round(), __0);
         assert_eq!(_NEG1_3.trunc(), _0);
 
-        assert_eq!(_2_3.ceil(), _1);
-        assert_eq!(_2_3.floor(), _0);
-        assert_eq!(_2_3.round(), _1);
+        assert_eq!(_1_NEG3.ceil(), __0);
+        assert_eq!(_1_NEG3.floor(), -__1);
+        assert_eq!(_1_NEG3.round(), __0);
+        assert_eq!(_1_NEG3.trunc(), _0);
+
+        assert_eq!(_2_3.ceil(), __1);
+        assert_eq!(_2_3.floor(), __0);
+        assert_eq!(_2_3.round(), __1);
         assert_eq!(_2_3.trunc(), _0);
 
-        assert_eq!(_NEG2_3.ceil(), _0);
-        assert_eq!(_NEG2_3.floor(), -_1);
-        assert_eq!(_NEG2_3.round(), -_1);
+        assert_eq!(_NEG2_3.ceil(), __0);
+        assert_eq!(_NEG2_3.floor(), -__1);
+        assert_eq!(_NEG2_3.round(), -__1);
         assert_eq!(_NEG2_3.trunc(), _0);
 
-        assert_eq!(_1_2.ceil(), _1);
-        assert_eq!(_1_2.floor(), _0);
-        assert_eq!(_1_2.round(), _1);
+        assert_eq!(_2_NEG3.ceil(), __0);
+        assert_eq!(_2_NEG3.floor(), -__1);
+        assert_eq!(_2_NEG3.round(), -__1);
+        assert_eq!(_2_NEG3.trunc(), _0);
+
+        assert_eq!(_1_2.ceil(), __1);
+        assert_eq!(_1_2.floor(), __0);
+        assert_eq!(_1_2.round(), __1);
         assert_eq!(_1_2.trunc(), _0);
 
-        assert_eq!(_NEG1_2.ceil(), _0);
-        assert_eq!(_NEG1_2.floor(), -_1);
-        assert_eq!(_NEG1_2.round(), -_1);
+        assert_eq!(_NEG1_2.ceil(), __0);
+        assert_eq!(_NEG1_2.floor(), -__1);
+        assert_eq!(_NEG1_2.round(), -__1);
         assert_eq!(_NEG1_2.trunc(), _0);
 
-        assert_eq!(_1.ceil(), _1);
-        assert_eq!(_1.floor(), _1);
-        assert_eq!(_1.round(), _1);
+        assert_eq!(_1.ceil(), __1);
+        assert_eq!(_1.floor(), __1);
+        assert_eq!(_1.round(), __1);
         assert_eq!(_1.trunc(), _1);
 
         // Overflow checks
 
-        let _neg1 = Ratio::from(-1);
+        let __0 = 0i32;
+        let __1 = 1i32;
         let _large_rat1 = Ratio::new(i32::MAX, i32::MAX - 1);
         let _large_rat2 = Ratio::new(i32::MAX - 1, i32::MAX);
         let _large_rat3 = Ratio::new(i32::MIN + 2, i32::MIN + 1);
@@ -1792,14 +1915,14 @@ mod rational {
         let _large_rat8 = Ratio::new(1, i32::MAX);
 
         // a couple of these are too close to handle by the still general trait bounds
-        //assert_eq!(_large_rat1.round(), One::one());
-        assert_eq!(_large_rat2.round(), One::one());
-        //assert_eq!(_large_rat3.round(), One::one());
-        //assert_eq!(_large_rat4.round(), One::one());
-        assert_eq!(_large_rat5.round(), _neg1);
-        //assert_eq!(_large_rat6.round(), _neg1);
-        //assert_eq!(_large_rat7.round(), Zero::zero());
-        assert_eq!(_large_rat8.round(), Zero::zero());
+        //assert_eq!(_large_rat1.round(), __1);
+        assert_eq!(_large_rat2.round(), __1);
+        //assert_eq!(_large_rat3.round(), __1);
+        //assert_eq!(_large_rat4.round(), __1);
+        assert_eq!(_large_rat5.round(), -__1);
+        //assert_eq!(_large_rat6.round(), -__1);
+        //assert_eq!(_large_rat7.round(), __0);
+        assert_eq!(_large_rat8.round(), __0);
     }
 
     #[test]
@@ -1824,40 +1947,32 @@ mod rational {
         assert_eq!(Ratio::new(0, 1).recip(), Ratio::new_raw(1, 0));
     }
 
-    /*#[test]
+    #[test]
     fn test_pow() {
-        fn test(r: Rational64, e: i32, expected: Rational64) {
-            assert_eq!(r.pow(e), expected);
-            assert_eq!(Pow::pow(r, e), expected);
-            assert_eq!(Pow::pow(r, &e), expected);
-            assert_eq!(Pow::pow(&r, e), expected);
-            assert_eq!(Pow::pow(&r, &e), expected);
+        fn test(r: Rational64, e: i64, expected: Rational64) {
+            assert_eq!(r.powi(e), expected);
             #[cfg(feature = "num-bigint")]
             test_big(r, e, expected);
         }
 
         #[cfg(feature = "num-bigint")]
-        fn test_big(r: Rational64, e: i32, expected: Rational64) {
+        fn test_big(r: Rational64, e: i64, expected: Rational64) {
             let r = BigRational::new_raw(r.numer.into(), r.denom.into());
             let expected = BigRational::new_raw(expected.numer.into(), expected.denom.into());
-            assert_eq!((&r).pow(e), expected);
-            assert_eq!(Pow::pow(r.clone(), e), expected);
-            assert_eq!(Pow::pow(r.clone(), &e), expected);
-            assert_eq!(Pow::pow(&r, e), expected);
-            assert_eq!(Pow::pow(&r, &e), expected);
+            assert_eq!((&r).powi(e), expected);
         }
 
         test(_1_2, 2, Ratio::new(1, 4));
         test(_1_2, -2, Ratio::new(4, 1));
         test(_1, 1, _1);
-        test(_1, i32::MAX, _1);
-        test(_1, i32::MIN, _1);
-        test(_NEG1_2, 2, _1_2.pow(2i32));
-        test(_NEG1_2, 3, -_1_2.pow(3i32));
+        test(_1, i64::MAX, _1);
+        test(_1, i64::MIN, _1);
+        test(_NEG1_2, 2, _1_2.powi(2));
+        test(_NEG1_2, 3, -_1_2.powi(3));
         test(_3_2, 0, _1);
         test(_3_2, -1, _3_2.recip());
         test(_3_2, 3, Ratio::new(27, 8));
-    }*/
+    }
 
     /*#[test]
     #[cfg(feature = "std")]
@@ -1885,65 +2000,6 @@ mod rational {
         for &s in xs.iter() {
             test(s);
         }
-    }
-
-    #[cfg(feature = "num-bigint")]
-    #[test]
-    fn test_from_float() {
-        fn test<T>(given: T, (numer, denom): (&str, &str)) {
-            let ratio: BigRational = Ratio::from_float(given).unwrap();
-            assert_eq!(
-                ratio,
-                Ratio::new(
-                    FromStr::from_str(numer).unwrap(),
-                    FromStr::from_str(denom).unwrap()
-                )
-            );
-        }
-
-        // f32
-        test(core::f32::consts::PI, ("13176795", "4194304"));
-        test(2f32.powf(100.), ("1267650600228229401496703205376", "1"));
-        test(
-            -(2f32.powf(100.)),
-            ("-1267650600228229401496703205376", "1"),
-        );
-        test(
-            1.0 / 2f32.powf(100.),
-            ("1", "1267650600228229401496703205376"),
-        );
-        test(684729.48391f32, ("1369459", "2"));
-        test(-8573.5918555f32, ("-4389679", "512"));
-
-        // f64
-        test(
-            core::f64::consts::PI,
-            ("884279719003555", "281474976710656"),
-        );
-        test(2f64.powf(100.), ("1267650600228229401496703205376", "1"));
-        test(
-            -(2f64.powf(100.)),
-            ("-1267650600228229401496703205376", "1"),
-        );
-        test(684729.48391f64, ("367611342500051", "536870912"));
-        test(-8573.5918555f64, ("-4713381968463931", "549755813888"));
-        test(
-            1.0 / 2f64.powf(100.),
-            ("1", "1267650600228229401496703205376"),
-        );
-    }
-
-    #[cfg(feature = "num-bigint")]
-    #[test]
-    fn test_from_float_fail() {
-        use core::{f32, f64};
-
-        assert_eq!(Ratio::from_float(f32::NAN), None);
-        assert_eq!(Ratio::from_float(f32::INFINITY), None);
-        assert_eq!(Ratio::from_float(f32::NEG_INFINITY), None);
-        assert_eq!(Ratio::from_float(f64::NAN), None);
-        assert_eq!(Ratio::from_float(f64::INFINITY), None);
-        assert_eq!(Ratio::from_float(f64::NEG_INFINITY), None);
     }
 
     #[test]
@@ -2072,6 +2128,65 @@ mod rational {
         assert_eq!(r.denom, (456 / 3));
     }
 
+    #[test]
+    fn test_from_float() {
+        assert_eq!(Ratio::<i128>::try_from(f32::MAX), Err(()));
+        assert_eq!(
+            Ratio::<i128>::try_from(f32::MAX / 2.0),
+            Ok(Ratio::new_raw((f32::MAX / 2.0) as i128, 1))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(-f32::MAX / 2.0),
+            Ok(Ratio::new_raw(-(f32::MAX / 2.0) as i128, 1))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(f32::MIN_POSITIVE),
+            Ok(Ratio::new_raw(1, 1 << (1 - f32::MIN_EXP)))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(f32::INFINITY),
+            Ok(Ratio::new_raw(1, 0))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(f32::NEG_INFINITY),
+            Ok(Ratio::new_raw(-1, 0))
+        );
+        assert_eq!(Ratio::<i128>::try_from(f32::NAN), Ok(Ratio::new_raw(0, 0)));
+        assert_eq!(Ratio::<i128>::try_from(f64::MAX), Err(()));
+        assert_eq!(
+            Ratio::<i128>::try_from((f32::MAX / 2.0) as f64),
+            Ok(Ratio::new_raw((f32::MAX / 2.0) as i128, 1))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from((-f32::MAX / 2.0) as f64),
+            Ok(Ratio::new_raw(-(f32::MAX / 2.0) as i128, 1))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(f32::MIN_POSITIVE as f64),
+            Ok(Ratio::new_raw(1, 1 << (1 - f32::MIN_EXP)))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(f64::INFINITY),
+            Ok(Ratio::new_raw(1, 0))
+        );
+        assert_eq!(
+            Ratio::<i128>::try_from(f64::NEG_INFINITY),
+            Ok(Ratio::new_raw(-1, 0))
+        );
+        assert_eq!(Ratio::<i128>::try_from(f64::NAN), Ok(Ratio::new_raw(0, 0)));
+        // now test all simple integers
+        assert_eq!(Ratio::<i128>::try_from(1.0f32), Ok(Ratio::one()));
+        assert_eq!(Ratio::<i64>::try_from(1.0f32), Ok(Ratio::one()));
+        assert_eq!(Ratio::<i32>::try_from(1.0f32), Ok(Ratio::one()));
+        assert_eq!(Ratio::<i128>::try_from(1.0f64), Ok(Ratio::one()));
+        assert_eq!(Ratio::<i64>::try_from(1.0f64), Ok(Ratio::one()));
+        assert_eq!(Ratio::<i128>::try_from(-1.0f32), Ok(-Ratio::one()));
+        assert_eq!(Ratio::<i64>::try_from(-1.0f32), Ok(-Ratio::one()));
+        assert_eq!(Ratio::<i32>::try_from(-1.0f32), Ok(-Ratio::one()));
+        assert_eq!(Ratio::<i128>::try_from(-1.0f64), Ok(-Ratio::one()));
+        assert_eq!(Ratio::<i64>::try_from(-1.0f64), Ok(-Ratio::one()));
+    }
+
     /*#[test]
     #[cfg(feature = "num-bigint")]
     fn test_big_ratio_to_f64() {
@@ -2152,4 +2267,214 @@ mod rational {
         );
         assert_eq!(Ratio::<i32>::new_raw(0, 0).to_f64(), None);
     }*/
+}
+
+mod extension {
+    use core::cmp::Ordering;
+    use std::println;
+
+    use crate::{complex::Complex, extension::*, rational::Ratio, *};
+
+    #[test]
+    fn test_extension() {
+        // 1 + √5
+        const PHI2: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 1);
+        assert_eq!(PHI2.abs_sqr(), (PHI2 + 2) * 2); // phi^2 = phi+1
+        // 1 + i√5
+        const C: SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>> =
+            SqrtExt::new(Complex::new(1, 0), Complex::new(0, 1));
+        assert_eq!(C.abs_sqr(), 6.into());
+        // 1-3i + (2+i)√5
+        const X: SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>> =
+            SqrtExt::new(Complex::new(1, -3), Complex::new(2, 1));
+        assert_eq!(X.abs_sqr(), SqrtExt::new(35, -2));
+        // TODO test with negative SqrtI<_, -1>, SqrtI<_, -2>
+
+        // TODO turn these into tests, once it's clear that the result is correct.
+        let a = SqrtExt::<_, Sqrt<_, 2>>::new(2, 1);
+        let b = SqrtExt::<_, Sqrt<_, 2>>::new(3, 0);
+        println!("{}", gcd(a, b));
+        println!("{}", lcm(a, b));
+
+        let a = SqrtExt::<_, Sqrt<_, 7>>::new(2, 1);
+        let b = SqrtExt::<_, Sqrt<_, 7>>::new(3, 5);
+        println!("{}", gcd(a, b));
+        println!("{}", lcm(a, b));
+    }
+
+    #[test]
+    fn test_cmp() {
+        const N: u64 = 7;
+        //const S: SqrtExt<i32, Sqrt<i32, N>> = SqrtExt::new(-1, 1); // N=2 -> 0.4142, N=3 -> 0.732, otherwise > 1
+        //const S: SqrtExt<i32, Sqrt<i32, N>> = SqrtExt::new(-2, 1); // N=5..9
+        //const S: SqrtExt<i32, Sqrt<i32, N>> = SqrtExt::new(-5, 2); // N=7
+        const S: SqrtExt<i32, Sqrt<i32, N>> = SqrtExt::new(6, -2); // N=7
+        for i in -5..=5 {
+            assert_eq!(S.cmp(&i.into()), S.to_f64().total_cmp(&(i as f64)));
+            assert_eq!((S + i).cmp(&i.into()), Ordering::Greater);
+            assert_eq!((-S * S + i).cmp(&i.into()), Ordering::Less);
+            assert_eq!((-S * S * S + i).cmp(&i.into()), Ordering::Less);
+            assert_eq!((-S * S * S * S + i).cmp(&i.into()), Ordering::Less);
+            let x = S * S + i;
+            assert_eq!((S + i).cmp(&x), Ordering::Greater);
+            assert_eq!(x.cmp(&x), Ordering::Equal);
+            let x_prev = x;
+            let x = S * S * S + i;
+            assert_eq!((S + i).cmp(&x), Ordering::Greater);
+            assert_eq!(x.cmp(&x), Ordering::Equal);
+            assert_eq!(x_prev.cmp(&x), Ordering::Greater);
+            let x_prev = x;
+            let x = S * S * S * S + i;
+            assert_eq!((S + i).cmp(&x), Ordering::Greater);
+            assert_eq!(x.cmp(&x), Ordering::Equal);
+            assert_eq!(x_prev.cmp(&x), Ordering::Greater);
+        }
+        let x: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(-5, -5);
+        let y: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(0, 3);
+        assert_eq!(x.cmp(&y), x.to_f64().total_cmp(&y.to_f64()));
+    }
+
+    #[test]
+    fn test_arithmetic() {
+        const S: SqrtExt<i32, Sqrt<i32, 7>> = SqrtExt::new(6, -2);
+        assert_eq!(S * S - 4, (S + 2) * (S - 2));
+        assert_eq!(S * S - 9, (S + 3) * (S - 3));
+        // test division
+        assert_eq!((S * S - 4) / (S + 2), S - 2);
+        assert_eq!((S * S - 4) / (S - 2), S + 2);
+        assert_eq!((S * S - 9) / (S + 3), S - 3);
+        assert_eq!((S * S - 9) / (S - 3), S + 3);
+        // test the reference versions
+        const R: &SqrtExt<i32, Sqrt<i32, 7>> = &SqrtExt::new(6, -2);
+        assert_eq!(&(R * R) - &4, (R + &2) * (R - &2));
+        assert_eq!(&(R * R) - &9, (R + &3) * (R - &3));
+        // test division
+        assert_eq!(&(&(R * R) - &4) / &(R + &2), R - &2);
+        assert_eq!(&(&(R * R) - &4) / &(R - &2), R + &2);
+        assert_eq!(&(&(R * R) - &9) / &(R + &3), R - &3);
+        assert_eq!(&(&(R * R) - &9) / &(R - &3), R + &3);
+    }
+
+    #[test]
+    fn test_arithmetic_overflow() {
+        let a: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(4, 2);
+        let b: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(14, -6);
+        println!("{}", a / b);
+        println!("{}", &a / &b);
+        let a: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(2, 8);
+        let b: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(14, -6);
+        println!("{}", a / b);
+        println!("{}", &a / &b);
+    }
+
+    #[test]
+    fn test_unit() {
+        //let _ = Sqrt::<i64, 9>::TEST_SQRT; // panics at compile time.
+        // using over 100 types here for all numbers is a bad idea, so use the dynamic one to improve compile time.
+        fn test_fn(n: u64) {
+            dynamic_sqrt_u64!(N, n);
+            assert!(SqrtExt::<i64, N<i64>>::unit().is_unit());
+            assert!(!SqrtExt::<i64, N<i64>>::unit().is_one());
+        }
+        for i in 2u64..=198 {
+            if i == 151 || i == 166 || i == 181 {
+                // 199 is the next one that fails with i64
+                continue; // too big solution for i64
+            }
+            if i.isqrt() * i.isqrt() != i {
+                test_fn(i);
+            }
+        }
+        macro_rules! test {
+            ($($N:literal),+) => {
+                $(test_fn($N);)+
+            };
+        }
+        // test for some bigger primes, which have somewhat simple solutions (617 has actually a quite large solution)
+        test!(617, 2029, 21029);
+        // These primes solutions are too big for the algorithm, even with i128
+        //test!(6701, 12713, 20297, 59207, 60811, 79031);
+    }
+
+    #[test]
+    fn test_rational_sqrt() {
+        fn test(n: u64, iter: u64) {
+            println!("start √{n}");
+            dynamic_sqrt_u64!(N, n);
+            for n in 0..iter {
+                let r = Ratio::approximate_sqrt::<N<i64>>(n);
+                println!("{}", r);
+                let x = SqrtExt::<_, N<_>>::new(-r.numer, r.denom);
+                assert!(x > (-1).into());
+                assert!(x < 1.into());
+                assert_eq!(x.floor(), if x >= 0.into() { 0 } else { -1 });
+            }
+        }
+        test(2, 20);
+        test(3, 12);
+        test(5, 12);
+        test(6, 12);
+        test(8, 12);
+        test(26, 8);
+        test(31, 8);
+        let x = SqrtExt::<_, Sqrt<i64, 2>>::new(0, 2);
+        for n in 0..12 {
+            println!("{}", x.approximate_rational(n));
+        }
+    }
+
+    #[test]
+    fn test_continued_fraction() {
+        {
+            println!("starting √2");
+            let cf = [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+            let x = SqrtExt::<i64, Sqrt<i64, 2>>::new(0, 1);
+            let mut iter = DevelopContinuedFraction::new(x);
+            for n in 0..cf.len() {
+                assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
+                println!("{}", cf[..n].iter().continued_fraction(1).last().unwrap());
+            }
+        }
+        {
+            println!("starting √3");
+            let cf = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
+            let x = SqrtExt::<i64, Sqrt<i64, 3>>::new(0, 1);
+            let mut iter = DevelopContinuedFraction::new(x);
+            for n in 0..cf.len() {
+                assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
+                println!("{}", cf[..n].iter().continued_fraction(1).last().unwrap());
+            }
+        }
+        {
+            println!("starting √5");
+            let cf = [2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4];
+            let x = SqrtExt::<i64, Sqrt<i64, 5>>::new(0, 1);
+            let mut iter = DevelopContinuedFraction::new(x);
+            for n in 0..cf.len() {
+                assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
+                println!("{}", cf[..n].iter().continued_fraction(1).last().unwrap());
+            }
+        }
+        {
+            println!("starting √24");
+            let x = SqrtExt::<i64, Sqrt<i64, 24>>::new(0, 1);
+            let mut iter1 = DevelopContinuedFraction::new(x);
+            let mut iter2 = DevelopContinuedFraction::new(x).continued_fraction(1);
+            for _ in 0..15 {
+                println!("{} -> {}", iter1.next().unwrap(), iter2.next().unwrap());
+            }
+        }
+        {
+            println!("starting √31");
+            let cf = [5, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10];
+            let x = SqrtExt::<i64, Sqrt<i64, 31>>::new(0, 1);
+            let mut iter = DevelopContinuedFraction::new(x);
+            for n in 0..cf.len() {
+                assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
+                println!("{}", cf[..n].iter().continued_fraction(1).last().unwrap());
+            }
+        }
+        // TODO push it out to almost overflow!
+        //println!("{}", Ratio::approximate_sqrt::<extension::Sqrt<i64, 31>>(n as u64));
+    }
 }
