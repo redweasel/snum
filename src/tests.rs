@@ -1066,6 +1066,7 @@ mod rational {
     use crate::rational::Ratio;
     type Rational64 = Ratio<i64>;
 
+    use core::f32;
     use core::f64;
     use core::hash::*;
     use core::i32;
@@ -1162,6 +1163,9 @@ mod rational {
         assert_eq!(Ratio::<i64>::approximate_f64(core::f64::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
         assert_eq!(Ratio::<i64>::approximate_f64(f32::MAX as f64, 1e-7), None);
         assert_eq!(Ratio::<i128>::approximate_f64(f32::MAX as f64, 1e-7), Ratio::try_from(f32::MAX).ok());
+        assert_eq!(Ratio::<i64>::approximate_f64(f64::INFINITY, 1e-7), Ratio::try_from(f32::INFINITY).ok());
+        assert_eq!(Ratio::<i64>::approximate_f64(f64::NEG_INFINITY, 1e-7), Ratio::try_from(f32::NEG_INFINITY).ok());
+        assert_eq!(Ratio::<i64>::approximate_f64(f64::NAN, 1e-7), Ratio::try_from(f32::NAN).ok());
     }
 
     #[test]
@@ -2296,7 +2300,7 @@ mod extension {
             assert_eq!(x.cmp(&x), Ordering::Equal);
             assert_eq!(x_prev.cmp(&x), Ordering::Greater);
         }
-        let x: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(-5, -5);
+        let x: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(-5i64, -5);
         let y: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(0, 3);
         assert_eq!(x.cmp(&y), x.to_f64().total_cmp(&y.to_f64()));
     }
@@ -2443,5 +2447,20 @@ mod extension {
         }
         // TODO push it out to almost overflow!
         //println!("{}", Ratio::approximate_sqrt::<extension::Sqrt<i64, 31>>(n as u64));
+    }
+
+    #[test]
+    fn test_approximate_float() {
+        let f_list = [core::f32::consts::PI, core::f32::consts::E, core::f32::consts::LN_2, 1.5, 0.7, 12500.7, 0.0001];
+        const N: u64 = 5;
+        let tol = 1e-6;
+        for f in f_list {
+            let x = SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f, tol).unwrap();
+            assert!((x.to_f64() as f32 - f).abs() < tol);
+            //println!("{}", x);
+        }
+        assert!(SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f32::NAN, tol).is_none());
+        assert!(SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f32::INFINITY, tol).is_none());
+        assert!(SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f32::NEG_INFINITY, tol).is_none());
     }
 }

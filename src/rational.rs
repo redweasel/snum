@@ -702,6 +702,9 @@ macro_rules! impl_approximate_float {
     ($approximate:ident, $float:ty, $($int:ty),+) => {
         $(impl Ratio<$int> {
             pub fn $approximate(value: $float, rtol: $float) -> Option<Self> {
+                if !value.is_finite() || rtol <= 0.0 {
+                    return Ratio::try_from(value).ok();
+                }
                 if value.round() == value {
                     let v = value as $int;
                     return (v as $float == value).then_some(Ratio::new_raw(v, 1));

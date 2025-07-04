@@ -245,18 +245,6 @@ impl<T: Zero + Num, E: SqrtConst<T>> SqrtExt<T, E> {
         self.ext.is_zero()
     }
 }
-impl<T: Zero + Num + Into<f64>, E: SqrtConst<T>> SqrtExt<T, E> {
-    /// Returns the float value, represented by this number.
-    // TODO match this with rational! Check if Into<f64> is fine, or TryInto should be used.
-    // probably move this to an Into/TryInto implementation.
-    #[inline]
-    pub fn to_f64(&self) -> f64 {
-        let a: f64 = self.value.clone().into();
-        let b: f64 = self.ext.clone().into();
-        let c: f64 = E::sqr().into();
-        a + b * c.sqrt()
-    }
-}
 impl<T: Num + Cancel, E: SqrtConst<T>> SqrtExt<T, E>
 where
     Self: Cancel + IntoDiscrete<Output = T>,
@@ -798,6 +786,57 @@ where
         abs_sqr.is_unit()
     }
 }
+
+macro_rules! impl_approximate_float {
+    ($approximate:ident, $to_float:ident, $float:ty, $($int:ty),+) => {
+        $(impl<E: SqrtConst<$int>> SqrtExt<$int, E> {
+            /// Returns the float value, represented by this number.
+            #[inline]
+            pub fn $to_float(&self) -> $float {
+                let a: $float = self.value as $float;
+                let b: $float = self.ext as $float;
+                let c: $float = E::sqr() as $float;
+                a + b * c.sqrt()
+            }
+        }
+        impl<E: SqrtConst<$int>> SqrtExt<$int, E> {
+            // Find a close approximation to a `f32` using small integers.
+            pub fn $approximate(mut value: $float, mut tol: $float) -> Option<Self> {
+                if !value.is_finite() || tol <= 0.0 {
+                    return None;
+                }
+                // The possibly simplest method is binary search.
+                // 1. get the integer part right
+                // 2. add k*(√N - floor(√N))^n, where k is an integer and n indicates the repetition of this step.
+                // this can also be inverted to no longer require binary search, when concrete types are used.
+                // This is a kinda radix based number system, just that the radix is 0 < √N - floor(√N) < 1
+                // We know how to convert into such a number system using the euclidean algorithm.
+                // He we use rounding instead of floor to get smaller integers k.
+                let r = Self::new(-E::floor(), 1);
+                let rf = (E::sqr() as $float).sqrt() - E::floor() as $float;
+                let mut p = Self::one();
+                let mut result = Self::zero();
+                loop {
+                    let xf = value.round();
+                    let x = xf as $int;
+                    if (x as $float - value).abs() > 0.5 {
+                        return None; // can not be represented, as it's too big or small
+                    }
+                    result += p * x;
+                    p *= r;
+                    value -= xf;
+                    value /= rf;
+                    tol /= rf;
+                    if value.abs() < tol.abs() {
+                        return Some(result);
+                    }
+                }
+            }
+        })+
+    };
+}
+impl_approximate_float!(approximate_f32, to_f32, f32, i32, i64, i128);
+impl_approximate_float!(approximate_f64, to_f64, f64, i32, i64, i128);
 
 // Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
