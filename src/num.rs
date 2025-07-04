@@ -301,13 +301,13 @@ where
 /// like [Rem<T, Output = T>] but with euclidean division.
 pub trait RemEuclid: Sized {
     /// Compute the euclidean division `q` and remainder `r` of `self`, such that `self = q * div + r`.
-    /// 
+    ///
     /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `div` with `|r| < |div|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
     /// - If the divisor is a unit, the remainder is also required to be 0.
     /// - If the number is signed, the positive sign solution is returned. In all cases `is_valid_euclid` needs to be true on the result remainder,
     /// - The result must make the Euclidean algorithm to compute the gcd convergent.
     /// - Division by zero may panic, or return the invalid value `(q=0, r=self)`.
-    /// 
+    ///
     /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as `|r|` might be larger than `|div|`.
     /// For fields on the other hand, the implementation `(q=self/div, r=0)` IS valid, however fields may also implement a
     /// different notion of division here based on modulo, as that also fulfills the condition, but not with minimal `r`.
@@ -316,7 +316,7 @@ pub trait RemEuclid: Sized {
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self);
     /// Return, whether the number could be the result of a euclidean remainder.
     /// Note, that zero is always "valid euclid".
-    /// 
+    ///
     /// For all x: x or -x need to be "valid euclid".
     fn is_valid_euclid(&self) -> bool;
 }
@@ -324,19 +324,20 @@ pub trait RemEuclid: Sized {
 macro_rules! impl_rem_euclid {
     ($($T:ty),+) => {
         $(impl RemEuclid for $T {
+            #[inline(always)]
             fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
                 (self.div_euclid(*div), self.rem_euclid(*div))
             }
+            #[inline(always)]
             fn is_valid_euclid(&self) -> bool {
-                self >= &0
+                self >= &Zero::zero()
             }
         })+
     };
 }
 impl_rem_euclid!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
 );
-// TODO add a careful implementation for floats, such that division is lossless? Addition and multiplication would still be lossy though... is it worth it?
 
 #[cfg(feature = "num-bigint")]
 mod bigint {

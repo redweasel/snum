@@ -36,7 +36,9 @@ pub struct ContinuedFractionIter<T: ContinuedFraction, I: Iterator> {
     accum: (T, T, T, T),
     end: T,
 }
-impl<T: ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFractionIter<T, I> {
+impl<T: ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> Iterator
+    for ContinuedFractionIter<T, I>
+{
     type Item = T::Output;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|x| {
@@ -77,7 +79,8 @@ pub trait IntoContinuedFraction<T: Sized> {
     /// This is done forward, so `[1, 2, 2]` turns into `[1+1/1, 1+1/(2+1/1), 1+1/(2+1/(2+1/1))]`
     fn continued_fraction(self, end: T) -> Self::IntoIter;
 }
-impl<'a, T: 'a + ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T> for I
+impl<'a, T: 'a + ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T>
+    for I
 {
     type IntoIter = ContinuedFractionIter<T, Self>;
     fn continued_fraction(self, end: T) -> ContinuedFractionIter<T, Self> {
@@ -89,9 +92,6 @@ impl<'a, T: 'a + ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> IntoCon
     }
 }
 
-// TODO add floor trait which returns an integer type.
-// alternatively add an Integer trait and make RemEuclid return integers (would not work with Polynomials!), which can be cast back up.
-// problem is, that RemEuclid isn't floor_mod division.
 pub trait IntoDiscrete: PartialEq + From<Self::Output> {
     type Output: Clone + Zero + One;
     fn floor(&self) -> Self::Output;
@@ -105,6 +105,50 @@ pub trait IntoDiscrete: PartialEq + From<Self::Output> {
     }
     fn round(&self) -> Self::Output;
 }
+
+impl IntoDiscrete for f32 {
+    type Output = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
+    fn floor(&self) -> Self::Output {
+        f32::floor(*self)
+    }
+    fn ceil(&self) -> Self::Output {
+        f32::ceil(*self)
+    }
+    fn round(&self) -> Self::Output {
+        f32::round(*self)
+    }
+}
+impl IntoDiscrete for f64 {
+    type Output = f64;
+    fn floor(&self) -> Self::Output {
+        f64::floor(*self)
+    }
+    fn ceil(&self) -> Self::Output {
+        f64::ceil(*self)
+    }
+    fn round(&self) -> Self::Output {
+        f64::round(*self)
+    }
+}
+macro_rules! impl_into_discrete_int {
+    ($($t:ty),+) => {
+        $(impl IntoDiscrete for $t {
+            type Output = $t;
+            fn floor(&self) -> Self::Output {
+                *self
+            }
+            fn ceil(&self) -> Self::Output {
+                *self
+            }
+            fn round(&self) -> Self::Output {
+                *self
+            }
+        })+
+    };
+}
+impl_into_discrete_int!(
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
+);
 
 /// Iterator for a regular continued fraction.
 pub struct DevelopContinuedFraction<T> {

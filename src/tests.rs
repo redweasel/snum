@@ -4,7 +4,7 @@ use crate::{
     extension::{Sqrt, SqrtExt},
     rational::Ratio,
 };
-use std::{io::Write, *};
+use std::*;
 
 #[test]
 pub fn test_macros() {
@@ -1070,7 +1070,6 @@ mod rational {
     use core::hash::*;
     use core::i32;
     use core::i64;
-    use core::str::FromStr;
     use std::{format, println};
 
     pub const _0: Rational64 = Ratio::new_raw(0, 1);
@@ -1155,47 +1154,15 @@ mod rational {
         assert_eq!(Ratio::new(-1, 0), Ratio::new_raw(-1, 0));
     }
 
-    /*#[test]
+    #[test]
     fn test_approximate_float() {
-        assert_eq!(Ratio::from_f32(0.5f32), Some(Ratio::new(1i64, 2)));
-        assert_eq!(Ratio::from_f64(0.5f64), Some(Ratio::new(1i32, 2)));
-        assert_eq!(Ratio::from_f32(5f32), Some(Ratio::new(5i64, 1)));
-        assert_eq!(Ratio::from_f64(5f64), Some(Ratio::new(5i32, 1)));
-        assert_eq!(Ratio::from_f32(29.97f32), Some(Ratio::new(2997i64, 100)));
-        assert_eq!(Ratio::from_f32(-29.97f32), Some(Ratio::new(-2997i64, 100)));
-
-        assert_eq!(Ratio::<i8>::from_f32(63.5f32), Some(Ratio::new(127i8, 2)));
-        assert_eq!(Ratio::<i8>::from_f32(126.5f32), Some(Ratio::new(126i8, 1)));
-        assert_eq!(Ratio::<i8>::from_f32(127.0f32), Some(Ratio::new(127i8, 1)));
-        assert_eq!(Ratio::<i8>::from_f32(127.5f32), None);
-        assert_eq!(Ratio::<i8>::from_f32(-63.5f32), Some(Ratio::new(-127i8, 2)));
-        assert_eq!(
-            Ratio::<i8>::from_f32(-126.5f32),
-            Some(Ratio::new(-126i8, 1))
-        );
-        assert_eq!(
-            Ratio::<i8>::from_f32(-127.0f32),
-            Some(Ratio::new(-127i8, 1))
-        );
-        assert_eq!(Ratio::<i8>::from_f32(-127.5f32), None);
-
-        assert_eq!(Ratio::<u8>::from_f32(-127f32), None);
-        assert_eq!(Ratio::<u8>::from_f32(127f32), Some(Ratio::new(127u8, 1)));
-        assert_eq!(Ratio::<u8>::from_f32(127.5f32), Some(Ratio::new(255u8, 2)));
-        assert_eq!(Ratio::<u8>::from_f32(256f32), None);
-
-        assert_eq!(Ratio::<i64>::from_f64(-10e200), None);
-        assert_eq!(Ratio::<i64>::from_f64(10e200), None);
-        assert_eq!(Ratio::<i64>::from_f64(f64::INFINITY), None);
-        assert_eq!(Ratio::<i64>::from_f64(f64::NEG_INFINITY), None);
-        assert_eq!(Ratio::<i64>::from_f64(f64::NAN), None);
-        assert_eq!(
-            Ratio::<i64>::from_f64(f64::EPSILON),
-            Some(Ratio::new(1, 4503599627370496))
-        );
-        assert_eq!(Ratio::<i64>::from_f64(0.0), Some(Ratio::new(0, 1)));
-        assert_eq!(Ratio::<i64>::from_f64(-0.0), Some(Ratio::new(0, 1)));
-    }*/
+        assert_eq!(Ratio::<i32>::approximate_f32(core::f32::consts::PI, 1e-7), Some(Ratio::new(355, 113)));
+        assert_eq!(Ratio::<i64>::approximate_f64(core::f64::consts::PI, 1e-7), Some(Ratio::new(355, 113)));
+        assert_eq!(Ratio::<i32>::approximate_f32(core::f32::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
+        assert_eq!(Ratio::<i64>::approximate_f64(core::f64::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
+        assert_eq!(Ratio::<i64>::approximate_f64(f32::MAX as f64, 1e-7), None);
+        assert_eq!(Ratio::<i128>::approximate_f64(f32::MAX as f64, 1e-7), Ratio::try_from(f32::MAX).ok());
+    }
 
     #[test]
     #[allow(clippy::eq_op)]

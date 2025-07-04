@@ -9,7 +9,7 @@ use core::{
 };
 use take_mut::take;
 
-use crate::{IntoDiscrete, num::*};
+use crate::{DevelopContinuedFraction, IntoContinuedFraction, IntoDiscrete, num::*};
 use crate::{FromU64, complex::Complex};
 
 /// A fraction, or rational number `p/q`.
@@ -698,6 +698,34 @@ where
     }
 }
 
+macro_rules! impl_approximate_float {
+    ($approximate:ident, $float:ty, $($int:ty),+) => {
+        $(impl Ratio<$int> {
+            pub fn $approximate(value: $float, rtol: $float) -> Option<Self> {
+                if value.round() == value {
+                    let v = value as $int;
+                    return (v as $float == value).then_some(Ratio::new_raw(v, 1));
+                }
+                let iter = DevelopContinuedFraction::new(value).continued_fraction(1.0);
+                for x in iter {
+                    if (x.numer / x.denom - value).abs() / value < rtol {
+                        let numer = x.numer as $int;
+                        let denom = x.denom as $int;
+                        if numer as $float != x.numer || denom as $float != x.denom {
+                            return None;
+                        }
+                        return Some(Ratio::new(numer, denom));
+                    }
+                }
+                None
+            }
+        })+
+    };
+}
+impl_approximate_float!(approximate_f32, f32, i32, i64, i128);
+impl_approximate_float!(approximate_f64, f64, i64, i128);
+
+
 // Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
 // `Ratio<T>` is also `Zeroable`
@@ -810,6 +838,3 @@ impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Ratio<T> {
         Ok(Self::new_raw(numer, denom))
     }
 }
-
-// TODO add `approximate_float` (see [crate::continued_fractions])
-// both of the above can be essentially copied from `num_rational`.
