@@ -1,4 +1,6 @@
-use crate::rational::Ratio;
+use core::ops::*;
+
+use crate::{rational::Ratio, Cancel, IntoDiscrete, Num, NumAnalytic, One, Zero};
 
 // adapted from num_traits
 // returns f = mantissa * 2^exponent
@@ -52,6 +54,74 @@ fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
     exponent += c as i16;
     (mantissa, exponent, finite, zero_mantissa)
 }
+
+pub trait FloatType: Clone
++ Zero
++ One
++ PartialOrd
++ Cancel
++ Num<Real = Self>
++ NumAnalytic
++ IntoDiscrete<Output = Self>
++ Div<Output = Self>
++ Neg<Output = Self>
++ core::fmt::Display {
+    fn is_finite(&self) -> bool;
+    fn is_infinite(&self) -> bool;
+}
+
+/// A float type that can approximate `T`, e.g. `f32` can approximate `i64`.
+///
+/// Never panicing, but the results might be wrong if something
+/// is out of range, like `f32::MAX as i32`, so
+/// check the results if exact conversion is required.
+pub trait ApproxFloat<F: FloatType>: Sized {
+    /// from `T` to approximation with cutoff. E.g. i64 -> f32
+    fn to_approx(&self) -> F;
+    /// get `T` from approximation with some kind of rounding. E.g. f32 -> i64.
+    /// Returns None, if the tolerance `error <= tol` can not be satisfied.
+    /// The tolerance is the absolute tolerance.
+    fn from_approx(value: F, tol: F) -> Option<Self>;
+}
+
+macro_rules! impl_approx_float {
+    ($float:ty; $($int:ty),+) => {
+        impl FloatType for $float {
+            #[inline(always)]
+            fn is_finite(&self) -> bool {
+                <$float>::is_finite(*self)
+            }
+            #[inline(always)]
+            fn is_infinite(&self) -> bool {
+                <$float>::is_infinite(*self)
+            }
+        }
+        // self approximation
+        impl ApproxFloat<$float> for $float {
+            #[inline(always)]
+            fn to_approx(&self) -> $float {
+                *self
+            }
+            #[inline(always)]
+            fn from_approx(value: $float, _tol: $float) -> Option<Self> {
+                Some(value)
+            }
+        }
+        $(impl ApproxFloat<$float> for $int {
+            #[inline(always)]
+            fn to_approx(&self) -> $float {
+                *self as $float
+            }
+            #[inline(always)]
+            fn from_approx(value: $float, tol: $float) -> Option<Self> {
+                let v = value.round() as $int;
+                (v == 0 || (v as $float - value).abs() <= tol).then_some(v)
+            }
+        })+
+    };
+}
+impl_approx_float!(f32; i32, i64, i128);
+impl_approx_float!(f64; i64, i128);
 
 // specific implementations of TryFrom for Ratio.
 // note, f32::MAX can be represented using u128, but not using i128.

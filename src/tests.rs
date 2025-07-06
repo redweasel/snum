@@ -1156,16 +1156,21 @@ mod rational {
     }
 
     #[test]
-    fn test_approximate_float() {
-        assert_eq!(Ratio::<i32>::approximate_f32(core::f32::consts::PI, 1e-7), Some(Ratio::new(355, 113)));
-        assert_eq!(Ratio::<i64>::approximate_f64(core::f64::consts::PI, 1e-7), Some(Ratio::new(355, 113)));
-        assert_eq!(Ratio::<i32>::approximate_f32(core::f32::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
-        assert_eq!(Ratio::<i64>::approximate_f64(core::f64::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
-        assert_eq!(Ratio::<i64>::approximate_f64(f32::MAX as f64, 1e-7), None);
-        assert_eq!(Ratio::<i128>::approximate_f64(f32::MAX as f64, 1e-7), Ratio::try_from(f32::MAX).ok());
-        assert_eq!(Ratio::<i64>::approximate_f64(f64::INFINITY, 1e-7), Ratio::try_from(f32::INFINITY).ok());
-        assert_eq!(Ratio::<i64>::approximate_f64(f64::NEG_INFINITY, 1e-7), Ratio::try_from(f32::NEG_INFINITY).ok());
-        assert_eq!(Ratio::<i64>::approximate_f64(f64::NAN, 1e-7), Ratio::try_from(f32::NAN).ok());
+    fn test_approx_float() {
+        assert_eq!(Ratio::<i32>::from_approx(core::f32::consts::PI, 1e-7), Some(Ratio::new(355, 113)));
+        assert_eq!(Ratio::<i64>::from_approx(core::f64::consts::PI, 1e-7), Some(Ratio::new(355, 113)));
+        assert_eq!(Ratio::<i32>::from_approx(core::f32::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
+        assert_eq!(Ratio::<i64>::from_approx(core::f64::consts::E, 1e-7), Some(Ratio::new(2721, 1001)));
+        assert_eq!(Ratio::<i64>::from_approx(f32::MAX as f64, 1e-7), None);
+        assert_eq!(Ratio::<i128>::from_approx(f32::MAX as f64, 1e-7), Ratio::try_from(f32::MAX).ok());
+        assert_eq!(Ratio::<i64>::from_approx(f64::INFINITY, 1e-7), Ratio::try_from(f32::INFINITY).ok());
+        assert_eq!(Ratio::<i64>::from_approx(f64::NEG_INFINITY, 1e-7), Ratio::try_from(f32::NEG_INFINITY).ok());
+        assert_eq!(Ratio::<i64>::from_approx(f64::NAN, 1e-7), Ratio::try_from(f32::NAN).ok());
+        // Note, these differ from the try_from representations.
+        assert_eq!(core::f64::consts::PI, Ratio::<i128>::from_approx(core::f64::consts::PI, 0.0).unwrap().to_approx());
+        assert_eq!(core::f64::consts::E, Ratio::<i128>::from_approx(core::f64::consts::E, 0.0).unwrap().to_approx());
+        assert_eq!(core::f32::consts::PI, Ratio::<i64>::from_approx(core::f32::consts::PI, 0.0).unwrap().to_approx());
+        assert_eq!(core::f32::consts::E, Ratio::<i64>::from_approx(core::f32::consts::E, 0.0).unwrap().to_approx());
     }
 
     #[test]
@@ -2261,16 +2266,16 @@ mod extension {
         assert_eq!(X.abs_sqr(), SqrtExt::new(35, -2));
         // TODO test with negative SqrtI<_, -1>, SqrtI<_, -2>
 
-        // TODO turn these into tests, once it's clear that the result is correct.
+        // The gcd is currently not unique.
         let a = SqrtExt::<_, Sqrt<_, 2>>::new(2, 1);
         let b = SqrtExt::<_, Sqrt<_, 2>>::new(3, 0);
-        println!("{}", gcd(a, b));
-        println!("{}", lcm(a, b));
+        let _ = gcd(a, b);
+        let _ = lcm(a, b);
 
         let a = SqrtExt::<_, Sqrt<_, 7>>::new(2, 1);
         let b = SqrtExt::<_, Sqrt<_, 7>>::new(3, 5);
-        println!("{}", gcd(a, b));
-        println!("{}", lcm(a, b));
+        let _ = gcd(a, b);
+        let _ = lcm(a, b);
     }
 
     #[test]
@@ -2281,7 +2286,7 @@ mod extension {
         //const S: SqrtExt<i32, Sqrt<i32, N>> = SqrtExt::new(-5, 2); // N=7
         const S: SqrtExt<i32, Sqrt<i32, N>> = SqrtExt::new(6, -2); // N=7
         for i in -5..=5 {
-            assert_eq!(S.cmp(&i.into()), S.to_f64().total_cmp(&(i as f64)));
+            assert_eq!(S.cmp(&i.into()), S.to_approx().total_cmp(&(i as f32)));
             assert_eq!((S + i).cmp(&i.into()), Ordering::Greater);
             assert_eq!((-S * S + i).cmp(&i.into()), Ordering::Less);
             assert_eq!((-S * S * S + i).cmp(&i.into()), Ordering::Less);
@@ -2302,7 +2307,8 @@ mod extension {
         }
         let x: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(-5i64, -5);
         let y: SqrtExt<_, Sqrt<_, 5>> = SqrtExt::new(0, 3);
-        assert_eq!(x.cmp(&y), x.to_f64().total_cmp(&y.to_f64()));
+        let xf: f64 = x.to_approx();
+        assert_eq!(x.cmp(&y), xf.total_cmp(&y.to_approx()));
     }
 
     #[test]
@@ -2317,25 +2323,26 @@ mod extension {
         assert_eq!((S * S - 9) / (S - 3), S + 3);
         // test the reference versions
         const R: &SqrtExt<i32, Sqrt<i32, 7>> = &SqrtExt::new(6, -2);
-        assert_eq!(&(R * R) - &4, (R + &2) * (R - &2));
-        assert_eq!(&(R * R) - &9, (R + &3) * (R - &3));
+        assert_eq!(&(R * R) - &4, &(R + &2) * &(R - &2));
+        assert_eq!(&(&(R * R) * &2) - &18, &(&(R + &3) * &(R - &3)) * &2);
         // test division
         assert_eq!(&(&(R * R) - &4) / &(R + &2), R - &2);
         assert_eq!(&(&(R * R) - &4) / &(R - &2), R + &2);
         assert_eq!(&(&(R * R) - &9) / &(R + &3), R - &3);
         assert_eq!(&(&(R * R) - &9) / &(R - &3), R + &3);
+        // don't need to test assign ops, because they are implemented using the above ones.
     }
 
     #[test]
     fn test_arithmetic_overflow() {
         let a: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(4, 2);
         let b: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(14, -6);
-        println!("{}", a / b);
-        println!("{}", &a / &b);
+        let _ = a / b;
+        let _ = &a / &b;
         let a: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(2, 8);
         let b: SqrtExt<i8, Sqrt<i8, 2>> = SqrtExt::new(14, -6);
-        println!("{}", a / b);
-        println!("{}", &a / &b);
+        let _ = a / b;
+        let _ = &a / &b;
     }
 
     #[test]
@@ -2373,7 +2380,7 @@ mod extension {
             println!("start √{n}");
             dynamic_sqrt_u64!(N, n);
             for n in 0..iter {
-                let r = Ratio::approximate_sqrt::<N<i64>>(n);
+                let r = Ratio::approx_sqrt::<N<i64>>(n);
                 println!("{}", r);
                 let x = SqrtExt::<_, N<_>>::new(-r.numer, r.denom);
                 assert!(x > (-1).into());
@@ -2390,15 +2397,16 @@ mod extension {
         test(31, 8);
         let x = SqrtExt::<_, Sqrt<i64, 2>>::new(0, 2);
         for n in 0..12 {
-            println!("{}", x.approximate_rational(n));
+            println!("{}", x.approx_rational(n));
         }
     }
 
     #[test]
     fn test_continued_fraction() {
+        // all pushed out to almost overflow
         {
             println!("starting √2");
-            let cf = [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
+            let cf = [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2];
             let x = SqrtExt::<i64, Sqrt<i64, 2>>::new(0, 1);
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
@@ -2408,7 +2416,7 @@ mod extension {
         }
         {
             println!("starting √3");
-            let cf = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
+            let cf = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
             let x = SqrtExt::<i64, Sqrt<i64, 3>>::new(0, 1);
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
@@ -2418,7 +2426,7 @@ mod extension {
         }
         {
             println!("starting √5");
-            let cf = [2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4];
+            let cf = [2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4];
             let x = SqrtExt::<i64, Sqrt<i64, 5>>::new(0, 1);
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
@@ -2431,13 +2439,13 @@ mod extension {
             let x = SqrtExt::<i64, Sqrt<i64, 24>>::new(0, 1);
             let mut iter1 = DevelopContinuedFraction::new(x);
             let mut iter2 = DevelopContinuedFraction::new(x).continued_fraction(1);
-            for _ in 0..15 {
+            for _ in 0..38 {
                 println!("{} -> {}", iter1.next().unwrap(), iter2.next().unwrap());
             }
         }
         {
             println!("starting √31");
-            let cf = [5, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10];
+            let cf = [5, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3];
             let x = SqrtExt::<i64, Sqrt<i64, 31>>::new(0, 1);
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
@@ -2445,22 +2453,50 @@ mod extension {
                 println!("{}", cf[..n].iter().continued_fraction(1).last().unwrap());
             }
         }
-        // TODO push it out to almost overflow!
-        //println!("{}", Ratio::approximate_sqrt::<extension::Sqrt<i64, 31>>(n as u64));
+        //println!("{}", Ratio::approx_sqrt::<extension::Sqrt<i64, 31>>(n as u64));
     }
 
     #[test]
-    fn test_approximate_float() {
+    fn test_ratio_sqrt() {
+        // test a bunch of things with
+        type S = Sqrt<Ratio<i64>, 2>;
+        assert_eq!(SqrtExt::<_, S>::unit(), SqrtExt::<_, S>::new(Ratio::zero(), Ratio::one())); // 1/sqrt(N) = sqrt(N)/N
+        // test cf development into fractions of sqrt terms using floats
+        let mut iter = DevelopContinuedFraction::new(core::f64::consts::PI);
+        let x = SqrtExt::<f64, Sqrt<f64, 2>>::new(core::f64::consts::PI, 0.0);
+        let mut iter2 = DevelopContinuedFraction::new(Ratio::from(x));
+        for _ in 0..20 {
+            assert_eq!(iter2.next().unwrap(), iter.next().unwrap().into());
+        }
+        // this next form gives different results including notably 22/7
+        let x = SqrtExt::<f64, Sqrt<f64, 6>>::new(0.0, core::f64::consts::PI);
+        let mut iter = DevelopContinuedFraction::new(Ratio::from(x));
+        for _ in 0..10 {
+            println!("{}", iter.next().unwrap());
+        }
+        println!();
+        let mut iter = DevelopContinuedFraction::new(Ratio::from(x)).continued_fraction(One::one());
+        for _ in 0..10 {
+            let v = iter.next().unwrap() / SqrtExt::new(0.0, 1.0);
+            let vf = v.to_approx();
+            let err = ((vf - core::f64::consts::PI) / core::f64::consts::PI).abs();
+            println!("{v} error: {err:.2e}");
+        }
+    }
+
+    #[test]
+    fn test_approx_float() {
         let f_list = [core::f32::consts::PI, core::f32::consts::E, core::f32::consts::LN_2, 1.5, 0.7, 12500.7, 0.0001];
         const N: u64 = 5;
-        let tol = 1e-6;
+        let tol = 1e-6f32;
         for f in f_list {
-            let x = SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f, tol).unwrap();
-            assert!((x.to_f64() as f32 - f).abs() < tol);
+            let x = SqrtExt::<i64, Sqrt<_, N>>::from_approx(f, tol).unwrap();
+            let xf: f32 = x.to_approx();
+            assert!((xf - f).abs() < tol, "failed with\n{} vs\n{}\n{}", xf, f, x);
             //println!("{}", x);
         }
-        assert!(SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f32::NAN, tol).is_none());
-        assert!(SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f32::INFINITY, tol).is_none());
-        assert!(SqrtExt::<i32, Sqrt<_, N>>::approximate_f32(f32::NEG_INFINITY, tol).is_none());
+        assert!(SqrtExt::<i32, Sqrt<_, N>>::from_approx(f32::NAN, tol).is_none());
+        assert!(SqrtExt::<i32, Sqrt<_, N>>::from_approx(f32::INFINITY, tol).is_none());
+        assert!(SqrtExt::<i32, Sqrt<_, N>>::from_approx(f32::NEG_INFINITY, tol).is_none());
     }
 }

@@ -4,9 +4,8 @@ use core::borrow::Borrow;
 
 use crate::{Cancel, One, Zero, rational::Ratio};
 
-// TODO remove this trait again as there is only one implementation possible with this type layout.
-pub trait ContinuedFraction: Sized + Clone {
-    type Output;
+trait ContinuedFraction: Sized {
+    type Output: Sized;
     fn start() -> (Self, Self, Self, Self);
     fn next(accum: (Self, Self, Self, Self), value: &Self) -> (Self, Self, Self, Self);
     fn end(accum: (Self, Self, Self, Self), end: Self) -> Self::Output;
@@ -20,7 +19,6 @@ impl<T: Cancel> ContinuedFraction for T {
     }
     fn next(accum: (Self, Self, Self, Self), x: &Self) -> (Self, Self, Self, Self) {
         let (a, b, c, d) = accum;
-        // TODO cancelation in all 4 variables?
         (x.clone() * a.clone() + b, a, x.clone() * c.clone() + d, c)
     }
     fn end(accum: (Self, Self, Self, Self), end: T) -> Self::Output {
@@ -31,15 +29,15 @@ impl<T: Cancel> ContinuedFraction for T {
 
 /// Trait extension to iterators to allow evaluating them as continued fractions.
 /// This is done forward, so `[1, 2, 2]` turns into `[1+1/1, 1+1/(2+1/1), 1+1/(2+1/(2+1/1))]`
-pub struct ContinuedFractionIter<T: ContinuedFraction, I: Iterator> {
+pub struct ContinuedFractionIter<T: Cancel, I: Iterator> {
     iter: I,
     accum: (T, T, T, T),
     end: T,
 }
-impl<T: ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> Iterator
+impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator
     for ContinuedFractionIter<T, I>
 {
-    type Item = T::Output;
+    type Item = Ratio<T>;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|x| {
             take_mut::take(&mut self.accum, |accum| T::next(accum, &x.borrow()));
@@ -79,7 +77,7 @@ pub trait IntoContinuedFraction<T: Sized> {
     /// This is done forward, so `[1, 2, 2]` turns into `[1+1/1, 1+1/(2+1/1), 1+1/(2+1/(2+1/1))]`
     fn continued_fraction(self, end: T) -> Self::IntoIter;
 }
-impl<'a, T: 'a + ContinuedFraction, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T>
+impl<'a, T: 'a + Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T>
     for I
 {
     type IntoIter = ContinuedFractionIter<T, Self>;
@@ -150,7 +148,7 @@ impl_into_discrete_int!(
     u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
 );
 
-/// Iterator for a regular continued fraction.
+/// Iterator for a simple/regular continued fraction.
 pub struct DevelopContinuedFraction<T> {
     // remaining value
     numer: T,
@@ -158,10 +156,7 @@ pub struct DevelopContinuedFraction<T> {
 }
 
 // same trait bounds as for iterator to simplify error messages
-impl<T: Cancel + IntoDiscrete> DevelopContinuedFraction<T>
-where
-    <T as IntoDiscrete>::Output: Cancel, // implied by ContinuedFractionIter
-{
+impl<T: Cancel + IntoDiscrete> DevelopContinuedFraction<T> {
     pub fn new(value: T) -> Self {
         Self {
             numer: value,
@@ -183,11 +178,10 @@ impl<T: Cancel + IntoDiscrete> Iterator for DevelopContinuedFraction<T> {
             if r.is_zero() {
                 (T::zero(), T::zero()) // end
             } else {
+                //(self.denom.clone(), r)
                 self.denom.clone().cancel(r)
             }
         };
         Some(i)
     }
 }
-
-// TODO based on DevelopContinuedFraction implement approximate_float for Ratio<T>

@@ -153,7 +153,7 @@ where
     /// let cfrac = DevelopContinuedFraction::new(x).take(n);
     /// let res = cfrac.continued_fraction::<Ratio<i64>>();
     /// assert_eq!(res, Ratio::new(33646, 6043));
-    /// assert_ne!(res, Ratio::approximate_sqrt::<Sqrt<i64, 31>>(n as u64));
+    /// assert_ne!(res, Ratio::approx_sqrt::<Sqrt<i64, 31>>(n as u64));
     /// ```
     ///
     /// In some cases this function gives the continued fraction results, like for √3
@@ -167,10 +167,10 @@ where
     ///     let x = SqrtExt::<_, Sqrt<i64, N>>::new(0, 1);
     ///     let cfrac = DevelopContinuedFraction::new(x).take(n);
     ///     let res = cfrac.continued_fraction::<Ratio<i64>>();
-    ///     assert_eq!(res, Ratio::approximate_sqrt::<Sqrt<i64, N>>((n / 2) as u64));
+    ///     assert_eq!(res, Ratio::approx_sqrt::<Sqrt<i64, N>>((n / 2) as u64));
     /// }
     /// ```
-    pub fn approximate_sqrt<E: SqrtConst<T>>(iterations: u64) -> Self {
+    pub fn approx_sqrt<E: SqrtConst<T>>(iterations: u64) -> Self {
         // Note, that (√N - floor(√N))^n converges to 0 for increasing n
         // This gives a rational number by x + y√N = 0 -> -x/y = √N
         // round(√N) is better than floor(√N), so use that
@@ -190,9 +190,9 @@ where
     for<'a> &'a T: AddMulSub<Output = T>,
 {
     /// Exponentially converging rational approximation of this number.
-    pub fn approximate_rational(&self, iterations: u64) -> Ratio<T> {
+    pub fn approx_rational(&self, iterations: u64) -> Ratio<T> {
         // just use the sqrt approximation without any additional fancy stuff.
-        &(&Ratio::approximate_sqrt::<E>(iterations) * &self.ext) + &self.value
+        &(&Ratio::approx_sqrt::<E>(iterations) * &self.ext) + &self.value
     }
 }
 
@@ -290,7 +290,7 @@ where
 
 impl<T: Zero + One + Num, E: SqrtConst<T>> One for SqrtExt<T, E>
 where
-    for<'a> &'a T: Mul<&'a T, Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     fn one() -> Self {
         Self::new(T::one(), T::zero())
@@ -324,7 +324,6 @@ impl<T: Num + PartialOrd + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> P
             (Ordering::Less, Ordering::Less) => Ordering::Less,
             _ => {
                 let x = self - other;
-                // TODO with floor, this can be improved to overflow less often.
                 let c =
                     (x.value.clone() * x.value).partial_cmp(&(x.ext.clone() * x.ext * E::sqr()))?;
                 match (a, b) {
@@ -339,52 +338,57 @@ impl<T: Num + PartialOrd + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> P
 impl<T: Num + Zero + Ord + Neg<Output = T> + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Ord
     for SqrtExt<T, E>
 where
-    for<'a> &'a T: Mul<&'a T, Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap() // no panic
     }
 }
 
-impl<T: Num + Cancel + Neg<Output = T> + PartialOrd + Div<Output = T>, E: SqrtConst<T>> IntoDiscrete
-    for SqrtExt<T, E>
+impl<
+    T: Num + Cancel + IntoDiscrete + Neg<Output = T> + PartialOrd + Div<Output = T>,
+    E: SqrtConst<T>,
+> IntoDiscrete for SqrtExt<T, E>
+where
+    <T as IntoDiscrete>::Output: IntoDiscrete<Output = <T as IntoDiscrete>::Output>
+        + Add<Output = <T as IntoDiscrete>::Output>
+        + Div<Output = <T as IntoDiscrete>::Output>,
 {
     type Output = T;
     fn floor(&self) -> Self::Output {
-        // TODO the following only works for integers... otherwise the result is not an integer...
-        // TODO base this on T: IntoDiscrete
         if self.ext.is_zero() || self.ext.is_one() {
-            self.value.clone() + self.ext.clone() * E::floor()
+            self.ext.clone() * E::floor() + self.value.floor().into()
         } else if (-self.ext.clone()).is_one() {
-            self.value.clone() - self.ext.clone() * (E::floor() + T::one())
+            T::from(self.value.floor()) - self.ext.clone() * (E::floor() + T::one())
         } else {
             // 1. split the integral part off
             // 2. floor(x√N) = floor(x)*floor(√N) + n with integer 0 <= n < x (+ floor(√N) for non integer types)
             // -> do a binary search for the integer n in O(log x) steps to find the value n where x√N <> floor(x)*floor(√N) + n switches
             // TODO it would be much better to have integers here, but that requires e.g. TryInto<u64>, as I would need E::floor() as u64
+            // TODO the following only works for integers...
             let v = self.ext.clone() * E::floor();
             let w = Self::new(T::zero(), self.ext.clone());
             assert!(w > v.clone().into());
-            let mut a = T::zero();
-            let mut b = self.ext.clone() + E::floor() - T::one();
-            let two = T::one() + T::one();
-            assert!(!two.is_unit());
+            let mut a = T::zero().floor();
+            let mut b = (self.ext.clone() + E::floor() - T::one()).floor();
+            let two = (T::one() + T::one()).floor();
             loop {
-                let c = (a.clone() + b.clone()) / two.clone();
+                let c = ((a.clone() + b.clone()) / two.clone()).floor(); // this way to also handle float
                 if c != a && c != b {
-                    if w > (v.clone() + c.clone()).into() {
+                    let add: T = v.clone() + c.clone().into();
+                    if w > add.into() {
                         // too small still
                         a = c;
                     } else {
                         b = c;
                     }
                 } else {
-                    // is only reached for discrete T
+                    // is only reached for "good" T
                     break;
                 }
             }
             // now we have v+a < x√N < v+b, so v+a is the floor
-            self.value.clone() + v + a
+            self.value.clone() + v + a.into()
         }
     }
     fn round(&self) -> Self::Output {
@@ -476,7 +480,7 @@ macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
         impl<T: Num, E: SqrtConst<T>> $Add for SqrtExt<T, E>
         where
-            for<'a> &'a T: $Add<&'a T, Output = T>, // TODO can I move this $Add to the owned version?
+            for<'a> &'a T: $Add<Output = T>, // TODO can I move this $Add to the owned version?
         {
             type Output = SqrtExt<T, E>;
             fn $add(self, rhs: Self) -> Self::Output {
@@ -494,7 +498,7 @@ macro_rules! impl_add {
         }
         impl<T: Num, E: SqrtConst<T>> $Add<T> for SqrtExt<T, E>
         where
-            for<'a> &'a T: $Add<&'a T, Output = T>,
+            for<'a> &'a T: $Add<Output = T>,
         {
             type Output = SqrtExt<T, E>;
             fn $add(self, rhs: T) -> Self::Output {
@@ -578,7 +582,7 @@ impl<T: Num + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = T>, 
 // TODO in macro for Div as well:
 impl<T: Num, E: SqrtConst<T>> Mul<T> for SqrtExt<T, E>
 where
-    for<'a> &'a T: Mul<&'a T, Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     type Output = SqrtExt<T, E>;
     fn mul(self, rhs: T) -> Self::Output {
@@ -615,19 +619,19 @@ where
             return (T::one().into(), T::zero().into());
         }
         // for any E::sqr().abs(), which is not a perfect square,
-        // one can arbitrarily closely approximate the inverse of any number,
+        // one can arbitrarily closely approx the inverse of any number,
         // as the numbers are dense in the reals (because √N is irrational).
         // However that is not, what should be used here.
         // Instead a solution with as simple as possible numbers is searched.
         let mut denom = b.abs_sqr_ext();
-        let mut numer = SqrtExt::new(
+        let mut numer = Self::new(
             self.value.clone() * b.value.clone() - self.ext.clone() * b.ext.clone() * E::sqr(),
             self.ext.clone() * b.value.clone() - self.value.clone() * b.ext.clone(),
         );
-        if denom.is_unit() {
+        /*if denom.is_unit() {
             // do the exact division. Required by definition of `div_rem_euclid`
             return (&numer * &(T::one() / denom), T::zero().into());
-        }
+        }*/
         // compute `a/b = q.value + q.ext √N` using rational numbers, then round those.
         // before rounding, decompose √N = floor(√N) + (√N - floor(√N))
         // q = (q.value + q.ext floor(√N)) + q.ext (√N - floor(√N))
@@ -681,7 +685,7 @@ where
 }
 
 macro_rules! forward_assign_impl {
-    ($($AddAssign:ident, $Add:ident, $add_assign:ident, $add:ident),+) => {
+    ($($AddAssign:ident, $Add:ident, $add_assign:ident, $add:ident);+) => {
         $(impl<T: Num + Add<Output = T>, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
             where for<'a> &'a T: $Add<Output = T> {
             fn $add_assign(&mut self, rhs: SqrtExt<T, E>) {
@@ -707,7 +711,7 @@ macro_rules! forward_assign_impl {
     };
 }
 forward_assign_impl!(
-    AddAssign, Add, add_assign, add, SubAssign, Sub, sub_assign, sub, MulAssign, Mul, mul_assign,
+    AddAssign, Add, add_assign, add; SubAssign, Sub, sub_assign, sub; MulAssign, Mul, mul_assign,
     mul //, DivAssign, Div, div_assign, div, RemAssign, Div, rem_assign, rem
 );
 
@@ -787,56 +791,91 @@ where
     }
 }
 
-macro_rules! impl_approximate_float {
-    ($approximate:ident, $to_float:ident, $float:ty, $($int:ty),+) => {
-        $(impl<E: SqrtConst<$int>> SqrtExt<$int, E> {
-            /// Returns the float value, represented by this number.
-            #[inline]
-            pub fn $to_float(&self) -> $float {
-                let a: $float = self.value as $float;
-                let b: $float = self.ext as $float;
-                let c: $float = E::sqr() as $float;
-                a + b * c.sqrt()
+impl<
+    F: FloatType,
+    T: Num + Cancel + PartialOrd + Div<Output = T> + Neg<Output = T>,
+    E: SqrtConst<T>,
+> ApproxFloat<F> for SqrtExt<T, E>
+where
+    T: ApproxFloat<F>,
+    for<'a> &'a T: AddMulSub<Output = T>,
+{
+    // Find a close approximation to a float using small integers.
+    fn from_approx(mut value: F, mut tol: F) -> Option<Self> {
+        if !value.is_finite() || tol < F::zero() {
+            return None;
+        }
+        // The possibly simplest method is binary search.
+        // 1. get the integer part right
+        // 2. add k*(√N - floor(√N))^n, where k is an integer and n indicates the repetition of this step.
+        // this can also be inverted to no longer require binary search, when concrete types are used.
+        // This is a kinda radix based number system, just that the radix is 0 < √N - floor(√N) < 1
+        // We know how to convert into such a number system using the euclidean algorithm.
+        // He we use rounding instead of floor to get smaller integers k.
+        let r = Self::new(-E::floor(), T::one());
+        let rf = r.to_approx();
+        let mut p = Self::new(T::one(), T::zero());
+        let mut result = Self::new(T::zero(), T::zero());
+        let half = F::one() / (F::one() + F::one());
+        loop {
+            let xf = value.round();
+            let x = T::from_approx(xf.clone(), half.clone())?;
+            result += &(&p * &x);
+            p *= &r;
+            value = (value - xf) / rf.clone();
+            tol = tol / rf.clone();
+            if value.abs() <= tol.abs() {
+                return Some(result);
             }
         }
-        impl<E: SqrtConst<$int>> SqrtExt<$int, E> {
-            // Find a close approximation to a `f32` using small integers.
-            pub fn $approximate(mut value: $float, mut tol: $float) -> Option<Self> {
-                if !value.is_finite() || tol <= 0.0 {
-                    return None;
-                }
-                // The possibly simplest method is binary search.
-                // 1. get the integer part right
-                // 2. add k*(√N - floor(√N))^n, where k is an integer and n indicates the repetition of this step.
-                // this can also be inverted to no longer require binary search, when concrete types are used.
-                // This is a kinda radix based number system, just that the radix is 0 < √N - floor(√N) < 1
-                // We know how to convert into such a number system using the euclidean algorithm.
-                // He we use rounding instead of floor to get smaller integers k.
-                let r = Self::new(-E::floor(), 1);
-                let rf = (E::sqr() as $float).sqrt() - E::floor() as $float;
-                let mut p = Self::one();
-                let mut result = Self::zero();
-                loop {
-                    let xf = value.round();
-                    let x = xf as $int;
-                    if (x as $float - value).abs() > 0.5 {
-                        return None; // can not be represented, as it's too big or small
-                    }
-                    result += p * x;
-                    p *= r;
-                    value -= xf;
-                    value /= rf;
-                    tol /= rf;
-                    if value.abs() < tol.abs() {
-                        return Some(result);
-                    }
-                }
+    }
+    #[inline]
+    fn to_approx(&self) -> F {
+        let c: F = E::sqr().to_approx();
+        // evaluate to float, but be very careful to avoid cancellation
+        if E::is_negative()
+            || self.value.is_zero()
+            || self.ext.is_zero()
+            || self.value.is_valid_euclid() == self.ext.is_valid_euclid()
+        {
+            // no cancelation, as both have the same sign.
+            let a: F = self.value.to_approx();
+            let b: F = self.ext.to_approx();
+            a + b * c.sqrt()
+        } else {
+            // cancel some of the integer part using floor first:
+            let mut q = self.clone();
+            q.value = q.value + q.ext.clone() * E::floor();
+            let rf = c.sqrt() - E::floor().to_approx();
+            let mut f = rf * q.ext.to_approx() + q.value.to_approx();
+            if self.value.is_zero() || self.value.is_valid_euclid() == self.ext.is_valid_euclid() {
+                return f;
             }
-        })+
-    };
+            // to remove the remaining cancelation error use Newton iteration:
+            // x-y√N = f -> N y^2 = (x - f)^2 = x^2 - 2xf + f^2
+            // -> F(f) = f^2 - 2xf + (x^2 - N y^2)
+            // -> F'(f) = 2f - 2x
+            let x: F = self.value.to_approx();
+            // huge exact integer cancelation! Easily overflows...
+            // This is what makes this converge to the correct solution.
+            let sqr: F = self.abs_sqr_ext().to_approx();
+            let two = F::one() + F::one();
+            let mut last_v = F::zero();
+            // limited to 100 to avoid endless loops at all cost.
+            // Theoretically, I think there can be floats, which cycle between two tiny numbers for v.
+            for _ in 0..100 {
+                let d = f.clone() - x.clone(); // derivative
+                let v = f.clone() * (d.clone() - x.clone()) + sqr.clone();
+                if v.is_zero() || v == last_v {
+                    break;
+                }
+                last_v = v.clone();
+                f = f - v / (two.clone() * d);
+            }
+            f
+        }
+    }
 }
-impl_approximate_float!(approximate_f32, to_f32, f32, i32, i64, i128);
-impl_approximate_float!(approximate_f64, to_f64, f64, i32, i64, i128);
 
 // Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
@@ -864,46 +903,119 @@ macro_rules! impl_formatting {
             for SqrtExt<T, E>
         {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let pre_pad = if self.ext.is_zero() {
-                    std::format!($fmt_str, self.value)
-                } else if self.ext.is_one() {
-                    if self.value.is_zero() {
-                        std::format!(concat!("√", $fmt_str), E::sqr())
+                if self.ext.is_zero() {
+                    return <T as fmt::$Display>::fmt(&self.value, f);
+                }
+                let value = if f.alternate() {
+                    &std::format!($fmt_alt, self.value)
+                } else {
+                    &std::format!($fmt_str, self.value)
+                };
+                let ext = if self.ext.is_zero() || self.ext.is_one() {
+                    ""
+                } else if f.alternate() {
+                    &std::format!($fmt_alt, self.ext)
+                } else {
+                    &std::format!($fmt_str, self.ext)
+                };
+                let ext_no_sign = ext.strip_prefix("-");
+                let is_number = !ext_no_sign
+                    .unwrap_or(ext)
+                    .chars()
+                    .any(|c| c == '+' || c == '-' || c == '/');
+
+                let sqr = if f.alternate() {
+                    &std::format!($fmt_alt, E::sqr())
+                } else {
+                    &std::format!($fmt_str, E::sqr())
+                };
+                let sqr_no_sign = sqr.strip_prefix("-");
+                let sqr_is_number = sqr_no_sign.unwrap_or(sqr).chars().all(|c| c.is_alphanumeric());
+                let sqr = if sqr_is_number {
+                    std::format!("√{}", sqr)
+                } else {
+                    std::format!("√({})", sqr)
+                };
+
+                let pre_pad = if self.ext.is_one() {
+                    &if self.value.is_zero() {
+                        sqr
                     } else {
-                        std::format!(concat!($fmt_str, "+√", $fmt_str), self.value, E::sqr())
+                        std::format!(concat!($fmt_str, "+{}"), self.value, sqr)
                     }
                 } else {
-                    if self.value.is_zero() {
-                        if f.alternate() {
-                            std::format!(concat!("(", $fmt_alt, ")√", $fmt_str), self.ext, E::sqr())
+                    &if self.value.is_zero() {
+                        if is_number {
+                            std::format!("{}{}", ext, sqr)
                         } else {
-                            std::format!(concat!("(", $fmt_str, ")√", $fmt_str), self.ext, E::sqr())
+                            std::format!("({}){}", ext, sqr)
                         }
                     } else {
-                        if f.alternate() {
-                            std::format!(
-                                concat!($fmt_str, "+(", $fmt_alt, ")√", $fmt_str),
-                                self.value,
-                                self.ext,
-                                E::sqr()
-                            )
+                        if is_number {
+                            if ext_no_sign.is_some() {
+                                std::format!("{}{}{}", value, ext, sqr)
+                            } else {
+                                std::format!("{}+{}{}", value, ext, sqr)
+                            }
                         } else {
-                            std::format!(
-                                concat!($fmt_str, "+(", $fmt_str, ")√", $fmt_str),
-                                self.value,
-                                self.ext,
-                                E::sqr()
-                            )
+                            std::format!("{}+({}){}", value, ext, sqr)
                         }
                     }
                 };
                 if let Some(pre_pad) = pre_pad.strip_prefix("-") {
-                    f.pad_integral(false, $prefix, pre_pad)
+                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
+                        f.pad_integral(false, $prefix, pre_pad)
+                    } else {
+                        f.pad_integral(false, "", pre_pad)
+                    }
                 } else {
-                    f.pad_integral(true, $prefix, &pre_pad)
+                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
+                        f.pad_integral(true, $prefix, pre_pad)
+                    } else {
+                        f.pad_integral(true, "", &pre_pad)
+                    }
                 }
             }
-            // TODO no_std, see Ratio<T>
+            #[cfg(not(feature = "std"))]
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                if self.ext.is_zero() {
+                    return <T as fmt::$Display>::fmt(&self.value, f);
+                }
+                // can't do any of the checking, so just always print with parenthesis to be on the safe side
+                if self.value.is_zero() {
+                    if f.alternate() {
+                        write!(
+                            f,
+                            concat!("(", $fmt_alt, ")√", $fmt_alt),
+                            self.ext,
+                            E::sqr()
+                        )
+                    } else {
+                        write!(
+                            f,
+                            concat!("(", $fmt_str, ")√", $fmt_str),
+                            self.ext,
+                            E::sqr()
+                        )
+                    }
+                } else if f.alternate() {
+                    write!(
+                        f,
+                        concat!("(", $fmt_alt, ")+(", $fmt_alt, ")√", $fmt_alt),
+                        self.value,
+                        self.ext,
+                        E::sqr()
+                    )
+                } else {
+                    write!(
+                        f,
+                        concat!("(", $fmt_str, ")+(", $fmt_str, ")√", $fmt_str),
+                        self.value,
+                        self.ext,
+                        E::sqr()
+                    )
+                }
+            }
         }
     };
 }

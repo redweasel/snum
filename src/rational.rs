@@ -9,7 +9,7 @@ use core::{
 };
 use take_mut::take;
 
-use crate::{DevelopContinuedFraction, IntoContinuedFraction, IntoDiscrete, num::*};
+use crate::{float::ApproxFloat, num::*, DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete};
 use crate::{FromU64, complex::Complex};
 
 /// A fraction, or rational number `p/q`.
@@ -698,36 +698,40 @@ where
     }
 }
 
-macro_rules! impl_approximate_float {
-    ($approximate:ident, $float:ty, $($int:ty),+) => {
-        $(impl Ratio<$int> {
-            pub fn $approximate(value: $float, rtol: $float) -> Option<Self> {
-                if !value.is_finite() || rtol <= 0.0 {
-                    return Ratio::try_from(value).ok();
-                }
-                if value.round() == value {
-                    let v = value as $int;
-                    return (v as $float == value).then_some(Ratio::new_raw(v, 1));
-                }
-                let iter = DevelopContinuedFraction::new(value).continued_fraction(1.0);
-                for x in iter {
-                    if (x.numer / x.denom - value).abs() / value < rtol {
-                        let numer = x.numer as $int;
-                        let denom = x.denom as $int;
-                        if numer as $float != x.numer || denom as $float != x.denom {
-                            return None;
-                        }
-                        return Some(Ratio::new(numer, denom));
-                    }
-                }
-                None
+impl<F: FloatType, T: Cancel + Neg<Output = T>> ApproxFloat<F> for Ratio<T>
+where T: ApproxFloat<F> {
+    fn from_approx(value: F, rtol: F) -> Option<Self> {
+        // TODO switch to absolute tolerance!
+        if !value.is_finite() {
+            if value.is_infinite() {
+                return Some(Ratio { numer: if value > F::zero() { T::one() } else { -T::one() }, denom: T::zero() })
             }
-        })+
-    };
+            return Some(Ratio::new_raw(T::zero(), T::zero()));
+        }
+        if value.round() == value {
+            let v = T::from_approx(value.clone(), rtol.clone())?;
+            return (v.to_approx() == value).then_some(Ratio::new_raw(v, T::one()));
+        }
+        let iter = DevelopContinuedFraction::new(value.clone()).continued_fraction(F::one());
+        for x in iter {
+            let rerr = (x.numer.clone() / x.denom.clone() - value.clone()) / value.clone();
+            if rerr <= rtol && -rerr <= rtol {
+                let numer = T::from_approx(x.numer.clone(), rtol.clone())?;
+                let denom = T::from_approx(x.denom.clone(), rtol.clone())?;
+                if numer.to_approx() != x.numer || denom.to_approx() != x.denom {
+                    return None;
+                }
+                return Some(Ratio::new(numer, denom));
+            }
+        }
+        None
+    }
+    #[inline]
+    fn to_approx(&self) -> F {
+        // always safe to just compute this.
+        self.numer.to_approx() / self.denom.to_approx()
+    }
 }
-impl_approximate_float!(approximate_f32, f32, i32, i64, i128);
-impl_approximate_float!(approximate_f64, f64, i64, i128);
-
 
 // Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
@@ -761,52 +765,92 @@ impl<T: Clone + Zero + RemEuclid + Hash> Hash for Ratio<T> {
 // String conversions
 macro_rules! impl_formatting {
     ($Display:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
-        impl<T: fmt::$Display + Clone + One> fmt::$Display for Ratio<T> {
+        impl<T: fmt::$Display + Clone + Zero + One> fmt::$Display for Ratio<T> {
             #[cfg(feature = "std")]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let pre_pad = if self.denom.is_one() {
-                    std::format!($fmt_str, self.numer)
+                if self.denom.is_one() {
+                    return self.numer.fmt(f);
+                }
+                let numer = &if f.alternate() {
+                    std::format!($fmt_alt, self.numer)
                 } else {
-                    if f.alternate() {
-                        std::format!(concat!($fmt_str, "/", $fmt_alt), self.numer, self.denom)
+                    std::format!($fmt_str, self.numer)
+                };
+                let numer_no_sign = numer.strip_prefix("-");
+                let numer_is_number = !numer_no_sign.unwrap_or(numer).chars().any(|c| c == '+' || c == '-' || c == '/');
+                let pre_pad = if self.denom.is_zero() {
+                    if self.numer.is_zero() {
+                        "NaN"
+                    } else if numer_no_sign.unwrap_or(numer) == "1" {
+                        &std::format!("{}∞", &numer[..numer.len()-1])
+                    } else if numer_is_number {
+                        &std::format!("{}∞", numer)
                     } else {
-                        std::format!(concat!($fmt_str, "/", $fmt_str), self.numer, self.denom)
+                        &std::format!("({})∞", numer)
+                    }
+                } else {
+                    // note, this is missing a lot of annotations like the precision in case of floats.
+                    let denom = &if f.alternate() {
+                        std::format!($fmt_alt, self.denom)
+                    } else {
+                        std::format!($fmt_str, self.denom)
+                    };
+                    let denom_no_sign = denom.strip_prefix("-");
+                    let denom_is_number = !denom_no_sign.unwrap_or(denom).chars().any(|c| c == '+' || c == '-' || c == '/' || c == '*');
+                    // Note, the signs can not be processed as strings, as the expression might be e.g. -1+i
+                    &if numer_is_number {
+                        if denom_is_number {
+                            std::format!("{}/{}", numer, denom)
+                        } else {
+                            std::format!("{}/({})", numer, denom)
+                        }
+                    } else {
+                        if denom_is_number {
+                            std::format!("({})/{}", numer, denom)
+                        } else {
+                            std::format!("({})/({})", numer, denom)
+                        }
                     }
                 };
                 if let Some(pre_pad) = pre_pad.strip_prefix("-") {
-                    f.pad_integral(false, $prefix, pre_pad)
+                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
+                        f.pad_integral(false, $prefix, pre_pad)
+                    } else {
+                        f.pad_integral(false, "", pre_pad)
+                    }
                 } else {
-                    f.pad_integral(true, $prefix, &pre_pad)
+                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
+                        f.pad_integral(true, $prefix, pre_pad)
+                    } else {
+                        f.pad_integral(true, "", &pre_pad)
+                    }
                 }
             }
             #[cfg(not(feature = "std"))]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let plus = ""; /*if f.sign_plus() && self.numer >= T::zero() {
-                "+"
-                } else {
-                ""
-                };*/
-                // + not currently supported in no_std environment.
                 if self.denom.is_one() {
-                    if f.alternate() {
-                        write!(f, concat!("{}", $fmt_alt), plus, self.numer)
+                    return self.numer.fmt(f);
+                }
+                // can't do any of the checking, so just always print with parenthesis to be on the safe side
+                if self.denom.is_zero() {
+                    if self.numer.is_zero() {
+                        write!(f, "NaN")
                     } else {
-                        write!(f, concat!("{}", $fmt_str), plus, self.numer)
+                        write!(f, "({})∞", self.numer)
                     }
+                }
+                else if f.alternate() {
+                    write!(
+                        f,
+                        concat!("(", $fmt_alt, ")/(", $fmt_alt, ")"),
+                        self.numer, self.denom
+                    )
                 } else {
-                    if f.alternate() {
-                        write!(
-                            f,
-                            concat!("{}", $fmt_alt, "/", $fmt_alt),
-                            plus, self.numer, self.denom
-                        )
-                    } else {
-                        write!(
-                            f,
-                            concat!("{}", $fmt_str, "/", $fmt_str),
-                            plus, self.numer, self.denom
-                        )
-                    }
+                    write!(
+                        f,
+                        concat!("(", $fmt_str, ")/(", $fmt_str, ")"),
+                        self.numer, self.denom
+                    )
                 }
             }
         }

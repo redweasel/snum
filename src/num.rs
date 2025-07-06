@@ -215,7 +215,7 @@ pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
 }
 
 /// A number that supports sqrt and cbrt (E.g. a float).
-/// Integers should not implement this, as their sqrt and cbrt are approximate.
+/// Integers should not implement this, as their sqrt and cbrt are approx.
 // NOTE: general powf could be added here, but strictly speaking algebraic just means pow(p/q) with p, q integers.
 // In any case, sqrt and cbrt are enough to get all analytic polynomial solutions working, which was the goal with this type.
 pub trait NumAlgebraic: Num {
@@ -503,7 +503,7 @@ macro_rules! num_float_type {
             }
             #[inline(always)]
             fn is_unit(&self) -> bool {
-                // every number has an (approximate) inverse, except for 0 and non finite values.
+                // every number has an (approx) inverse, except for 0 and non finite values.
                 // inverse in the sense, that x * (1.0 / x) = 1.0
                 self != &0.0 && self.is_finite()
             }

@@ -11,7 +11,8 @@
 //! - Derived traits are [Cancel], [Power], [IntMul].
 //! 
 //! All operator implementations, which mix references and owned structs are considered bloat, as the
-//! real world performance benefit hasn't been demonstrated. Usually one can already write equations
+//! real world performance benefit hasn't been demonstrated. Note that any type with expensive clone
+//! could just internally use `Arc` to make it cheap again. Usually one can already write equations
 //! optimal with non-mixed operations. Moreover, no crates (should) depend on having the mixed operators.
 //! Similarly the assign operators like `AssignAdd` are implemented based on the reference `Add` operation.
 //! This is done without cloning thanks to [take_mut].
@@ -38,7 +39,8 @@
 //! ### TODOs
 //! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
 //! - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
-//! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat?)
+//! - Hide approximation from floats for rational and sqrt types behind a feature flag.
+//! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
 
 #![no_std]
 
@@ -48,14 +50,15 @@ extern crate std;
 mod num;
 pub mod complex;
 pub mod rational;
-pub mod float;
 pub mod extension;
 mod from;
+mod float;
 mod power;
 mod continued_fractions;
 
 pub use num::*;
 pub use from::*;
+pub use float::*;
 pub use power::*;
 pub use continued_fractions::*;
 
