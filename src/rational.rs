@@ -9,12 +9,17 @@ use core::{
 };
 use take_mut::take;
 
-use crate::{float::ApproxFloat, num::*, DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete};
+use crate::{
+    DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete, float::ApproxFloat,
+    num::*,
+};
 use crate::{FromU64, complex::Complex};
 
 /// A fraction, or rational number `p/q`.
 /// For anything useful, it requires the [Zero], [One] and [RemEuclid] traits
 /// and some arithmetic operations, depending on the usecase.
+///
+/// Dividing by zero is handled without panics with Inf, -Inf and NaN just like for floats.
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct Ratio<T> {
@@ -125,7 +130,7 @@ where
 impl<T: Cancel> Ratio<T> {
     pub fn new(numer: T, denom: T) -> Self {
         let (mut numer, mut denom) = numer.cancel(denom);
-        if !denom.is_valid_euclid() {
+        if !numer.is_zero() && !denom.is_valid_euclid() {
             // also != 0, as 0 is always valid
             numer = T::zero() - numer;
             denom = T::zero() - denom;
@@ -140,14 +145,13 @@ impl<T: Cancel> Ratio<T> {
 
 impl<T: Num + Cancel + Div<Output = T>> Ratio<T> {
     /// reduce, not only by canceling, but also by dividing by the denominator, if it has a representable inverse.
-    pub fn reduced_full(self) -> Self {
-        // TODO maybe use div_rem_euclid instead of Div?
-        let (mut numer, mut denom) = self.numer.cancel(self.denom);
-        if denom.is_unit() {
-            numer = numer / denom;
-            denom = One::one();
+    pub fn reduced_full(mut self) -> Self {
+        (self.numer, self.denom) = self.numer.cancel(self.denom);
+        if self.denom.is_unit() {
+            self.numer = self.numer / self.denom;
+            self.denom = One::one();
         }
-        Ratio { numer, denom }
+        self
     }
 }
 
@@ -203,6 +207,12 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ra
             } else {
                 false
             };
+        }
+        if self.denom.is_zero() || other.denom.is_zero() {
+            return false;
+        }
+        if self.numer == other.numer {
+            return self.numer.is_zero() || self.denom == other.denom;
         }
         // Compare by comparing the continued fraction expansion. TODO make iterative using continued fractions iterator.
         // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
@@ -266,15 +276,15 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
         if self.denom == other.denom {
             // With equal denominators, the numerators can be compared
             let ord = self.numer.partial_cmp(&other.numer);
-            return if self.denom < T::zero() {
+            if self.denom < T::zero() {
                 ord.map(Ordering::reverse)
             } else {
                 ord
-            };
-        }
-        if self.numer == other.numer {
+            }
+        } else if self.numer == other.numer {
             // With equal numerators, the denominators can be inversely compared
             if self.numer.is_zero() {
+                // -0 and 0 are equal
                 return Some(Ordering::Equal);
             }
             let ord = self.denom.partial_cmp(&other.denom);
@@ -378,12 +388,20 @@ impl<T: Conjugate> Conjugate for Ratio<T> {
     }
 }
 
-impl<T: Neg<Output = T>> Neg for Ratio<T> {
+impl<T: Zero + Neg<Output = T>> Neg for Ratio<T> {
     type Output = Ratio<T>;
     fn neg(self) -> Self::Output {
-        Self {
-            numer: -self.numer,
-            denom: self.denom,
+        if !self.numer.is_zero() {
+            Self {
+                numer: -self.numer,
+                denom: self.denom,
+            }
+        } else {
+            // negative zero
+            Self {
+                numer: self.numer,
+                denom: -self.denom,
+            }
         }
     }
 }
@@ -396,6 +414,14 @@ macro_rules! impl_add {
         {
             type Output = Ratio<T>;
             fn $add(self, rhs: Self) -> Self::Output {
+                if self.denom.is_zero() && rhs.denom.is_zero() {
+                    if self.numer.is_zero() || rhs.numer.is_zero() {
+                        return Ratio::new_raw(T::zero(), T::zero());
+                    }
+                    let a = self.reduced();
+                    let b = rhs.reduced();
+                    return Ratio::new_raw(a.numer.$add(b.numer), T::zero());
+                }
                 // avoid overflows by computing the gcd early (in each operation)
                 let (a, b) = self.denom.clone().cancel(rhs.denom.clone());
                 Ratio {
@@ -407,6 +433,14 @@ macro_rules! impl_add {
         impl<'a, T: Cancel + $Add<T, Output = T>> $Add for &'a Ratio<T> {
             type Output = Ratio<T>;
             fn $add(self, rhs: Self) -> Self::Output {
+                if self.denom.is_zero() && rhs.denom.is_zero() {
+                    if self.numer.is_zero() || rhs.numer.is_zero() {
+                        return Ratio::new_raw(T::zero(), T::zero());
+                    }
+                    let a = self.clone().reduced();
+                    let b = rhs.clone().reduced();
+                    return Ratio::new_raw(a.numer.$add(b.numer), T::zero());
+                }
                 // avoid overflows by computing the gcd early (in each operation)
                 let (a, b) = self.denom.clone().cancel(rhs.denom.clone());
                 Ratio {
@@ -446,27 +480,66 @@ where
     type Output = Ratio<T>;
     fn mul(mut self, mut rhs: Self) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
-        // TODO add feature flag to reduce the gcd usage here, as this is excessive, but necessary for many cases.
         (self.denom, rhs.numer) = self.denom.cancel(rhs.numer);
         (self.numer, rhs.denom) = self.numer.cancel(rhs.denom);
+        // make sure no signs get lost by multiplying with zero
+        let mut modified = false;
+        if self.numer.is_zero() && !rhs.numer.is_zero() {
+            rhs.denom = &rhs.denom * &rhs.numer;
+            modified = true;
+        } else if rhs.numer.is_zero() && !self.numer.is_zero() {
+            self.denom = &self.denom * &self.numer;
+            modified = true;
+        }
+        if self.denom.is_zero() && !rhs.denom.is_zero() {
+            rhs.numer = &rhs.numer * &rhs.denom;
+            modified = true;
+        } else if rhs.denom.is_zero() && !self.denom.is_zero() {
+            self.numer = &self.numer * &self.denom;
+            modified = true;
+        }
         // now compute the result. No more cancelation needed, as the initial fractions are assumed to be cancelled.
-        Ratio {
+        let mut r = Ratio {
             numer: &self.numer * &rhs.numer,
             denom: &self.denom * &rhs.denom,
+        };
+        if modified {
+            r = r.reduced();
         }
+        r
     }
 }
 impl<'a, T: Cancel> Mul for &'a Ratio<T> {
     type Output = Ratio<T>;
     fn mul(self, rhs: Self) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
-        let (sd, rn) = self.denom.clone().cancel(rhs.numer.clone());
-        let (sn, rd) = self.numer.clone().cancel(rhs.denom.clone());
+        let (mut sd, mut rn) = self.denom.clone().cancel(rhs.numer.clone());
+        let (mut sn, mut rd) = self.numer.clone().cancel(rhs.denom.clone());
+        // make sure no signs get lost by multiplying with zero
+        let mut modified = false;
+        if sn.is_zero() && !rn.is_zero() {
+            rd = rd * rn.clone();
+            modified = true;
+        } else if rn.is_zero() && !sn.is_zero() {
+            sd = sd * sn.clone();
+            modified = true;
+        }
+        if sd.is_zero() && !rd.is_zero() {
+            rn = rn * rd.clone();
+            modified = true;
+        } else if rd.is_zero() && !sd.is_zero() {
+            sn = sn * sd.clone();
+            modified = true;
+        }
         // now compute the result. No more cancelation needed, as the initial fractions are assumed to be cancelled.
-        Ratio {
+        let mut r = Ratio {
             numer: sn * rn,
             denom: sd * rd,
+        };
+        if modified {
+            r = r.reduced();
         }
+        r
     }
 }
 impl<T: Cancel> Mul<T> for Ratio<T>
@@ -476,7 +549,11 @@ where
     type Output = Ratio<T>;
     fn mul(self, rhs: T) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
-        let (rhs, denom) = rhs.cancel(self.denom.clone());
+        let (mut rhs, mut denom) = rhs.cancel(self.denom.clone());
+        if self.numer.is_zero() && !rhs.is_valid_euclid() {
+            rhs = T::zero() - rhs; // floats can have zero signs!
+            denom = T::zero() - denom;
+        }
         Ratio {
             numer: &self.numer * &rhs,
             denom,
@@ -487,7 +564,11 @@ impl<'a, T: Cancel> Mul<&'a T> for &'a Ratio<T> {
     type Output = Ratio<T>;
     fn mul(self, rhs: &'a T) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
-        let (rhs, denom) = rhs.clone().cancel(self.denom.clone());
+        let (mut rhs, mut denom) = rhs.clone().cancel(self.denom.clone());
+        if self.numer.is_zero() && !rhs.is_valid_euclid() {
+            rhs = T::zero() - rhs; // floats can have zero signs!
+            denom = T::zero() - denom;
+        }
         Ratio {
             numer: self.numer.clone() * rhs,
             denom,
@@ -699,28 +780,47 @@ where
 }
 
 impl<F: FloatType, T: Cancel + Neg<Output = T>> ApproxFloat<F> for Ratio<T>
-where T: ApproxFloat<F> {
-    fn from_approx(value: F, rtol: F) -> Option<Self> {
-        // TODO switch to absolute tolerance!
+where
+    T: ApproxFloat<F>,
+{
+    fn from_approx(value: F, tol: F) -> Option<Self> {
         if !value.is_finite() {
             if value.is_infinite() {
-                return Some(Ratio { numer: if value > F::zero() { T::one() } else { -T::one() }, denom: T::zero() })
+                return Some(Ratio::new_raw(
+                    if value > F::zero() {
+                        T::one()
+                    } else {
+                        -T::one()
+                    },
+                    T::zero(),
+                ));
             }
             return Some(Ratio::new_raw(T::zero(), T::zero()));
         }
         if value.round() == value {
-            let v = T::from_approx(value.clone(), rtol.clone())?;
-            return (v.to_approx() == value).then_some(Ratio::new_raw(v, T::one()));
+            let v = T::from_approx(value.clone(), tol)?;
+            return Some(Ratio::new_raw(v, T::one()));
+        }
+        // zero is already covered above. These non finite values don't come from division by zero.
+        if !(F::one() / value.clone()).is_finite() {
+            // same as in to_approx, handle subnormal inputs by multiplying.
+            // all of this needs to happen without integer overflows.
+            let mut _16 = T::one() + T::one();
+            _16 = _16.clone() * _16;
+            _16 = _16.clone() * _16;
+            let _16f: F = _16.to_approx();
+            // Note, this can lead to stack overflow, but not to an endless loop.
+            return Some(&Self::from_approx(value * _16f.clone(), tol * _16f.clone())? / &_16);
         }
         let iter = DevelopContinuedFraction::new(value.clone()).continued_fraction(F::one());
         for x in iter {
-            let rerr = (x.numer.clone() / x.denom.clone() - value.clone()) / value.clone();
-            if rerr <= rtol && -rerr <= rtol {
-                let numer = T::from_approx(x.numer.clone(), rtol.clone())?;
-                let denom = T::from_approx(x.denom.clone(), rtol.clone())?;
-                if numer.to_approx() != x.numer || denom.to_approx() != x.denom {
-                    return None;
-                }
+            let err = x.numer.clone() / x.denom.clone() - value.clone();
+            if !x.numer.is_finite() || !x.denom.is_finite() || !err.is_finite() {
+                return None;
+            }
+            if err.abs() <= tol {
+                let numer = T::from_approx(x.numer.clone(), F::one())?;
+                let denom = T::from_approx(x.denom.clone(), F::one())?;
                 return Some(Ratio::new(numer, denom));
             }
         }
@@ -728,8 +828,29 @@ where T: ApproxFloat<F> {
     }
     #[inline]
     fn to_approx(&self) -> F {
-        // always safe to just compute this.
-        self.numer.to_approx() / self.denom.to_approx()
+        // not always safe to just compute it directly.
+        // The unsafe case is, where the denominator is so big,
+        // that an infinite result is returned, but a
+        // subnormal float result would be possible.
+        // To fix that, divided by 16 until the result is finite.
+        let mut n = self.numer.to_approx();
+        let mut denom = self.denom.clone();
+        let mut d = denom.to_approx();
+        if !n.is_zero() && !d.is_finite() {
+            let mut _16 = T::one() + T::one();
+            _16 = _16.clone() * _16;
+            _16 = _16.clone() * _16;
+            let _16f: F = _16.to_approx();
+            loop {
+                denom = denom.div_rem_euclid(&_16).0;
+                n = n / _16f.clone();
+                d = denom.to_approx();
+                if n.is_zero() || d.is_finite() {
+                    break;
+                }
+            }
+        }
+        n / d
     }
 }
 
@@ -777,12 +898,15 @@ macro_rules! impl_formatting {
                     std::format!($fmt_str, self.numer)
                 };
                 let numer_no_sign = numer.strip_prefix("-");
-                let numer_is_number = !numer_no_sign.unwrap_or(numer).chars().any(|c| c == '+' || c == '-' || c == '/');
+                let numer_is_number = !numer_no_sign
+                    .unwrap_or(numer)
+                    .chars()
+                    .any(|c| c == '+' || c == '-' || c == '/');
                 let pre_pad = if self.denom.is_zero() {
                     if self.numer.is_zero() {
                         "NaN"
                     } else if numer_no_sign.unwrap_or(numer) == "1" {
-                        &std::format!("{}∞", &numer[..numer.len()-1])
+                        &std::format!("{}∞", &numer[..numer.len() - 1])
                     } else if numer_is_number {
                         &std::format!("{}∞", numer)
                     } else {
@@ -796,7 +920,10 @@ macro_rules! impl_formatting {
                         std::format!($fmt_str, self.denom)
                     };
                     let denom_no_sign = denom.strip_prefix("-");
-                    let denom_is_number = !denom_no_sign.unwrap_or(denom).chars().any(|c| c == '+' || c == '-' || c == '/' || c == '*');
+                    let denom_is_number = !denom_no_sign
+                        .unwrap_or(denom)
+                        .chars()
+                        .any(|c| c == '+' || c == '-' || c == '/' || c == '*');
                     // Note, the signs can not be processed as strings, as the expression might be e.g. -1+i
                     &if numer_is_number {
                         if denom_is_number {
@@ -838,8 +965,7 @@ macro_rules! impl_formatting {
                     } else {
                         write!(f, "({})∞", self.numer)
                     }
-                }
-                else if f.alternate() {
+                } else if f.alternate() {
                     write!(
                         f,
                         concat!("(", $fmt_alt, ")/(", $fmt_alt, ")"),

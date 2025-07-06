@@ -48,18 +48,26 @@
 extern crate std;
 
 mod num;
-pub mod complex;
-pub mod rational;
-pub mod extension;
 mod from;
-mod float;
 mod power;
-mod continued_fractions;
+pub mod complex;
 
 pub use num::*;
 pub use from::*;
-pub use float::*;
 pub use power::*;
+
+#[cfg(feature = "rational")]
+pub mod rational;
+#[cfg(feature = "rational")]
+pub mod extension;
+#[cfg(feature = "rational")]
+mod float;
+#[cfg(feature = "rational")]
+mod continued_fractions;
+
+#[cfg(feature = "rational")]
+pub use float::*;
+#[cfg(feature = "rational")]
 pub use continued_fractions::*;
 
 #[cfg(test)]

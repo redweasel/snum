@@ -64,8 +64,7 @@ pub trait FloatType: Clone
 + NumAnalytic
 + IntoDiscrete<Output = Self>
 + Div<Output = Self>
-+ Neg<Output = Self>
-+ core::fmt::Display {
++ Neg<Output = Self> {
     fn is_finite(&self) -> bool;
     fn is_infinite(&self) -> bool;
 }
@@ -114,14 +113,17 @@ macro_rules! impl_approx_float {
             }
             #[inline(always)]
             fn from_approx(value: $float, tol: $float) -> Option<Self> {
+                if !value.is_finite() {
+                    return None;
+                }
                 let v = value.round() as $int;
-                (v == 0 || (v as $float - value).abs() <= tol).then_some(v)
+                ((v as $float - value).abs() <= tol).then_some(v)
             }
         })+
     };
 }
 impl_approx_float!(f32; i32, i64, i128);
-impl_approx_float!(f64; i64, i128);
+impl_approx_float!(f64; i32, i64, i128);
 
 // specific implementations of TryFrom for Ratio.
 // note, f32::MAX can be represented using u128, but not using i128.
@@ -160,8 +162,8 @@ macro_rules! impl_try_from {
 impl_try_from!(f32, integer_decode_f32, i32, i64, i128);
 impl_try_from!(f64, integer_decode_f64, i64, i128);
 
-macro_rules! impl_from {
-    ($float:ident, $integer_decode:ident) => {
+macro_rules! impl_bigint {
+    ($float:ident, $integer_decode:ident, $from:ident) => {
         impl From<$float> for Ratio<num_bigint::BigInt> {
             fn from(value: $float) -> Self {
                 let (mantissa, exponent, finite, zero_mantissa) = $integer_decode(value);
@@ -191,9 +193,24 @@ macro_rules! impl_from {
                 }
             }
         }
+
+        impl ApproxFloat<$float> for num_bigint::BigInt {
+            #[inline(always)]
+            fn to_approx(&self) -> $float {
+                use num_traits::ToPrimitive;
+                self.to_f64().unwrap() as $float
+            }
+            #[inline(always)]
+            fn from_approx(value: $float, tol: $float) -> Option<Self> {
+                use num_traits::FromPrimitive;
+                let vf = value.round();
+                let v = num_bigint::BigInt::$from(vf)?;
+                ((vf - value).abs() <= tol).then_some(v)
+            }
+        }
     };
 }
 #[cfg(feature = "num-bigint")]
-impl_from!(f32, integer_decode_f32);
+impl_bigint!(f32, integer_decode_f32, from_f32);
 #[cfg(feature = "num-bigint")]
-impl_from!(f64, integer_decode_f64);
+impl_bigint!(f64, integer_decode_f64, from_f64);

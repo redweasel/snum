@@ -151,7 +151,7 @@ where
     /// let n = 10;
     /// let x = SqrtExt::<_, Sqrt<i64, 31>>::new(0, 1);
     /// let cfrac = DevelopContinuedFraction::new(x).take(n);
-    /// let res = cfrac.continued_fraction::<Ratio<i64>>();
+    /// let res = cfrac.continued_fraction(1).last().unwrap();
     /// assert_eq!(res, Ratio::new(33646, 6043));
     /// assert_ne!(res, Ratio::approx_sqrt::<Sqrt<i64, 31>>(n as u64));
     /// ```
@@ -166,7 +166,7 @@ where
     /// for n in (1..10).step_by(2) {
     ///     let x = SqrtExt::<_, Sqrt<i64, N>>::new(0, 1);
     ///     let cfrac = DevelopContinuedFraction::new(x).take(n);
-    ///     let res = cfrac.continued_fraction::<Ratio<i64>>();
+    ///     let res = cfrac.continued_fraction(1).last().unwrap();
     ///     assert_eq!(res, Ratio::approx_sqrt::<Sqrt<i64, N>>((n / 2) as u64));
     /// }
     /// ```

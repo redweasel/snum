@@ -23,6 +23,7 @@ default-features = false
 default = ["std"]
 std = []
 libm = ["dep:libm"]
+rational = []
 bytemuck = ["dep:bytemuck"]
 num-bigint = ["dep:num-bigint", "dep:num-traits"]
 serde = ["dep:serde"]

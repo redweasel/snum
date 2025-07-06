@@ -2,7 +2,7 @@
 
 use core::borrow::Borrow;
 
-use crate::{Cancel, One, Zero, rational::Ratio};
+use crate::{rational::Ratio, Cancel, IntoDiscrete};
 
 trait ContinuedFraction: Sized {
     type Output: Sized;
@@ -89,64 +89,6 @@ impl<'a, T: 'a + Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFract
         }
     }
 }
-
-pub trait IntoDiscrete: PartialEq + From<Self::Output> {
-    type Output: Clone + Zero + One;
-    fn floor(&self) -> Self::Output;
-    fn ceil(&self) -> Self::Output {
-        let x = self.floor();
-        if self == &Self::from(x.clone()) {
-            x
-        } else {
-            x + One::one()
-        }
-    }
-    fn round(&self) -> Self::Output;
-}
-
-impl IntoDiscrete for f32 {
-    type Output = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
-    fn floor(&self) -> Self::Output {
-        f32::floor(*self)
-    }
-    fn ceil(&self) -> Self::Output {
-        f32::ceil(*self)
-    }
-    fn round(&self) -> Self::Output {
-        f32::round(*self)
-    }
-}
-impl IntoDiscrete for f64 {
-    type Output = f64;
-    fn floor(&self) -> Self::Output {
-        f64::floor(*self)
-    }
-    fn ceil(&self) -> Self::Output {
-        f64::ceil(*self)
-    }
-    fn round(&self) -> Self::Output {
-        f64::round(*self)
-    }
-}
-macro_rules! impl_into_discrete_int {
-    ($($t:ty),+) => {
-        $(impl IntoDiscrete for $t {
-            type Output = $t;
-            fn floor(&self) -> Self::Output {
-                *self
-            }
-            fn ceil(&self) -> Self::Output {
-                *self
-            }
-            fn round(&self) -> Self::Output {
-                *self
-            }
-        })+
-    };
-}
-impl_into_discrete_int!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
-);
 
 /// Iterator for a simple/regular continued fraction.
 pub struct DevelopContinuedFraction<T> {

@@ -330,32 +330,55 @@ macro_rules! impl_rem_euclid {
             }
             #[inline(always)]
             fn is_valid_euclid(&self) -> bool {
-                self >= &Zero::zero()
+                // the compiler optimizes this away for integers, but this works for non finite floats.
+                self >= &0
             }
         })+
     };
 }
 impl_rem_euclid!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
+);
+
+macro_rules! impl_rem_euclid_float {
+    ($($T:ty),+) => {
+        $(impl RemEuclid for $T {
+            #[inline(always)]
+            fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
+                if !div.is_finite() {
+                    return (0.0, 0.0); // for safety in gcd
+                }
+                (self.div_euclid(*div), self.rem_euclid(*div))
+            }
+            #[inline(always)]
+            fn is_valid_euclid(&self) -> bool {
+                // the compiler optimizes this away for integers, but this works for non finite floats.
+                self >= &0.0 && self.is_finite()
+            }
+        })+
+    };
+}
+impl_rem_euclid_float!(
+    f32, f64
 );
 
 #[cfg(feature = "num-bigint")]
 mod bigint {
     use crate::*;
     // TODO to my strong disliking I need this here... copying the implementation from num_bigint isn't possible because it relies on `is_positive()`, which is again from `num_traits`.
-    use num_traits::Euclid;
+    use num_traits::{Signed, Euclid};
 
     impl RemEuclid for num_bigint::BigInt {
         fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
             <Self as Euclid>::div_rem_euclid(self, div)
         }
         fn is_valid_euclid(&self) -> bool {
-            self >= &Zero::zero()
+            !self.is_negative()
         }
     }
     impl RemEuclid for num_bigint::BigUint {
         fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
-            (self / div, self % div)
+            <Self as Euclid>::div_rem_euclid(self, div)
         }
         fn is_valid_euclid(&self) -> bool {
             true
@@ -365,8 +388,6 @@ mod bigint {
 
 /// Calculates the Greatest Common Divisor (GCD) of the number and
 /// `other`. The result is always positive (> 0).
-/// If the number type is a floating point number, it returns
-/// the absolute smallest non zero number, or 1 if both are 0.
 #[must_use]
 pub fn gcd<T: Zero + One + Sub<Output = T> + RemEuclid>(mut a: T, mut b: T) -> T {
     if a.is_zero() {
@@ -389,34 +410,6 @@ pub fn gcd<T: Zero + One + Sub<Output = T> + RemEuclid>(mut a: T, mut b: T) -> T
         T::zero() - a
     }
 }
-pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + RemEuclid {
-    #[must_use]
-    fn cancel(self, b: Self) -> (Self, Self);
-}
-impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + RemEuclid> Cancel for T
-where
-    for<'a> &'a T: AddMulSubDiv<Output = T>,
-{
-    fn cancel(self, b: Self) -> (Self, Self) {
-        if self == b {
-            if self.is_zero() {
-                return (T::zero(), T::zero());
-            } else {
-                return (T::one(), T::one());
-            }
-        }
-        // negative equality check (overflows on i32::MIN, TODO see if there is a performance difference with this)
-        /*if !b.is_valid_euclid() && self == &T::zero() - &b {
-            return (T::one(), &T::zero() - &T::one());
-        }
-        if !self.is_valid_euclid() && b == &T::zero() - &self {
-            return (&T::zero() - &T::one(), T::one());
-        }*/
-        // TODO what do signs do here?
-        let gcd = gcd(self.clone(), b.clone());
-        (&self / &gcd, &b / &gcd)
-    }
-}
 
 /// Calculates the Least Common Multiple (LCM) of the number and
 /// `other`. The result is always `result.is_valid_euclid() == true` (usually that means >= 0).
@@ -434,7 +427,118 @@ pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + RemEuc
     a.clone() * (b.clone() / gcd(a, b))
 }
 
-// TODO add extended gcd
+/// Extended Euclidean algorithm to solve Bézout's identity: `ax + by = d`.
+/// Returns `((x, y), d)`.
+/// Note that `d` differs from the gcd if both arguments are zero.
+#[must_use]
+pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + RemEuclid>(mut a: T, mut b: T) -> ((T, T), T) {
+    if a.is_zero() {
+        return if b.is_zero() {
+            ((T::zero(), T::zero()), T::zero())
+        } else {
+            if b.is_valid_euclid() {
+                ((T::zero(), T::one()), b)
+            } else {
+                ((T::zero(), T::zero() - T::one()), T::zero() - b)
+            }
+        };
+    }
+    let mut x0 = T::zero();
+    let mut x1 = T::one();
+    let mut y0 = T::one();
+    let mut y1 = T::zero();
+    while !a.is_zero() {
+        let q;
+        ((q, a), b) = (b.div_rem_euclid(&a), a);
+        (y0, y1) = (y1.clone(), y0 - q.clone() * y1); // TODO for b >= 2^63 this q * y1 can be outside of i64 range, but still in u64
+        (x0, x1) = (x1.clone(), x0 - q * x1);
+    }
+    if b.is_valid_euclid() {
+        ((x0, y0), b)
+    } else {
+        ((T::zero() - x0, T::zero() - y0), T::zero() - b)
+    }
+    
+}
+
+pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + RemEuclid {
+    #[must_use]
+    fn cancel(self, b: Self) -> (Self, Self);
+}
+impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + RemEuclid> Cancel for T
+where
+    for<'a> &'a T: AddMulSubDiv<Output = T>,
+{
+    fn cancel(self, b: Self) -> (Self, Self) {
+        if self == b {
+            if self.is_zero() {
+                return (T::zero(), T::zero());
+            } else {
+                return (T::one(), T::one());
+            }
+        }
+        let gcd = gcd(self.clone(), b.clone());
+        (&self / &gcd, &b / &gcd)
+    }
+}
+
+pub trait IntoDiscrete: PartialEq + From<Self::Output> {
+    type Output: Clone + Zero + One;
+    fn floor(&self) -> Self::Output;
+    fn ceil(&self) -> Self::Output {
+        let x = self.floor();
+        if self == &Self::from(x.clone()) {
+            x
+        } else {
+            x + One::one()
+        }
+    }
+    fn round(&self) -> Self::Output;
+}
+
+impl IntoDiscrete for f32 {
+    type Output = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
+    fn floor(&self) -> Self::Output {
+        f32::floor(*self)
+    }
+    fn ceil(&self) -> Self::Output {
+        f32::ceil(*self)
+    }
+    fn round(&self) -> Self::Output {
+        f32::round(*self)
+    }
+}
+impl IntoDiscrete for f64 {
+    type Output = f64;
+    fn floor(&self) -> Self::Output {
+        f64::floor(*self)
+    }
+    fn ceil(&self) -> Self::Output {
+        f64::ceil(*self)
+    }
+    fn round(&self) -> Self::Output {
+        f64::round(*self)
+    }
+}
+macro_rules! impl_into_discrete_int {
+    ($($t:ty),+) => {
+        $(impl IntoDiscrete for $t {
+            type Output = $t;
+            fn floor(&self) -> Self::Output {
+                *self
+            }
+            fn ceil(&self) -> Self::Output {
+                *self
+            }
+            fn round(&self) -> Self::Output {
+                *self
+            }
+        })+
+    };
+}
+impl_into_discrete_int!(
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
+);
 
 macro_rules! signed_num_type {
     ($($type:ty),+) => {
