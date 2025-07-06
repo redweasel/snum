@@ -15,7 +15,6 @@ where
     fn powu(&self, n: u64) -> Self {
         // overflow-free power algorithm for u64.
         // It's u64 instead of u32 because many types never overflow.
-        // TODO add powi to the definition of a Field.
         if n == 0 {
             return Self::one();
         }

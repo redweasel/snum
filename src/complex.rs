@@ -1,8 +1,5 @@
 //! implements a `Complex<T>` type, that in large parts matches (is a copy of) the complex type of `num_complex`.
 //! However a lot more functionallity is available with weak trait bounds.
-//! This is made possible by implementing `Add<T>` using `Add<&T>`` and vice versa to trick Rusts type system (i.e. work around the bugs).
-
-// TODO can I fix the reference problems by requiring T: Num<Real = T> for the arithmetic operations on references?
 
 use crate::*;
 use core::fmt;
@@ -325,7 +322,7 @@ impl<T: Num + RemEuclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Di
         // https://stackoverflow.com/a/18067292
         let rounded_div = |a: T, b: T| {
             let b2 = b.clone() / two.clone();
-            (if a.is_valid_euclid() == b.is_valid_euclid() { // TODO is there a better way to do this?
+            (if a.is_valid_euclid() == b.is_valid_euclid() {
                 a + b2
             } else {
                 a - b2
@@ -545,7 +542,6 @@ where
     /// but the principal complex cube root of `-8` is `1 + i√3`.
     #[inline]
     fn cbrt(&self) -> Self {
-        // TODO maybe I want the real result for negative real numbers? It would introduce less rounding errors and formulas should be invariant wrt the choosen root.
         if self.im.is_zero() {
             if self.re >= T::zero() {
                 // simple positive real ∛r, and copy `im` for its sign

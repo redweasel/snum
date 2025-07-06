@@ -21,6 +21,15 @@
 //! E.g. The multiplicative inverse on these commutative fields is called `recip` instead of `inv`, as some type might be an invertible
 //! (e.g. Moebius transform) function, which needs `inv` for inversion wrt composition, but can still have `recip`.
 //! 
+//! # Features
+//! 
+//! - `std` (default, however not required)
+//! - `libm` as a replacement for `std` when using floats.
+//! - `rational` for the rational and sqrt extension types.
+//! - `bytemuck`
+//! - `num-bigint` to include trait implementations for it
+//! - `serde`
+//! 
 //! # Testing Status
 //! Some code has been copied from `num_complex` and `num_rational`. In particular the test code has been copied where applicable.
 //! In this process, bugs in the testing code have been found.
@@ -38,9 +47,11 @@
 //! 
 //! ### TODOs
 //! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
+//! - `Zero`, `Conjugate` and `RemEuclid` should have derive macros just like `Clone`
 //! - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
 //! - Hide approximation from floats for rational and sqrt types behind a feature flag.
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
+//! - It appears, that the reference implementation need to use the non reference implementations to avoid recursive trait evaluations. Check this again! Otherwise switch to using the optimal operations.
 
 #![no_std]
 

@@ -11,8 +11,6 @@ use crate::complex::Complex;
 use crate::rational::Ratio;
 use crate::*;
 
-// TODO when doing division, check with is_unit and panic if not (use `debug_assert!()`).
-
 pub trait SqrtConst<T: Num> {
     type Real: SqrtConst<T::Real, Real = Self::Real>;
     /// constant for internal use to be able to check at compile time, if a SqrtConst is allowed.
@@ -364,8 +362,7 @@ where
             // 1. split the integral part off
             // 2. floor(x√N) = floor(x)*floor(√N) + n with integer 0 <= n < x (+ floor(√N) for non integer types)
             // -> do a binary search for the integer n in O(log x) steps to find the value n where x√N <> floor(x)*floor(√N) + n switches
-            // TODO it would be much better to have integers here, but that requires e.g. TryInto<u64>, as I would need E::floor() as u64
-            // TODO the following only works for integers...
+            // Note, it would be much better to have integers here, but that requires e.g. TryInto<u64>, as I would need E::floor() as u64
             let v = self.ext.clone() * E::floor();
             let w = Self::new(T::zero(), self.ext.clone());
             assert!(w > v.clone().into());
@@ -451,6 +448,7 @@ impl<T: Num + One + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> SqrtExt<
         //self.value.clone() * self.value.clone() - self.ext.clone() * self.ext.clone() * E::sqr()
         // less overflows (but slower) with rearranged form (value - ext)(value + ext*N) - (N-1)*value*ext
         // TODO make two versions depending on the sign of ext. The current version works well for negative ext
+        // or base it on floor?!?
         (self.value.clone() - self.ext.clone()) * (self.value.clone() + self.ext.clone() * E::sqr())
             - (E::sqr() - T::one()) * self.value.clone() * self.ext.clone()
     }
@@ -478,13 +476,10 @@ impl<T: Num + Neg<Output = T>, E: SqrtConst<T>> Neg for SqrtExt<T, E> {
 
 macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
-        impl<T: Num, E: SqrtConst<T>> $Add for SqrtExt<T, E>
-        where
-            for<'a> &'a T: $Add<Output = T>, // TODO can I move this $Add to the owned version?
-        {
+        impl<T: Num + $Add<Output = T>, E: SqrtConst<T>> $Add for SqrtExt<T, E> {
             type Output = SqrtExt<T, E>;
             fn $add(self, rhs: Self) -> Self::Output {
-                SqrtExt::new(self.value.$add(&rhs.value), self.ext.$add(&rhs.ext))
+                SqrtExt::new(self.value.$add(rhs.value), self.ext.$add(rhs.ext))
             }
         }
         impl<'a, T: Num + $Add<T, Output = T>, E: SqrtConst<T>> $Add for &'a SqrtExt<T, E> {
@@ -545,14 +540,13 @@ where
     type Output = SqrtExt<T, E>;
     fn div(self, rhs: SqrtExt<T, E>) -> Self::Output {
         let abs_sqr = rhs.abs_sqr_ext_ref();
-        // TODO Consider depending on Cancel to have less overflows here, as one can cancel everything with abs_sqr first.
         Self::new(
             &(&(&self.value * &rhs.value) - &(&(&self.ext * &rhs.ext) * &E::sqr())) / &abs_sqr,
             &(&(&self.ext * &rhs.value) - &(&self.value * &rhs.ext)) / &abs_sqr,
         )
     }
 }
-impl<'a, T: Num + Zero + One + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Div
+impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Div
     for &'a SqrtExt<T, E>
 {
     type Output = SqrtExt<T, E>;
@@ -579,27 +573,48 @@ impl<T: Num + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = T>, 
     }
 }
 
-// TODO in macro for Div as well:
-impl<T: Num, E: SqrtConst<T>> Mul<T> for SqrtExt<T, E>
+impl<T: Num + One + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> Rem for SqrtExt<T, E>
 where
-    for<'a> &'a T: Mul<Output = T>,
+    for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
     type Output = SqrtExt<T, E>;
-    fn mul(self, rhs: T) -> Self::Output {
-        SqrtExt::new(&self.value * &rhs, &self.ext * &rhs)
+    fn rem(self, rhs: SqrtExt<T, E>) -> Self::Output {
+        let d = self.clone() / rhs.clone();
+        self - d * rhs
     }
 }
-impl<'a, T: Num + Mul<Output = T>, E: SqrtConst<T>> Mul<&'a T> for &'a SqrtExt<T, E> {
+impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Rem
+    for &'a SqrtExt<T, E>
+{
     type Output = SqrtExt<T, E>;
-    fn mul(self, rhs: &'a T) -> Self::Output {
-        SqrtExt::new(
-            self.value.clone() * rhs.clone(),
-            self.ext.clone() * rhs.clone(),
-        )
+    fn rem(self, rhs: &'a SqrtExt<T, E>) -> Self::Output {
+        self - &(&(self / rhs) * rhs)
     }
 }
 
-// TODO remainder based on division?
+macro_rules! impl_mul {
+    ($($Mul:ident, $mul:ident);+) => {
+        $(impl<T: Num, E: SqrtConst<T>> $Mul<T> for SqrtExt<T, E>
+        where
+            for<'a> &'a T: $Mul<Output = T>,
+        {
+            type Output = SqrtExt<T, E>;
+            fn $mul(self, rhs: T) -> Self::Output {
+                SqrtExt::new((&self.value).$mul(&rhs), (&self.ext).$mul(&rhs))
+            }
+        }
+        impl<'a, T: Num + $Mul<Output = T>, E: SqrtConst<T>> $Mul<&'a T> for &'a SqrtExt<T, E> {
+            type Output = SqrtExt<T, E>;
+            fn $mul(self, rhs: &'a T) -> Self::Output {
+                SqrtExt::new(
+                    self.value.clone().$mul(rhs.clone()),
+                    self.ext.clone().$mul(rhs.clone()),
+                )
+            }
+        })+
+    };
+}
+impl_mul!(Mul, mul; Div, div; Rem, rem);
 
 impl<
     T: Num + Zero + One + RemEuclid + PartialOrd + Neg<Output = T> + Sub<Output = T> + Div<Output = T>,
@@ -639,12 +654,8 @@ where
         // this results in an error < 1/2 in the integer part and < 1/2 * ((√N - floor(√N)) in the rest,
         // which makes the error in the result less than 1, which in turn
         // makes the remainder smaller than the divisor.
-        // TODO by correctly combining the two errors, the error can be made
-        // smaller than 1/2 and then a positive solution can be returned.
 
         // TODO handle the complex case √-1 correctly.
-        // TODO check if this makes the gcd converge! Just because the remainder is smaller,
-        // doesn't mean it converges, as these numbers are dense in the reals!
 
         numer.value = numer.value + numer.ext.clone() * E::floor();
         if !denom.is_valid_euclid() {
@@ -656,13 +667,14 @@ where
             numer.ext.div_rem_euclid(&denom),
             denom.clone() / (T::one() + T::one()),
         );
-        // now choose the rounding, such that |nr/denom|^2 + |mr/denom|^2 N < 1
+        // round correctly
         let mut q = SqrtExt::new(
             if nr > d2 { n + T::one() } else { n },
             if mr > d2 { m + T::one() } else { m },
         );
         q.value = q.value - q.ext.clone() * E::floor();
         let mut r = self - &(b * &q);
+        // The following breaks sqrt(2) and sqrt(3) as Euclidean domains, but it's needed to make the results positive.
         // add/subtract 0 < √N-floor(√N) < 1
         //let mut step = Self::new(-E::floor(), T::one());
         // add/subtract 1, this makes the gcd stable apparently (for N != 5) (TODO proof)
@@ -686,7 +698,7 @@ where
 
 macro_rules! forward_assign_impl {
     ($($AddAssign:ident, $Add:ident, $add_assign:ident, $add:ident);+) => {
-        $(impl<T: Num + Add<Output = T>, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
+        $(impl<T: Num + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
             where for<'a> &'a T: $Add<Output = T> {
             fn $add_assign(&mut self, rhs: SqrtExt<T, E>) {
                 take(self, |x| x.$add(rhs));
@@ -712,7 +724,7 @@ macro_rules! forward_assign_impl {
 }
 forward_assign_impl!(
     AddAssign, Add, add_assign, add; SubAssign, Sub, sub_assign, sub; MulAssign, Mul, mul_assign,
-    mul //, DivAssign, Div, div_assign, div, RemAssign, Div, rem_assign, rem
+    mul //, DivAssign, Div, div_assign, div, RemAssign, Div, rem_assign, rem // TODO
 );
 
 impl<T: Num + Zero + Add<Output = T>, E: SqrtConst<T>> Sum for SqrtExt<T, E>
@@ -930,7 +942,10 @@ macro_rules! impl_formatting {
                     &std::format!($fmt_str, E::sqr())
                 };
                 let sqr_no_sign = sqr.strip_prefix("-");
-                let sqr_is_number = sqr_no_sign.unwrap_or(sqr).chars().all(|c| c.is_alphanumeric());
+                let sqr_is_number = sqr_no_sign
+                    .unwrap_or(sqr)
+                    .chars()
+                    .all(|c| c.is_alphanumeric());
                 let sqr = if sqr_is_number {
                     std::format!("√{}", sqr)
                 } else {

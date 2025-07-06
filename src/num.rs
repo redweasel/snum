@@ -1,7 +1,5 @@
 use core::{fmt::Debug, ops::*};
 
-// TODO Zero and Conjugate could have derive macros just like Clone
-// TODO add powi to the definition of a Field.
 // TODO consider `CommutativeAdd` and `CommutativeMul` traits,
 // which are just markers to make clear, that commutativity is given,
 // so algorithms don't have to say in their description,
@@ -9,7 +7,6 @@ use core::{fmt::Debug, ops::*};
 // TODO similarly add a `TrueDiv` trait, so integers can no longer be used with `Field`.
 // anything that previously worked with `Field` and now doesn't, needs to use `Ring` with `RemEuclid`.
 // Note, that is_unit can already provide a way to check if a division is a true division, however those checks should be in `debug_assert!()`.
-// TODO consider moving `Real` to Conjugate.
 
 /// Defines an additive identity element for `Self`.
 ///
@@ -365,7 +362,7 @@ impl_rem_euclid_float!(
 #[cfg(feature = "num-bigint")]
 mod bigint {
     use crate::*;
-    // TODO to my strong disliking I need this here... copying the implementation from num_bigint isn't possible because it relies on `is_positive()`, which is again from `num_traits`.
+    // num_bigint is written based on num_traits
     use num_traits::{Signed, Euclid};
 
     impl RemEuclid for num_bigint::BigInt {
@@ -450,7 +447,7 @@ pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + RemEuc
     while !a.is_zero() {
         let q;
         ((q, a), b) = (b.div_rem_euclid(&a), a);
-        (y0, y1) = (y1.clone(), y0 - q.clone() * y1); // TODO for b >= 2^63 this q * y1 can be outside of i64 range, but still in u64
+        (y0, y1) = (y1.clone(), y0 - q.clone() * y1);
         (x0, x1) = (x1.clone(), x0 - q * x1);
     }
     if b.is_valid_euclid() {

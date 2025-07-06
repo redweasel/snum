@@ -214,7 +214,9 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ra
         if self.numer == other.numer {
             return self.numer.is_zero() || self.denom == other.denom;
         }
-        // Compare by comparing the continued fraction expansion. TODO make iterative using continued fractions iterator.
+        // Compare by comparing the continued fraction expansion.
+        // This is done on stack however, so an infinite recursion would create a stack overflow instead of halting the program.
+        // TODO check how deep it goes for really big rationals.
         // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
         // when negative denominators are used, so the denominators have to be checked.
         let a = if self.denom.is_valid_euclid() {
@@ -408,10 +410,7 @@ impl<T: Zero + Neg<Output = T>> Neg for Ratio<T> {
 
 macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
-        impl<T: Cancel> $Add for Ratio<T>
-        where
-            for<'a> &'a T: Mul<&'a T, Output = T> + $Add<&'a T, Output = T>, // TODO can I move this $Add to the owned version?
-        {
+        impl<T: Cancel> $Add for Ratio<T> {
             type Output = Ratio<T>;
             fn $add(self, rhs: Self) -> Self::Output {
                 if self.denom.is_zero() && rhs.denom.is_zero() {
@@ -425,8 +424,8 @@ macro_rules! impl_add {
                 // avoid overflows by computing the gcd early (in each operation)
                 let (a, b) = self.denom.clone().cancel(rhs.denom.clone());
                 Ratio {
-                    numer: (&(&self.numer * &b)).$add(&(&rhs.numer * &a)),
-                    denom: &a * &rhs.denom,
+                    numer: (self.numer * b).$add(rhs.numer * a.clone()),
+                    denom: a * rhs.denom,
                 }
             }
         }
@@ -449,14 +448,11 @@ macro_rules! impl_add {
                 }
             }
         }
-        impl<T: Cancel> $Add<T> for Ratio<T>
-        where
-            for<'a> &'a T: Mul<&'a T, Output = T> + $Add<&'a T, Output = T>,
-        {
+        impl<T: Cancel> $Add<T> for Ratio<T> {
             type Output = Ratio<T>;
             fn $add(self, rhs: T) -> Self::Output {
                 // avoid overflows by computing the gcd in each operation
-                let numer = (&self.numer).$add(&(&self.denom * &rhs));
+                let numer = self.numer.$add(self.denom.clone() * rhs);
                 Ratio::new(numer, self.denom)
             }
         }

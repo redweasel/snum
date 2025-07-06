@@ -132,36 +132,14 @@ pub fn test_sqrt() {
 }
 
 #[test]
-fn test_euclid() {
+fn test_gcd() {
     assert!(!f32::NAN.is_valid_euclid());
     assert!(!f64::NAN.is_valid_euclid());
     assert!(!f32::NEG_INFINITY.is_valid_euclid());
     assert!(!f64::NEG_INFINITY.is_valid_euclid());
     assert!(!f32::INFINITY.is_valid_euclid());
     assert!(!f64::INFINITY.is_valid_euclid());
-    for i in -5i64..=5 {
-        for j in -5..=5 {
-            for a in -5..=5 {
-                for b in -5..=5 {
-                    //println!("{i} {j} {a} {b}");
-                    if i != 0 || j != 0 {
-                        let x = Complex::new(a, b);
-                        let d = Complex::new(i, j);
-                        let (q, r) = x.div_rem_euclid(&d);
-                        assert!(r.is_valid_euclid());
-                        assert_eq!(q * d + r, x);
-                        assert!(r.abs_sqr() <= d.abs_sqr() / 2);
-                    }
-                }
-            }
-        }
-    }
-}
 
-// TODO test more Complex<> NumAlgebraic implementation
-
-#[test]
-fn test_gcd() {
     fn test(a: i32, b: i32, _gcd: i32, _lcm: i32) {
         assert_eq!(lcm(a, b), _lcm);
         assert_eq!(gcd(a, b), _gcd);
@@ -244,6 +222,27 @@ mod complex {
 
         assert_eq!(_0_0i, Zero::zero());
         assert_eq!(_1_0i, One::one());
+    }
+
+    #[test]
+    fn test_euclid() {
+        for i in -5i64..=5 {
+            for j in -5..=5 {
+                for a in -5..=5 {
+                    for b in -5..=5 {
+                        //println!("{i} {j} {a} {b}");
+                        if i != 0 || j != 0 {
+                            let x = Complex::new(a, b);
+                            let d = Complex::new(i, j);
+                            let (q, r) = x.div_rem_euclid(&d);
+                            assert!(r.is_valid_euclid());
+                            assert_eq!(q * d + r, x);
+                            assert!(r.abs_sqr() <= d.abs_sqr() / 2);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -458,6 +457,8 @@ mod complex {
             ));
         }
     }
+    
+    // TODO test more Complex<> NumAlgebraic implementation
 
     #[test]
     fn test_cbrt() {
