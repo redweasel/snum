@@ -1,135 +1,6 @@
-use super::*;
-use crate::{
-    complex::*,
-};
+use crate::*;
 use std::*;
 
-#[test]
-pub fn test_macros() {
-    // this is only a syntax test
-    let _ = complex![1 + 2 i];
-    let _ = complex![(1+2) + 2 i];
-    let _ = complex![1 + (2-1) i];
-    let _ = complex![(1+2) + (2+3) i];
-    let _ = complex![1 + 2 j];
-    let _ = complex![(1+2) + 2 j];
-    let _ = complex![1 + (2-1) j];
-    let _ = complex![(1+2) + (2+3) j];
-    let _ = complex![1 - 2 i];
-    let _ = complex![(1+2) - 2 i];
-    let _ = complex![1 - (2-1) i];
-    let _ = complex![(1+2) - (2+3) i];
-    let _ = complex![1 - 2 j];
-    let _ = complex![(1+2) - 2 j];
-    let _ = complex![1 - (2-1) j];
-    let _ = complex![(1+2) - (2+3) j];
-    let _ = complex![(2+3) i];
-    let _ = complex![(2+3) j];
-    let _: i32 = complex![2 + 3]; // uses .into() so a type is needed
-}
-
-#[test]
-pub fn test_sqrt() {
-    // test my custom implementations in Num
-    // first of all, here is the stable standard implementation from num_complex:
-    fn sqrt(y: Complex<f64>) -> Complex<f64> {
-        if y.im.is_zero() {
-            if y.re.is_sign_positive() {
-                // simple positive real √r, and copy `im` for its sign
-                Complex::new(y.re.sqrt(), y.im)
-            } else {
-                // √(r e^(iπ)) = √r e^(iπ/2) = i√r
-                // √(r e^(-iπ)) = √r e^(-iπ/2) = -i√r
-                let im = (-y.re).sqrt();
-                if y.im.is_sign_positive() {
-                    Complex::new(0.0, im)
-                } else {
-                    Complex::new(0.0, -im)
-                }
-            }
-        } else if y.re.is_zero() {
-            // √(r e^(iπ/2)) = √r e^(iπ/4) = √(r/2) + i√(r/2)
-            // √(r e^(-iπ/2)) = √r e^(-iπ/4) = √(r/2) - i√(r/2)
-            let x = (y.im.abs() / 2.0).sqrt();
-            if y.im.is_sign_positive() {
-                Complex::new(x, x)
-            } else {
-                Complex::new(x, -x)
-            }
-        } else {
-            // formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)
-            let (r, theta) = y.to_polar();
-            Complex::from_polar(r.sqrt(), theta / 2.0)
-        }
-    }
-    // test Complex::sqrt
-    let a = Complex::new(0.0, 0.0);
-    assert_eq!(a, sqrt(a));
-    let a = Complex::new(1.0, 0.0);
-    assert_eq!(a, sqrt(a));
-    let a = Complex::new(-1.0, 0.0);
-    assert_eq!(Complex::new(0.0, 1.0), sqrt(a));
-    let a = Complex::new(5.0, 2.0);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(-5.0, 2.0);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(-5.0, -2.0);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(5.0, -2.0);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    // if the values come really close to the negative real axis, the error rises
-    // here the errorbound is already 1e-13, but it easily gets much worse.
-    let a = Complex::new(-5.0, 0.01);
-    assert!(
-        (a.sqrt() - sqrt(a)).abs() < 1e-13,
-        "error real {} vs my {}",
-        a.sqrt(),
-        sqrt(a)
-    );
-    // if the imaginary value is too small compares with the real value, it will snap to the axis
-    let a = Complex::new(5.0, 2.0e-16);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(5.0, -2.0e-16);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(5.0, -2.0e-13);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(5.0, -2.0e-10);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(5.0, -2.0e-6);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(5.0, -2.0e-3);
-    assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
-    let a = Complex::new(-1.0, 2.0e-20);
-    assert!((a.sqrt() - Complex::new(1.0e-20, 1.0)).abs() < 0.2e-20);
-    let a = Complex::new(-4.0, 8.0e-20);
-    assert!((a.sqrt() - Complex::new(2.0e-20, 2.0)).abs() < 0.2e-20);
-    let a = Complex::new(1.0, 2.0e-20);
-    assert!((a.sqrt() - Complex::new(1.0, 1.0e-20)).abs() < 0.2e-20);
-    let a = Complex::new(4.0, 8.0e-20);
-    assert!((a.sqrt() - Complex::new(2.0, 2.0e-20)).abs() < 0.2e-20);
-    let a = Complex::new(-1.0, 2.0e-15);
-    assert!(
-        (a.sqrt() - Complex::new(1.0e-15, 1.0)).abs() < 0.5e-15,
-        "had {}",
-        a.sqrt()
-    );
-    let a = Complex::new(-1.0, 2.0e-16);
-    assert!((a.sqrt() - Complex::new(1.0e-16, 1.0)).abs() < 0.5e-16);
-    // im: 0.0
-    let a = Complex::new(-4.0, 0.0f64);
-    assert!(
-        (Complex::new(0.0, 2.0) - sqrt(a)).abs() < 1e-15,
-        "error, this is wrong: {}",
-        sqrt(a)
-    );
-    // im: -0.0
-    let a = Complex::new(-4.0, -0.0f64);
-    assert!(
-        (Complex::new(0.0, -2.0) - sqrt(a)).abs() < 1e-15,
-        "error, this is wrong: {}",
-        sqrt(a)
-    );
-}
 
 #[test]
 fn test_gcd() {
@@ -243,6 +114,133 @@ mod complex {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_macros() {
+        // this is only a syntax test
+        let _ = complex![1 + 2 i];
+        let _ = complex![(1+2) + 2 i];
+        let _ = complex![1 + (2-1) i];
+        let _ = complex![(1+2) + (2+3) i];
+        let _ = complex![1 + 2 j];
+        let _ = complex![(1+2) + 2 j];
+        let _ = complex![1 + (2-1) j];
+        let _ = complex![(1+2) + (2+3) j];
+        let _ = complex![1 - 2 i];
+        let _ = complex![(1+2) - 2 i];
+        let _ = complex![1 - (2-1) i];
+        let _ = complex![(1+2) - (2+3) i];
+        let _ = complex![1 - 2 j];
+        let _ = complex![(1+2) - 2 j];
+        let _ = complex![1 - (2-1) j];
+        let _ = complex![(1+2) - (2+3) j];
+        let _ = complex![(2+3) i];
+        let _ = complex![(2+3) j];
+        let _: i32 = complex![2 + 3]; // uses .into() so a type is needed
+    }
+
+    #[test]
+    fn test_sqrt1() {
+        // test my custom implementations in Num
+        // first of all, here is the stable standard implementation from num_complex:
+        fn sqrt(y: Complex<f64>) -> Complex<f64> {
+            if y.im.is_zero() {
+                if y.re.is_sign_positive() {
+                    // simple positive real √r, and copy `im` for its sign
+                    Complex::new(y.re.sqrt(), y.im)
+                } else {
+                    // √(r e^(iπ)) = √r e^(iπ/2) = i√r
+                    // √(r e^(-iπ)) = √r e^(-iπ/2) = -i√r
+                    let im = (-y.re).sqrt();
+                    if y.im.is_sign_positive() {
+                        Complex::new(0.0, im)
+                    } else {
+                        Complex::new(0.0, -im)
+                    }
+                }
+            } else if y.re.is_zero() {
+                // √(r e^(iπ/2)) = √r e^(iπ/4) = √(r/2) + i√(r/2)
+                // √(r e^(-iπ/2)) = √r e^(-iπ/4) = √(r/2) - i√(r/2)
+                let x = (y.im.abs() / 2.0).sqrt();
+                if y.im.is_sign_positive() {
+                    Complex::new(x, x)
+                } else {
+                    Complex::new(x, -x)
+                }
+            } else {
+                // formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)
+                let (r, theta) = y.to_polar();
+                Complex::from_polar(r.sqrt(), theta / 2.0)
+            }
+        }
+        // test Complex::sqrt
+        let a = Complex::new(0.0, 0.0);
+        assert_eq!(a, sqrt(a));
+        let a = Complex::new(1.0, 0.0);
+        assert_eq!(a, sqrt(a));
+        let a = Complex::new(-1.0, 0.0);
+        assert_eq!(Complex::new(0.0, 1.0), sqrt(a));
+        let a = Complex::new(5.0, 2.0);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(-5.0, 2.0);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(-5.0, -2.0);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(5.0, -2.0);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        // if the values come really close to the negative real axis, the error rises
+        // here the errorbound is already 1e-13, but it easily gets much worse.
+        let a = Complex::new(-5.0, 0.01);
+        assert!(
+            (a.sqrt() - sqrt(a)).abs() < 1e-13,
+            "error real {} vs my {}",
+            a.sqrt(),
+            sqrt(a)
+        );
+        // if the imaginary value is too small compares with the real value, it will snap to the axis
+        let a = Complex::new(5.0, 2.0e-16);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(5.0, -2.0e-16);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(5.0, -2.0e-13);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(5.0, -2.0e-10);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(5.0, -2.0e-6);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(5.0, -2.0e-3);
+        assert!((a.sqrt() - sqrt(a)).abs() < 1e-15);
+        let a = Complex::new(-1.0, 2.0e-20);
+        assert!((a.sqrt() - Complex::new(1.0e-20, 1.0)).abs() < 0.2e-20);
+        let a = Complex::new(-4.0, 8.0e-20);
+        assert!((a.sqrt() - Complex::new(2.0e-20, 2.0)).abs() < 0.2e-20);
+        let a = Complex::new(1.0, 2.0e-20);
+        assert!((a.sqrt() - Complex::new(1.0, 1.0e-20)).abs() < 0.2e-20);
+        let a = Complex::new(4.0, 8.0e-20);
+        assert!((a.sqrt() - Complex::new(2.0, 2.0e-20)).abs() < 0.2e-20);
+        let a = Complex::new(-1.0, 2.0e-15);
+        assert!(
+            (a.sqrt() - Complex::new(1.0e-15, 1.0)).abs() < 0.5e-15,
+            "had {}",
+            a.sqrt()
+        );
+        let a = Complex::new(-1.0, 2.0e-16);
+        assert!((a.sqrt() - Complex::new(1.0e-16, 1.0)).abs() < 0.5e-16);
+        // im: 0.0
+        let a = Complex::new(-4.0, 0.0f64);
+        assert!(
+            (Complex::new(0.0, 2.0) - sqrt(a)).abs() < 1e-15,
+            "error, this is wrong: {}",
+            sqrt(a)
+        );
+        // im: -0.0
+        let a = Complex::new(-4.0, -0.0f64);
+        assert!(
+            (Complex::new(0.0, -2.0) - sqrt(a)).abs() < 1e-15,
+            "error, this is wrong: {}",
+            sqrt(a)
+        );
     }
 
     #[test]
@@ -1159,7 +1157,9 @@ mod rational {
         assert!(_0 < _1 && !(_1 < _0));
         assert!(_1 > _0 && !(_0 > _1));
         assert_eq!(Ratio::new_raw(-1, -1), _1);
+        assert_eq!(_1, Ratio::new_raw(-1, -1));
         assert_eq!(Ratio::new_raw(-1, -2), _1_2);
+        assert_eq!(_1_2, Ratio::new_raw(-1, -2));
         assert_eq!(Ratio::new_raw(-1, -2).cmp(&_1_2), Ordering::Equal);
 
         assert!(_0 <= _0 && _1 <= _1);
@@ -1178,6 +1178,8 @@ mod rational {
         assert!(((-_1) / _0) < (_1 / _0));
         assert!((_1 / _0) > ((-_1) / _0));
         assert_eq!((_2 / _0).partial_cmp(&(_1 / _0)), Some(Ordering::Equal));
+        assert_eq!(Ratio::new_raw(2, 0).partial_cmp(&Ratio::new_raw(1, 0)), Some(Ordering::Equal));
+        assert_eq!(Ratio::new_raw(2, 0).partial_cmp(&Ratio::new_raw(-1, 0)), Some(Ordering::Greater));
         assert!(!(_0 / _0).is_finite());
         assert!((_0 / _0).is_nan());
         assert_eq!((_0).partial_cmp(&(_0 / _0)), None);
@@ -1229,6 +1231,49 @@ mod rational {
                 check_cmp(-a.recip(), -b.recip(), Ordering::Less);
             }
         }
+
+        #[cfg(feature = "num-bigint")]
+        {
+            // test recursion limits
+            let a = BigRational::new("2848091240477484913831".parse().unwrap(), "1347298747461876457091".parse().unwrap());
+            let b = BigRational::new("2848091240477484913832".parse().unwrap(), "1347298747461876457092".parse().unwrap());
+            assert!(a > b);
+            assert!(a != b);
+            let a = BigRational::new("284809124001480758165698749156931477484913831".parse().unwrap(), "134729874746012938570101240147041441876457091".parse().unwrap());
+            let b = BigRational::new("284809124001480758165698749156931477484913832".parse().unwrap(), "134729874746012938570101240147041441876457092".parse().unwrap());
+            assert!(a > b);
+            assert!(a != b);
+            let a = BigRational::new("28480912408140985865921964982184619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041441876457091".parse().unwrap());
+            let b = BigRational::new("28480912408140985865921964982184619846901480758165698749156931477484913832".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041441876457092".parse().unwrap());
+            assert!(a > b);
+            assert!(a != b);
+            // this next one is already 115 recursive calls deep
+            let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640194710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918659764818204710348765103865981732091731441876457091".parse().unwrap());
+            let b = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640194710871024710484619846901480758165698749156931477484913832".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918659764818204710348765103865981732091731441876457092".parse().unwrap());
+            assert!(a > b);
+            assert!(a != b);
+            // next: 184 recursive calls deep
+            let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640110498471864871634871264917298419374547129369126471546537312391294687154894710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918129848913648716481270321798476735481146918349817439216351940424141246876659764818204710348765103865981732091731441876457091".parse().unwrap());
+            let b = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640110498471864871634871264917298419374547129369126471546537312391294687154894710871024710484619846901480758165698749156931477484913832".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918129848913648716481270321798476735481146918349817439216351940424141246876659764818204710348765103865981732091731441876457092".parse().unwrap());
+            assert!(a > b);
+            assert!(a != b);
+            // 390
+            let a = &a*&a;
+            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            assert!(a > b);
+            assert!(a != b);
+            // 728
+            let a = &a*&a;
+            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            assert!(a > b);
+            assert!(a != b);
+            // probably ~1300 TODO overflow.
+            let a = &a*&a;
+            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            assert!(a > b);
+            assert!(a != b);
+        }
+        // TODO is there some float ratio, where this stackoverflow will also occur?
     }
 
     #[test]
@@ -2483,6 +2528,13 @@ mod extension {
         assert_eq!(&(&(R * R) - &9) / &(R + &3), R - &3);
         assert_eq!(&(&(R * R) - &9) / &(R - &3), R + &3);
         // don't need to test assign ops, because they are implemented using the above ones.
+
+        const D: SqrtExt<i32, Sqrt<i32, 7>> = SqrtExt::new(2, -5);
+        assert!(!D.is_unit());
+        let (q, r) = (S / D, S % D);
+        assert_eq!(D * q + r, S);
+        let (q, r) = ((-S) / D, (-S) % D);
+        assert_eq!(D * q + r, -S);
     }
 
     #[test]
@@ -2731,16 +2783,34 @@ mod extension {
         let x = SqrtExt::<f64, Sqrt<f64, 6>>::new(0.0, core::f64::consts::PI);
         let mut iter = DevelopContinuedFraction::new(Ratio::from(x));
         for _ in 0..10 {
-            println!("{}", iter.next().unwrap());
+            let _next = iter.next().unwrap();
+            //println!("{}", _next);
         }
-        println!();
+        // mostly testing that there is no infinite loops:
         let mut iter = DevelopContinuedFraction::new(Ratio::from(x)).continued_fraction(One::one());
         for _ in 0..10 {
             let v = iter.next().unwrap() / SqrtExt::new(0.0, 1.0);
             let vf = v.to_approx();
             let err = ((vf - core::f64::consts::PI) / core::f64::consts::PI).abs();
-            println!("{v} error: {err:.2e}");
+            assert!(err < 0.1);
+            //println!("{v} error: {err:.2e}");
         }
+        // test conversions
+        let phi = SqrtExt::<_, Sqrt<_, 5>>::new(Ratio::new(1, 2), Ratio::new(1, 2));
+        let phi2: Ratio<SqrtExt::<i64, Sqrt<_, 5>>> = phi.into();
+        let f: f64 = phi.to_approx();
+        assert_eq!(f, phi2.to_approx());
+        assert_eq!(f, 0.5 + 0.5*5.0f64.sqrt());
+        assert_eq!(phi, phi2.into());
+        assert!(phi2.denom.is_integral());
+        // test an example where a more difficult conversion is needed
+        let x: Ratio<SqrtExt::<i64, Sqrt<_, 5>>> = Ratio::new(SqrtExt::new(1, 3), SqrtExt::new(7, 9));
+        let x2: SqrtExt<Ratio<i64>, Sqrt<_, 5>> = x.into();
+        let f: f64 = x.to_approx();
+        assert_eq!(f, x2.to_approx());
+        assert_eq!(x, x2.into());
+        assert!(x2.value.denom != 1);
+        assert!(x2.ext.denom != 1);
     }
 
     #[test]
@@ -2765,5 +2835,42 @@ mod extension {
         assert!(SqrtExt::<i32, Sqrt<_, N>>::from_approx(f32::NAN, tol).is_none());
         assert!(SqrtExt::<i32, Sqrt<_, N>>::from_approx(f32::INFINITY, tol).is_none());
         assert!(SqrtExt::<i32, Sqrt<_, N>>::from_approx(f32::NEG_INFINITY, tol).is_none());
+    }
+
+    #[test]
+    fn test_complex_sqrt_ext() {
+        type T = SqrtExt::<Complex<i32>, Sqrt<Complex<i32>, 5>>;
+        let x = T::new(Complex::i() * 4, Complex::i() * 4);
+        let y = T::new(Complex::i() * 2, Complex::i() * 2);
+        assert_eq!(x / y, Complex::from(2i32).into());
+        assert!((x % y).is_zero());
+        let x = T::new(Complex::i() * -4, Complex::one() * 4);
+        let y = T::new(Complex::one() * 2, Complex::i() * 2);
+        assert_eq!(x / y, Complex::new(0, -2i32).into());
+        assert!((x % y).is_zero());
+        assert_eq!(x.abs_sqr(), SqrtExt::new(16 + 16*5, 0));
+        // let u = T::unit(); // what is the complex version of this???
+        //println!("{}", x / y);
+
+        // TODO test Complex<SqrtExt<...>> e.g. with Euclid and conversion between them.
+
+        type C = SqrtExt::<i32, SignedSqrt<i32, -1>>; // alternative to complex type
+        let a = C::new(3, 2);
+        let b = C::new(-2, 7);
+        let c = a * b;
+        let c2 = Complex::new(3, 2) * Complex::new(-2, 7);
+        assert_eq!(c.value, c2.re);
+        assert_eq!(c.ext, c2.im);
+        //assert_eq!(c.re(), c2.re().into()); // unimplemented
+        //assert_eq!(c.abs_sqr(), c2.abs_sqr().into()); // unimplemented
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_display() {
+        type T = SqrtExt::<Complex<i32>, Sqrt<Complex<i32>, 5>>;
+        let x = T::new(One::one(), One::one());
+        assert_eq!("1+0i+√(5+0i)", std::format!("{x}"));
+        // TODO add more
     }
 }

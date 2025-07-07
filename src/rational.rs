@@ -1,4 +1,4 @@
-//! Custom rational type, which allows much more generic types based on [RemEuclid] and handles division by zero like floats without panic.
+//! Custom rational type, which allows much more generic types based on [Euclid] and handles division by zero like floats without panic.
 
 use core::{
     cmp::Ordering,
@@ -16,7 +16,7 @@ use crate::{
 use crate::{FromU64, complex::Complex};
 
 /// A fraction, or rational number `p/q`.
-/// For anything useful, it requires the [Zero], [One] and [RemEuclid] traits
+/// For anything useful, it requires the [Zero], [One] and [Euclid] traits
 /// and some arithmetic operations, depending on the usecase.
 ///
 /// Dividing by zero is handled without panics with Inf, -Inf and NaN just like for floats.
@@ -77,12 +77,11 @@ where
         }
     }
 }
-impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T>
-where
-    for<'a> &'a T: Mul<&'a T, Output = T> + Div<&'a T, Output = T>,
-{
+impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
     type Output = T;
-    /// rounds to the next integer towards -oo, using [RemEuclid].
+    /// rounds to the next integer towards -oo, using [Euclid].
+    ///
+    /// Panics if the rational is not finite.
     fn floor(&self) -> T {
         if !self.is_finite() {
             panic!("Called floor on non finite rational");
@@ -97,6 +96,8 @@ where
         .0
     }
     /// rounds to the closest integer, breaking ties by rounding away from zero.
+    ///
+    /// Panics if the rational is not finite.
     fn round(&self) -> T {
         if !self.is_finite() {
             panic!("Called round on non finite rational");
@@ -106,8 +107,9 @@ where
         if self.denom < T::zero() {
             (t1, t2) = (t2, t1);
         }
-        let d1 = self.numer.clone() - &t1 * &self.denom;
-        let d2 = &t2 * &self.denom - self.numer.clone();
+        // TODO avoid this multiplication using continued fractions
+        let d1 = self.numer.clone() - t1.clone() * self.denom.clone();
+        let d2 = t2.clone() * self.denom.clone() - self.numer.clone();
         if t1 >= T::zero() {
             // round up
             if d1 < d2 { t1 } else { t2 }
@@ -117,14 +119,11 @@ where
         }
     }
 }
-impl<T: Zero + PartialEq> Ratio<T>
-where
-    for<'a> &'a T: Div<&'a T, Output = T>,
-{
+impl<T: Zero + Euclid + PartialEq> Ratio<T> {
     /// Returns true if the rational number can be written as a normal number (i.e. `self == self.trunc()`).
     #[inline]
     pub fn is_integral(&self) -> bool {
-        self.is_finite() && &self.numer / &self.denom == self.numer
+        self.is_finite() && self.numer.div_rem_euclid(&self.denom).1.is_zero()
     }
 }
 impl<T: Cancel> Ratio<T> {
@@ -194,7 +193,7 @@ where
     }
 }
 
-impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ratio<T> {
+impl<T: Clone + Zero + PartialEq + Sub<Output = T> + Euclid> PartialEq for Ratio<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.denom == other.denom {
             return if self.numer == other.numer {
@@ -212,128 +211,130 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + RemEuclid> PartialEq for Ra
             return false;
         }
         if self.numer == other.numer {
+            // +0 and -0 are considered equal
             return self.numer.is_zero() || self.denom == other.denom;
         }
         // Compare by comparing the continued fraction expansion.
-        // This is done on stack however, so an infinite recursion would create a stack overflow instead of halting the program.
-        // TODO check how deep it goes for really big rationals.
-        // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
-        // when negative denominators are used, so the denominators have to be checked.
-        let a = if self.denom.is_valid_euclid() {
-            self.clone()
-        } else {
-            Ratio::new_raw(
-                T::zero() - self.numer.clone(),
-                T::zero() - self.denom.clone(),
-            )
-        };
-        let b = if other.denom.is_valid_euclid() {
-            other.clone()
-        } else {
-            Ratio::new_raw(
-                T::zero() - other.numer.clone(),
-                T::zero() - other.denom.clone(),
-            )
-        };
-        let (a_int, a_rem) = a.numer.div_rem_euclid(&a.denom);
-        let (b_int, b_rem) = b.numer.div_rem_euclid(&b.denom);
-        if a_int == b_int {
-            if a_rem.is_zero() || b_rem.is_zero() {
-                return a_rem == b_rem;
+        let mut s = self.clone();
+        let mut o = other.clone();
+        loop {
+            // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
+            // when negative denominators are used, so the denominators have to be checked.
+            let a = if s.denom.is_valid_euclid() {
+                s
+            } else {
+                Ratio::new_raw(T::zero() - s.numer, T::zero() - s.denom)
+            };
+            let b = if o.denom.is_valid_euclid() {
+                o
+            } else {
+                Ratio::new_raw(T::zero() - o.numer, T::zero() - o.denom)
+            };
+            // after flipping signs, the denominators might have become equal.
+            if a.denom == b.denom {
+                return a.numer == b.numer;
             }
-            // Compare the reciprocals of the remaining fractions in reverse
-            // Note, the denominators are smaller, so this can't lead to infinite recursion.
-            let a_recip = Ratio::new_raw(a.denom.clone(), a_rem);
-            let b_recip = Ratio::new_raw(b.denom.clone(), b_rem);
-            a_recip == b_recip
-        } else {
-            false
+            let (a_int, a_rem) = a.numer.div_rem_euclid(&a.denom);
+            let (b_int, b_rem) = b.numer.div_rem_euclid(&b.denom);
+            if a_int == b_int {
+                let a_zero = a_rem.is_zero();
+                let b_zero = b_rem.is_zero();
+                if a_zero || b_zero {
+                    return a_zero && b_zero;
+                }
+                // Compare the reciprocals of the remaining fractions in reverse
+                // Note, the denominators are smaller, so this can't lead to infinite recursion.
+                s = Ratio::new_raw(a.denom, a_rem);
+                o = Ratio::new_raw(b.denom, b_rem);
+            } else {
+                return false;
+            }
         }
     }
 }
-impl<T: Clone + Zero + Eq + Sub<T, Output = T> + RemEuclid> Eq for Ratio<T> {}
+impl<T: Clone + Zero + Eq + Sub<T, Output = T> + Euclid> Eq for Ratio<T> {}
 
 impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let zero = T::zero();
         if !self.is_finite() || !other.is_finite() {
             if self.is_nan() || other.is_nan() {
                 return None;
             }
-            let mut s = self.numer.partial_cmp(&T::zero());
-            let mut o = other.numer.partial_cmp(&T::zero());
-            if s.is_none() || o.is_none() {
-                return None;
+            let mut s = self.numer.partial_cmp(&zero)?;
+            let mut o = other.numer.partial_cmp(&zero)?;
+            if self.denom < zero {
+                s = s.reverse();
             }
-            if self.denom < T::zero() {
-                s = s.map(Ordering::reverse);
-            }
-            if other.denom < T::zero() {
-                o = o.map(Ordering::reverse);
+            if other.denom < zero {
+                o = o.reverse();
             }
             // compare infinities
             return Some(s.cmp(&o));
         }
-        // very smart way to write this function from `num_rational`
-        // compare by comparing the continued fraction expansion. TODO make iterative using continued fractions iterator.
-        if self.denom == other.denom {
-            // With equal denominators, the numerators can be compared
-            let ord = self.numer.partial_cmp(&other.numer);
-            if self.denom < T::zero() {
-                ord.map(Ordering::reverse)
+        let mut s = self.clone();
+        let mut o = other.clone();
+        // Compare by comparing the continued fraction expansion.
+        // based on `num_rational`, but fixed critical stackoverflow.
+        loop {
+            if s.denom == o.denom {
+                // With equal denominators, the numerators can be compared
+                let ord = s.numer.partial_cmp(&o.numer);
+                return if s.denom < zero {
+                    ord.map(Ordering::reverse)
+                } else {
+                    ord
+                };
+            } else if s.numer == o.numer {
+                // With equal numerators, the denominators can be inversely compared
+                if s.numer.is_zero() {
+                    // -0 and 0 are equal
+                    return Some(Ordering::Equal);
+                }
+                let ord = s.denom.partial_cmp(&o.denom);
+                return if s.numer < zero {
+                    ord
+                } else {
+                    ord.map(Ordering::reverse)
+                };
             } else {
-                ord
-            }
-        } else if self.numer == other.numer {
-            // With equal numerators, the denominators can be inversely compared
-            if self.numer.is_zero() {
-                // -0 and 0 are equal
-                return Some(Ordering::Equal);
-            }
-            let ord = self.denom.partial_cmp(&other.denom);
-            if self.numer < T::zero() {
-                ord
-            } else {
-                ord.map(Ordering::reverse)
-            }
-        } else {
-            // Compare as floored integers and remainders
-            // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
-            // when negative denominators are used, so the denominators have to be checked.
-            let a = if self.denom.is_valid_euclid() {
-                self.clone()
-            } else {
-                Ratio::new_raw(
-                    T::zero() - self.numer.clone(),
-                    T::zero() - self.denom.clone(),
-                )
-            };
-            let b = if other.denom.is_valid_euclid() {
-                other.clone()
-            } else {
-                Ratio::new_raw(
-                    T::zero() - other.numer.clone(),
-                    T::zero() - other.denom.clone(),
-                )
-            };
-            let (a_int, a_rem) = a.numer.div_rem_euclid(&a.denom);
-            let (b_int, b_rem) = b.numer.div_rem_euclid(&b.denom);
-            match a_int.partial_cmp(&b_int)? {
-                Ordering::Greater => Some(Ordering::Greater),
-                Ordering::Less => Some(Ordering::Less),
-                Ordering::Equal => {
-                    match (a_rem.is_zero(), b_rem.is_zero()) {
-                        (true, true) => Some(Ordering::Equal),
-                        (true, false) => Some(Ordering::Less),
-                        (false, true) => Some(Ordering::Greater),
-                        (false, false) => {
-                            // Compare the reciprocals of the remaining fractions in reverse
-                            // Note, the denominators are smaller, so this can't lead to infinite recursion.
-                            let a_recip = Ratio::new_raw(a.denom.clone(), a_rem);
-                            let b_recip = Ratio::new_raw(b.denom.clone(), b_rem);
-                            a_recip.partial_cmp(&b_recip).map(Ordering::reverse)
+                // Compare as floored integers and remainders
+                // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
+                // when negative denominators are used, so the denominators have to be checked.
+                let a = if s.denom >= zero {
+                    s
+                } else {
+                    Ratio::new_raw(T::zero() - s.numer, T::zero() - s.denom)
+                };
+                let b = if o.denom >= zero {
+                    o
+                } else {
+                    Ratio::new_raw(T::zero() - o.numer, T::zero() - o.denom)
+                };
+                // after flipping signs, the denominators might have become equal.
+                if a.denom == b.denom {
+                    return a.numer.partial_cmp(&b.numer);
+                }
+                let (a_int, a_rem) = a.numer.div_rem_euclid(&a.denom);
+                let (b_int, b_rem) = b.numer.div_rem_euclid(&b.denom);
+                return match a_int.partial_cmp(&b_int)? {
+                    Ordering::Greater => Some(Ordering::Greater),
+                    Ordering::Less => Some(Ordering::Less),
+                    Ordering::Equal => {
+                        match (a_rem.is_zero(), b_rem.is_zero()) {
+                            (true, true) => Some(Ordering::Equal),
+                            (true, false) => Some(Ordering::Less),
+                            (false, true) => Some(Ordering::Greater),
+                            (false, false) => {
+                                // Compare the reciprocals of the remaining fractions in reverse
+                                // Note, the denominators are smaller, so this can't lead to infinite recursion if the gcd doesn't.
+                                o = Ratio::new_raw(a.denom, a_rem);
+                                s = Ratio::new_raw(b.denom, b_rem);
+                                continue;
+                            }
                         }
                     }
-                }
+                };
             }
         }
     }
@@ -343,7 +344,8 @@ where
     for<'a> &'a T: Mul<&'a T, Output = T>,
 {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap() // may panic!
+        // TODO should this implement Ord? Where is it useful? Keep in mind, that integers also panic on divide by zero.
+        self.partial_cmp(other).unwrap() // panic for NaN < NaN!
     }
 }
 
@@ -649,7 +651,7 @@ impl<'a, T: Cancel + Div<Output = T>> Rem<&'a T> for &'a Ratio<T> {
     }
 }
 
-impl<T: Cancel> RemEuclid for Ratio<T> {
+impl<T: Cancel> Euclid for Ratio<T> {
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
         // always exactly divisible.
         let f = self / div;
@@ -864,7 +866,7 @@ unsafe impl<T: bytemuck::Pod> bytemuck::Pod for Ratio<T> {}
 
 // NB: We can't just `#[derive(Hash)]`, because it needs to agree
 // with `Eq` even for non-reduced ratios.
-impl<T: Clone + Zero + RemEuclid + Hash> Hash for Ratio<T> {
+impl<T: Clone + Zero + Euclid + Hash> Hash for Ratio<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let mut r = self.clone();
         loop {

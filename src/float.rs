@@ -55,6 +55,7 @@ fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
     (mantissa, exponent, finite, zero_mantissa)
 }
 
+/// Type for floats used with [ApproxFloat]. Otherwise it is never explicitly required.
 pub trait FloatType: Clone
 + Zero
 + One

@@ -6,7 +6,7 @@
 //! There is no dependence on [Copy] anywhere and nothing is limited to buildin types.
 //! 
 //! A central objective of this crate is to only have traits which are essential, or very useful.
-//! - Essential traits are e.g. [Zero], [One], [Num], [NumAlgebraic], [NumAnalytic] and [RemEuclid]. (these need to be implemented)
+//! - Essential traits are e.g. [Zero], [One], [Num], [NumAlgebraic], [NumAnalytic] and [Euclid]. (these need to be implemented)
 //! - Grouping/alias traits are [Ring], [Field], [AlgebraicField] and [AddMulSubDiv] (+ lesser variants).
 //! - Derived traits are [Cancel], [Power], [IntMul].
 //! 
@@ -31,8 +31,16 @@
 //! - `serde`
 //! 
 //! # Testing Status
-//! Some code has been copied from `num_complex` and `num_rational`. In particular the test code has been copied where applicable.
-//! In this process, bugs in the testing code have been found.
+//! The tests from `num_complex` and `num_rational` are copied where applicable.
+//! In this process, bugs in their testing code have been found. The improved testing code
+//! is no longer fully succeeding for `num_complex` and `num_rational`.
+//! 
+//! Note, that it is impossible to test all combinations, which are allowed in this crate.
+//! There is many cases in the `rational` part, where the gcd doesn't converge (infinite loop),
+//! because e.g. it is evaluated on a domain which is not Euclidean. Some functions have relaxed
+//! trait bounds to the point, where they can be called on types that don't work.
+//! E.g. [extension::SqrtExt] in large part only works for types with commutative multiplication.
+//! Be careful.
 //! 
 //! # Limitations
 //! To make other crates, which are not considered in this one, work, one needs to implement `Num` for them.
@@ -42,12 +50,12 @@
 //! as that would require an implementation for every specific type (bloat for nothing).
 //! 
 //! Overflows are well avoided in [rational], but no checked functions are implemented.
-//! Other places, like [complex] are prone to integer overflow. So get the checked or wrapping variants,
+//! Other places, like [complex] and [extension] are prone to integer overflow. So get the checked or wrapping variants,
 //! use custom wrappers on the int types. E.g. `enum Checked<T> { Value(T), Overflow }`.
 //! 
 //! ### TODOs
 //! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
-//! - `Zero`, `Conjugate` and `RemEuclid` should have derive macros just like `Clone`
+//! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`
 //! - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
 //! - Hide approximation from floats for rational and sqrt types behind a feature flag.
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)

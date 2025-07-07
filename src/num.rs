@@ -5,7 +5,7 @@ use core::{fmt::Debug, ops::*};
 // so algorithms don't have to say in their description,
 // whether they work for non commutative rings as well.
 // TODO similarly add a `TrueDiv` trait, so integers can no longer be used with `Field`.
-// anything that previously worked with `Field` and now doesn't, needs to use `Ring` with `RemEuclid`.
+// anything that previously worked with `Field` and now doesn't, needs to use `Ring` with `Euclid`.
 // Note, that is_unit can already provide a way to check if a division is a true division, however those checks should be in `debug_assert!()`.
 
 /// Defines an additive identity element for `Self`.
@@ -296,13 +296,14 @@ where
 }
 
 /// like [Rem<T, Output = T>] but with euclidean division.
-pub trait RemEuclid: Sized {
+pub trait Euclid: Sized {
     /// Compute the euclidean division `q` and remainder `r` of `self`, such that `self = q * div + r`.
     ///
     /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `div` with `|r| < |div|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
-    /// - If the divisor is a unit, the remainder is also required to be 0.
+    /// - If the divisor is a unit, the remainder is required to be 0.
     /// - If the number is signed, the positive sign solution is returned. In all cases `is_valid_euclid` needs to be true on the result remainder,
     /// - The result must make the Euclidean algorithm to compute the gcd convergent.
+    /// - TODO figure this ou exactly. Euclidean means repeated sub/add with `q` being an integer.
     /// - Division by zero may panic, or return the invalid value `(q=0, r=self)`.
     ///
     /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as `|r|` might be larger than `|div|`.
@@ -311,7 +312,7 @@ pub trait RemEuclid: Sized {
     /// Note, that even if only `r=0` is returned, `is_valid_euclid` still has to consider all positive numbers to be valid,
     /// due to it's condition that x or -x need to be valid.
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self);
-    /// Return, whether the number could be the result of a euclidean remainder.
+    /// Return, whether the number could be the result of an Euclidean remainder.
     /// Note, that zero is always "valid euclid".
     ///
     /// For all x: x or -x need to be "valid euclid".
@@ -320,7 +321,7 @@ pub trait RemEuclid: Sized {
 
 macro_rules! impl_rem_euclid {
     ($($T:ty),+) => {
-        $(impl RemEuclid for $T {
+        $(impl Euclid for $T {
             #[inline(always)]
             fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
                 (self.div_euclid(*div), self.rem_euclid(*div))
@@ -339,7 +340,7 @@ impl_rem_euclid!(
 
 macro_rules! impl_rem_euclid_float {
     ($($T:ty),+) => {
-        $(impl RemEuclid for $T {
+        $(impl Euclid for $T {
             #[inline(always)]
             fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
                 if !div.is_finite() {
@@ -363,19 +364,19 @@ impl_rem_euclid_float!(
 mod bigint {
     use crate::*;
     // num_bigint is written based on num_traits
-    use num_traits::{Signed, Euclid};
+    use num_traits::Signed;
 
-    impl RemEuclid for num_bigint::BigInt {
+    impl Euclid for num_bigint::BigInt {
         fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
-            <Self as Euclid>::div_rem_euclid(self, div)
+            <Self as num_traits::Euclid>::div_rem_euclid(self, div)
         }
         fn is_valid_euclid(&self) -> bool {
             !self.is_negative()
         }
     }
-    impl RemEuclid for num_bigint::BigUint {
+    impl Euclid for num_bigint::BigUint {
         fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
-            <Self as Euclid>::div_rem_euclid(self, div)
+            <Self as num_traits::Euclid>::div_rem_euclid(self, div)
         }
         fn is_valid_euclid(&self) -> bool {
             true
@@ -386,7 +387,7 @@ mod bigint {
 /// Calculates the Greatest Common Divisor (GCD) of the number and
 /// `other`. The result is always positive (> 0).
 #[must_use]
-pub fn gcd<T: Zero + One + Sub<Output = T> + RemEuclid>(mut a: T, mut b: T) -> T {
+pub fn gcd<T: Zero + One + Sub<Output = T> + Euclid>(mut a: T, mut b: T) -> T {
     if a.is_zero() {
         return if b.is_zero() {
             T::one()
@@ -411,7 +412,7 @@ pub fn gcd<T: Zero + One + Sub<Output = T> + RemEuclid>(mut a: T, mut b: T) -> T
 /// Calculates the Least Common Multiple (LCM) of the number and
 /// `other`. The result is always `result.is_valid_euclid() == true` (usually that means >= 0).
 #[must_use]
-pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + RemEuclid>(
+pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + Euclid>(
     mut a: T,
     mut b: T,
 ) -> T {
@@ -428,7 +429,7 @@ pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + RemEuc
 /// Returns `((x, y), d)`.
 /// Note that `d` differs from the gcd if both arguments are zero.
 #[must_use]
-pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + RemEuclid>(mut a: T, mut b: T) -> ((T, T), T) {
+pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid>(mut a: T, mut b: T) -> ((T, T), T) {
     if a.is_zero() {
         return if b.is_zero() {
             ((T::zero(), T::zero()), T::zero())
@@ -458,11 +459,11 @@ pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + RemEuc
     
 }
 
-pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + RemEuclid {
+pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + Euclid {
     #[must_use]
     fn cancel(self, b: Self) -> (Self, Self);
 }
-impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + RemEuclid> Cancel for T
+impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + Euclid> Cancel for T
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {

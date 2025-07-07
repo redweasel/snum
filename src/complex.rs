@@ -299,8 +299,8 @@ impl<
     }
 }
 
-impl<T: Num + RemEuclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>>
-    RemEuclid for Complex<T>
+impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>>
+    Euclid for Complex<T>
 {
     /// Euclidean division of complex numbers, such that `|r|^2 <= |b|^2/2`
     /// is satisfied for the remainder `r` with non negative real part.

@@ -343,10 +343,8 @@ where
     }
 }
 
-impl<
-    T: Num + Cancel + IntoDiscrete + Neg<Output = T> + PartialOrd + Div<Output = T>,
-    E: SqrtConst<T>,
-> IntoDiscrete for SqrtExt<T, E>
+impl<T: Num + Cancel + IntoDiscrete + Neg<Output = T> + PartialOrd, E: SqrtConst<T>> IntoDiscrete
+    for SqrtExt<T, E>
 where
     <T as IntoDiscrete>::Output: IntoDiscrete<Output = <T as IntoDiscrete>::Output>
         + Add<Output = <T as IntoDiscrete>::Output>
@@ -408,12 +406,56 @@ where
     Complex<T>: Num<Real = T>,
 {
     fn from(value: SqrtExt<T, E>) -> Self {
+        // equallity of the constants can not be checked at compile time here.
         assert_eq!(
-            Complex::from(E::sqr()),
             E2::sqr(),
-            "the extension number needs to be the same when upcasting to complex type"
+            E::sqr().into(),
+            "can not convert between SqrtExt with different constants"
         );
         SqrtExt::new(value.value.into(), value.ext.into())
+    }
+}
+impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<SqrtExt<Ratio<T>, E2>>
+    for Ratio<SqrtExt<T, E>>
+where
+    Ratio<T>: Num,
+{
+    fn from(value: SqrtExt<Ratio<T>, E2>) -> Self {
+        // equallity of the constants can not be checked at compile time here.
+        assert_eq!(
+            E2::sqr(),
+            E::sqr().into(),
+            "can not convert between SqrtExt with different constants"
+        );
+        let (a, b) = value.value.denom.clone().cancel(value.ext.denom.clone());
+        // TODO check behavior with non finite values
+        Ratio {
+            numer: SqrtExt::new(value.value.numer * b, value.ext.numer * a.clone()),
+            denom: SqrtExt::from(a * value.ext.denom.clone()),
+        }
+    }
+}
+impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<Ratio<SqrtExt<T, E>>>
+    for SqrtExt<Ratio<T>, E2>
+where
+    Ratio<T>: Num,
+    for<'a> &'a T: Mul<&'a T, Output = T>,
+{
+    fn from(value: Ratio<SqrtExt<T, E>>) -> Self {
+        // equallity of the constants can not be checked at compile time here.
+        assert_eq!(
+            E2::sqr(),
+            E::sqr().into(),
+            "can not convert between SqrtExt with different constants"
+        );
+        // this cast ist also possible since all (finite, non zero) rational numbers have an inverse.
+        &SqrtExt::new(
+            Ratio::new_raw(value.numer.value, T::one()),
+            Ratio::new_raw(value.numer.ext, T::one()),
+        ) / &SqrtExt::new(
+            Ratio::new_raw(value.denom.value, T::one()),
+            Ratio::new_raw(value.denom.ext, T::one()),
+        )
     }
 }
 
@@ -617,15 +659,19 @@ macro_rules! impl_mul {
 impl_mul!(Mul, mul; Div, div; Rem, rem);
 
 impl<
-    T: Num + Zero + One + RemEuclid + PartialOrd + Neg<Output = T> + Sub<Output = T> + Div<Output = T>,
+    T: Num + Zero + One + Euclid + PartialOrd + Neg<Output = T> + Sub<Output = T> + Div<Output = T>,
     E: SqrtConst<T>,
-> RemEuclid for SqrtExt<T, E>
+> Euclid for SqrtExt<T, E>
 where
     Self: PartialOrd,
 {
     /// Euclidean division for √2 and √3. Otherwise use an extension to √N, which ensures `|r| < |d|`,
     /// but can't be used in a `gcd` or `lcm`. That is because Z[√5] is not a Euclidean domain.
     fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
+        if E::is_negative() {
+            // can't properly implement this to work for both reals and complex numbers
+            unimplemented!();
+        }
         if b.value.is_zero() && b.ext.is_zero() {
             // invalid division -> invalid result, which still holds up the equation self = q * div + r = r;
             return (T::zero().into(), self.clone());
@@ -643,10 +689,6 @@ where
             self.value.clone() * b.value.clone() - self.ext.clone() * b.ext.clone() * E::sqr(),
             self.ext.clone() * b.value.clone() - self.value.clone() * b.ext.clone(),
         );
-        /*if denom.is_unit() {
-            // do the exact division. Required by definition of `div_rem_euclid`
-            return (&numer * &(T::one() / denom), T::zero().into());
-        }*/
         // compute `a/b = q.value + q.ext √N` using rational numbers, then round those.
         // before rounding, decompose √N = floor(√N) + (√N - floor(√N))
         // q = (q.value + q.ext floor(√N)) + q.ext (√N - floor(√N))
@@ -654,8 +696,6 @@ where
         // this results in an error < 1/2 in the integer part and < 1/2 * ((√N - floor(√N)) in the rest,
         // which makes the error in the result less than 1, which in turn
         // makes the remainder smaller than the divisor.
-
-        // TODO handle the complex case √-1 correctly.
 
         numer.value = numer.value + numer.ext.clone() * E::floor();
         if !denom.is_valid_euclid() {
@@ -783,17 +823,32 @@ where
     type Real = SqrtExt<T::Real, E::Real>;
     #[inline(always)]
     fn abs_sqr(&self) -> Self::Real {
-        // TODO correctly handle negative E::sqr()!!!
-        let x = (self.value.clone() * self.ext.conj()).re();
-        Self::Real::new(
-            self.value.abs_sqr() + self.ext.abs_sqr() * E::sqr().re(),
-            x.clone() + x,
-        )
+        if E::is_negative() {
+            // can't properly implement this to work for both reals and complex numbers
+            unimplemented!();
+            //let x = (self.value.clone() * self.ext.conj()).imag();
+            //Self::Real::new(
+            //    self.value.abs_sqr() - self.ext.abs_sqr() * E::sqr().re(),
+            //    x.clone() + x,
+            //)
+        } else {
+            let x = (self.value.clone() * self.ext.conj()).re();
+            Self::Real::new(
+                self.value.abs_sqr() + self.ext.abs_sqr() * E::sqr().re(),
+                x.clone() + x,
+            )
+        }
     }
     #[inline(always)]
     fn re(&self) -> Self::Real {
-        // TODO handle negative E::sqr() correctly!!!
-        Self::Real::new(self.value.re(), self.ext.re())
+        if E::is_negative() {
+            // can't properly implement this to work for both reals and complex numbers
+            unimplemented!();
+            //Self::Real::new(self.value.re(), self.ext.imag())
+            //Self::Real::new(self.value.re(), T::zero())
+        } else {
+            Self::Real::new(self.value.re(), self.ext.re())
+        }
     }
     #[inline(always)]
     fn is_unit(&self) -> bool {
