@@ -63,29 +63,27 @@
 
 #![no_std]
 
-#[cfg(any(test, feature = "std"))]
+#[cfg(feature = "std")]
 extern crate std;
 
 mod num;
 mod from;
 mod power;
 pub mod complex;
+mod float;
 
 pub use num::*;
 pub use from::*;
 pub use power::*;
+pub use float::*;
 
 #[cfg(feature = "rational")]
 pub mod rational;
 #[cfg(feature = "rational")]
 pub mod extension;
 #[cfg(feature = "rational")]
-mod float;
-#[cfg(feature = "rational")]
 mod continued_fractions;
 
-#[cfg(feature = "rational")]
-pub use float::*;
 #[cfg(feature = "rational")]
 pub use continued_fractions::*;
 

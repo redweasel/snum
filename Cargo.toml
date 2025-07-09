@@ -8,6 +8,8 @@ take_mut = { version = "0.2.2", default-features = false }
 libm = { version = "*", default-features = false, optional = true }
 bytemuck = { version = "1.9", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, optional = true }
+# the following crate version is almost compatible, just that it unnecessarily depends on std.
+#checked = { version = "0.4", default-features = false, optional = true }
 
 [dependencies.num-bigint]
 optional = true          # needs std until Rust 1.36

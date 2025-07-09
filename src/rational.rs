@@ -593,7 +593,10 @@ impl<T: Cancel> Div<T> for Ratio<T> {
     type Output = Ratio<T>;
     fn div(self, rhs: T) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
-        let (numer, rhs) = self.numer.cancel(rhs);
+        let (mut numer, rhs) = self.numer.cancel(rhs);
+        if self.denom.is_zero() && !rhs.is_valid_euclid() {
+            numer = T::zero() - numer;
+        }
         Ratio {
             numer,
             denom: self.denom * rhs,
@@ -604,7 +607,10 @@ impl<'a, T: Cancel> Div<&'a T> for &'a Ratio<T> {
     type Output = Ratio<T>;
     fn div(self, rhs: &'a T) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
-        let (numer, rhs) = self.numer.clone().cancel(rhs.clone());
+        let (mut numer, rhs) = self.numer.clone().cancel(rhs.clone());
+        if self.denom.is_zero() && !rhs.is_valid_euclid() {
+            numer = T::zero() - numer;
+        }
         Ratio {
             numer,
             denom: self.denom.clone() * rhs,
@@ -617,7 +623,7 @@ where
     for<'a> &'a T: Div<Output = T>,
 {
     type Output = Ratio<T>;
-    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    /// remainder like for floats, not the division remainder, but rather a signed modulo function.
     fn rem(self, rhs: Self) -> Self::Output {
         let f = &self / &rhs;
         &self - &(&rhs * &(&f.numer / &f.denom))
@@ -625,7 +631,7 @@ where
 }
 impl<'a, T: Cancel + Div<Output = T>> Rem for &'a Ratio<T> {
     type Output = Ratio<T>;
-    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    /// remainder like for floats, not the division remainder, but rather a signed modulo function.
     fn rem(self, rhs: Self) -> Self::Output {
         let f = self / rhs;
         self - &(rhs * &(f.numer / f.denom))
@@ -636,7 +642,7 @@ where
     for<'a> &'a T: Div<Output = T>,
 {
     type Output = Ratio<T>;
-    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    /// remainder like for floats, not the division remainder, but rather a signed modulo function.
     fn rem(self, rhs: T) -> Self::Output {
         let f = &self / &rhs;
         &self - &(rhs * (&f.numer / &f.denom))
@@ -644,7 +650,7 @@ where
 }
 impl<'a, T: Cancel + Div<Output = T>> Rem<&'a T> for &'a Ratio<T> {
     type Output = Ratio<T>;
-    /// remainder like for floats, not the division remainder, but rather a modulo function.
+    /// remainder like for floats, not the division remainder, but rather a signed modulo function.
     fn rem(self, rhs: &'a T) -> Self::Output {
         let f = self / rhs;
         self - &(rhs.clone() * (f.numer / f.denom))
@@ -816,7 +822,7 @@ where
             if !x.numer.is_finite() || !x.denom.is_finite() || !err.is_finite() {
                 return None;
             }
-            if err.abs() <= tol {
+            if err <= tol && -err <= tol {
                 let numer = T::from_approx(x.numer.clone(), F::one())?;
                 let denom = T::from_approx(x.denom.clone(), F::one())?;
                 return Some(Ratio::new(numer, denom));
@@ -881,6 +887,71 @@ impl<T: Clone + Zero + Euclid + Hash> Hash for Ratio<T> {
     }
 }
 
+#[cfg(feature = "std")]
+fn fmt_ratio(
+    f: &mut fmt::Formatter<'_>,
+    numer_zero: bool,
+    denom_zero: bool,
+    numer_args: fmt::Arguments<'_>,
+    denom_args: fmt::Arguments<'_>,
+    prefix: &str,
+) -> fmt::Result {
+    let numer = &std::fmt::format(numer_args);
+    let numer_no_sign = numer.strip_prefix("-");
+    let numer_is_number = !numer_no_sign
+        .unwrap_or(numer)
+        .chars()
+        .any(|c| c == '+' || c == '-' || c == '/');
+    let pre_pad = if denom_zero {
+        if numer_zero {
+            "NaN"
+        } else if numer_no_sign.unwrap_or(numer) == "1" {
+            &std::format!("{}∞", &numer[..numer.len() - 1])
+        } else if numer_is_number {
+            &std::format!("{}∞", numer)
+        } else {
+            &std::format!("({})∞", numer)
+        }
+    } else {
+        // note, this is missing a lot of annotations like the precision in case of floats.
+        let denom = &std::fmt::format(denom_args);
+        let denom_no_sign = denom.strip_prefix("-");
+        let denom_is_number = !denom_no_sign
+            .unwrap_or(denom)
+            .chars()
+            .any(|c| c == '+' || c == '-' || c == '/' || c == '*');
+        // Note, the signs can not be processed as strings, as the expression might be e.g. -1+i
+        &if numer_is_number {
+            if denom_is_number {
+                std::format!("{}/{}", numer, denom)
+            } else {
+                std::format!("{}/({})", numer, denom)
+            }
+        } else {
+            if denom_is_number {
+                std::format!("({})/{}", numer, denom)
+            } else {
+                std::format!("({})/({})", numer, denom)
+            }
+        }
+    };
+    // TODO this padding can add zeros before parenthesis...
+    if let Some(pre_pad) = pre_pad.strip_prefix("-") {
+        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
+            f.pad_integral(false, prefix, pre_pad)
+        } else {
+            f.pad_integral(false, "", pre_pad)
+        }
+    } else {
+        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
+            f.pad_integral(true, prefix, pre_pad)
+        } else {
+            f.pad_integral(true, "", &pre_pad)
+        }
+    }
+}
+// TODO extract the no_std case as well and use the same function in the macro part.
+
 // String conversions
 macro_rules! impl_formatting {
     ($Display:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
@@ -890,65 +961,24 @@ macro_rules! impl_formatting {
                 if self.denom.is_one() {
                     return self.numer.fmt(f);
                 }
-                let numer = &if f.alternate() {
-                    std::format!($fmt_alt, self.numer)
+                if f.alternate() {
+                    fmt_ratio(
+                        f,
+                        self.numer.is_zero(),
+                        self.denom.is_zero(),
+                        format_args!($fmt_alt, self.numer),
+                        format_args!($fmt_alt, self.denom),
+                        $prefix,
+                    )
                 } else {
-                    std::format!($fmt_str, self.numer)
-                };
-                let numer_no_sign = numer.strip_prefix("-");
-                let numer_is_number = !numer_no_sign
-                    .unwrap_or(numer)
-                    .chars()
-                    .any(|c| c == '+' || c == '-' || c == '/');
-                let pre_pad = if self.denom.is_zero() {
-                    if self.numer.is_zero() {
-                        "NaN"
-                    } else if numer_no_sign.unwrap_or(numer) == "1" {
-                        &std::format!("{}∞", &numer[..numer.len() - 1])
-                    } else if numer_is_number {
-                        &std::format!("{}∞", numer)
-                    } else {
-                        &std::format!("({})∞", numer)
-                    }
-                } else {
-                    // note, this is missing a lot of annotations like the precision in case of floats.
-                    let denom = &if f.alternate() {
-                        std::format!($fmt_alt, self.denom)
-                    } else {
-                        std::format!($fmt_str, self.denom)
-                    };
-                    let denom_no_sign = denom.strip_prefix("-");
-                    let denom_is_number = !denom_no_sign
-                        .unwrap_or(denom)
-                        .chars()
-                        .any(|c| c == '+' || c == '-' || c == '/' || c == '*');
-                    // Note, the signs can not be processed as strings, as the expression might be e.g. -1+i
-                    &if numer_is_number {
-                        if denom_is_number {
-                            std::format!("{}/{}", numer, denom)
-                        } else {
-                            std::format!("{}/({})", numer, denom)
-                        }
-                    } else {
-                        if denom_is_number {
-                            std::format!("({})/{}", numer, denom)
-                        } else {
-                            std::format!("({})/({})", numer, denom)
-                        }
-                    }
-                };
-                if let Some(pre_pad) = pre_pad.strip_prefix("-") {
-                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
-                        f.pad_integral(false, $prefix, pre_pad)
-                    } else {
-                        f.pad_integral(false, "", pre_pad)
-                    }
-                } else {
-                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
-                        f.pad_integral(true, $prefix, pre_pad)
-                    } else {
-                        f.pad_integral(true, "", &pre_pad)
-                    }
+                    fmt_ratio(
+                        f,
+                        self.numer.is_zero(),
+                        self.denom.is_zero(),
+                        format_args!($fmt_str, self.numer),
+                        format_args!($fmt_str, self.denom),
+                        $prefix,
+                    )
                 }
             }
             #[cfg(not(feature = "std"))]
@@ -961,7 +991,11 @@ macro_rules! impl_formatting {
                     if self.numer.is_zero() {
                         write!(f, "NaN")
                     } else {
-                        write!(f, "({})∞", self.numer)
+                        if f.alternate() {
+                            write!(f, concat!("(", $fmt_alt, ")∞"), self.numer)
+                        } else {
+                            write!(f, concat!("(", $fmt_str, ")∞"), self.numer)
+                        }
                     }
                 } else if f.alternate() {
                     write!(

@@ -11,27 +11,30 @@ use crate::complex::Complex;
 use crate::rational::Ratio;
 use crate::*;
 
+/// A constant representing `sqrt(Self::sqr())`
 pub trait SqrtConst<T: Num> {
     type Real: SqrtConst<T::Real, Real = Self::Real>;
     /// constant for internal use to be able to check at compile time, if a SqrtConst is allowed.
     const _TEST_SQRT: () = ();
-    /// Get the square of this constant. This constant is not allowed to be representable with `T`,
-    /// as otherwise equallity checks will be wrong.
+    /// Get the square of this sqrt constant, i.e. the content of the sqrt, which is representable in `T`.
+    /// This constant is not allowed to be representable with `T`, as otherwise e.g. the equallity check
+    /// will be wrong. It is also not allowed to be negative, as that would break comparisons and other
+    /// implementations for types which do implement them. The constant does not need to be an integer.
+    ///
+    /// In theory it can also be a complex number, but note that for complex numbers
+    /// `sqrt(z) = sqrt(|z|) * (z/|z| + 1)/2 = z/2 / sqrt(|z|) + 1/2 * sqrt(|z|)`, which means,
+    /// that a `Ratio<SqrtExt<_, Sqrt<_, |z|>>>` with real type is sufficient.
     ///
     /// Note, there is nothing enforcing that this is a compile time constant,
     /// however if it changes at runtime, the values of all numbers using it, will change.
     fn sqr() -> T;
-    /// returns true if the value of `Self::sqr()` is considered negative and
-    /// therefore the sqrt changes sign under complex conjugation.
-    ///
-    /// Note, implementing it this way, allows for more flexible trait bounds on [Num].
-    fn is_negative() -> bool;
-    /// Get the rounded down version of this square root by computing `floor(sqrt(Self::sqr()))`
+    /// Get the rounded down version of this square root by computing `floor(sqrt(Self::sqr()))`.
+    /// For non integers, this returns the closest approximation, which is smaller than the real constant.
     fn floor() -> T;
 }
 
 /// Type for field extentions with square roots of natural numbers.
-/// For runtime constants, use the `dynamic_sqrt_u64!(SqrtN, n)` macro.
+/// For runtime constants, use the `dynamic_sqrt_const!(SqrtN, n)` macro.
 pub struct Sqrt<T: FromU64, const N: u64>(PhantomData<T>); // not constructible
 impl<T: FromU64 + Num, const N: u64> SqrtConst<T> for Sqrt<T, N>
 where
@@ -51,51 +54,16 @@ where
         T::from_u64(N)
     }
     #[inline(always)]
-    fn is_negative() -> bool {
-        false
-    }
-    #[inline(always)]
     fn floor() -> T {
         T::from_u64(N.isqrt())
-    }
-}
-// TODO maybe make just this one available? Doesn't work with unsigned numbers though!
-/// Type for field extentions with square roots of natural numbers.
-pub struct SignedSqrt<T: FromU64, const N: i64>(PhantomData<T>); // not constructible
-impl<T: FromU64 + Neg<Output = T> + Num, const N: i64> SqrtConst<T> for SignedSqrt<T, N>
-where
-    T::Real: FromU64 + Neg<Output = T::Real>,
-{
-    type Real = SignedSqrt<T::Real, N>;
-    const _TEST_SQRT: () = {
-        assert!(
-            N < 0 || N.isqrt() * N.isqrt() != N,
-            "N is not allowed to be a perfect square"
-        );
-        ()
-    };
-    #[inline(always)]
-    fn sqr() -> T {
-        let _ = Self::_TEST_SQRT;
-        let v = T::from_u64(N.abs() as u64);
-        if N < 0 { -v } else { v }
-    }
-    #[inline(always)]
-    fn is_negative() -> bool {
-        N < 0
-    }
-    #[inline(always)]
-    fn floor() -> T {
-        assert!(N > 1);
-        T::from_u64(N.isqrt() as u64)
     }
 }
 
 #[macro_export]
 #[cfg(feature = "std")]
 /// Define a new square root constant using a u64 that can depend on variables in the current scope.
-/// Note, this macro creates a global variable, so use sparingly.
-macro_rules! dynamic_sqrt_u64 {
+/// Note, this macro creates a global/static thread local variable, so use sparingly.
+macro_rules! dynamic_sqrt_const {
     ($name:ident, $value:expr) => {
         std::thread_local! {
             static _SQR_CONST: core::cell::Cell<u64> = core::cell::Cell::new(0);
@@ -122,10 +90,6 @@ macro_rules! dynamic_sqrt_u64 {
                 T::from_u64(_SQR_CONST.get())
             }
             #[inline(always)]
-            fn is_negative() -> bool {
-                false
-            }
-            #[inline(always)]
             fn floor() -> T {
                 T::from_u64(_SQRT_CONST.get())
             }
@@ -133,12 +97,14 @@ macro_rules! dynamic_sqrt_u64 {
     };
 }
 
+// TODO implement alternative macro to dynamic_sqrt_const for no_std
+
 impl<T: Num + Cancel + Neg<Output = T> + PartialOrd> Ratio<T>
 where
     for<'a> &'a T: AddMulSub<Output = T>,
 {
-    /// Exponentially converging approximation of the square root of a constant.
-    /// Computed in O(log n) time (n = iterations) and convergent with at least `error < 2^-n`.
+    /// Linearly converging approximation of the square root of a constant.
+    /// Computed in O(log n) time (n = iterations) and convergent with at least error `<= 2^-n`.
     ///
     /// To compute the optimal result with continued fractions use:
     /// ```
@@ -187,7 +153,7 @@ impl<T: Num + Cancel + Neg<Output = T> + PartialOrd + Div<Output = T>, E: SqrtCo
 where
     for<'a> &'a T: AddMulSub<Output = T>,
 {
-    /// Exponentially converging rational approximation of this number.
+    /// Linearly converging rational approximation of this number in O(log n) time.
     pub fn approx_rational(&self, iterations: u64) -> Ratio<T> {
         // just use the sqrt approximation without any additional fancy stuff.
         &(&Ratio::approx_sqrt::<E>(iterations) * &self.ext) + &self.value
@@ -243,13 +209,15 @@ impl<T: Zero + Num, E: SqrtConst<T>> SqrtExt<T, E> {
         self.ext.is_zero()
     }
 }
+
 impl<T: Num + Cancel, E: SqrtConst<T>> SqrtExt<T, E>
 where
     Self: Cancel + IntoDiscrete<Output = T>,
 {
-    /// Returns a (positive) unit != 1 derived from [One] in `T`: x+y√N (satisfies `(x^2 - y^2 N).is_unit()`, `x,y > 0`)
-    /// The number x-y√N is the inverse.
-    ///
+    /// Returns the (positive) fundamental unit != 1 derived from [One] in `T`: x+y√N (satisfies `(x^2 - y^2 N).is_unit()`, `x,y > 0`)
+    /// The number x-y√N (the generalized conjugate) is the inverse and all other units are integer powers of this one.
+    /// See https://en.wikipedia.org/wiki/Dirichlet%27s_unit_theorem for more information.
+    /// 
     /// This (non const) function is computing it, so avoid calling it multiple times and precompute it, if possible.
     pub fn unit() -> Self {
         if E::sqr().is_unit() {
@@ -257,7 +225,13 @@ where
         }
         // Based on continued fractions.
         // A cycle in the continued fraction development gives the fundamental unit != 1.
-        // https://brilliant.org/wiki/quadratic-diophantine-equations-pells-equation/
+        // https://en.wikipedia.org/wiki/Pell%27s_equation
+        // To compute this faster, find the square free factorisation first and split off the square part.
+        // (this is the computationally difficult part with O(cbrt(N)))
+        // then compute the unit of the reduced problem. The solution of the complete problem is a power of
+        // the reduced problems unit, which can be computed efficiently using modulo arithmetic.
+        // However this reduction is left to the user of the library, as it's only beneficial for some numbers
+        // and a slowdown for others (e.g. semiprimes).
 
         let x = SqrtExt::<T, E>::new(T::zero(), T::one());
         let mut cfrac_iter = DevelopContinuedFraction::new(x).continued_fraction(T::zero());
@@ -395,6 +369,15 @@ where
     }
 }
 
+impl<T: Num, E: SqrtConst<T>> SqrtExt<T, E> {
+    pub fn try_from<Q: Num + TryInto<T>, E2: SqrtConst<Q>>(value: SqrtExt<Q, E2>) -> Option<Self> {
+        if E::sqr() != E2::sqr().try_into().ok()? {
+            return None;
+        }
+        Some(Self::new(value.value.try_into().ok()?, value.ext.try_into().ok()?))
+    }
+}
+
 impl<T: Num + Zero, E: SqrtConst<T>> From<T> for SqrtExt<T, E> {
     fn from(value: T) -> Self {
         SqrtExt::new(value, T::zero())
@@ -468,11 +451,7 @@ impl<T: Num + FromU64 + Zero, E: SqrtConst<T>> FromU64 for SqrtExt<T, E> {
 
 impl<T: Num + Neg<Output = T>, E: SqrtConst<T>> Conjugate for SqrtExt<T, E> {
     fn conj(&self) -> Self {
-        let mut ext = self.ext.conj();
-        if E::is_negative() {
-            ext = -ext;
-        }
-        Self::new(self.value.conj(), ext)
+        Self::new(self.value.conj(), self.ext.conj())
     }
 }
 
@@ -666,12 +645,8 @@ where
     Self: PartialOrd,
 {
     /// Euclidean division for √2 and √3. Otherwise use an extension to √N, which ensures `|r| < |d|`,
-    /// but can't be used in a `gcd` or `lcm`. That is because Z[√5] is not a Euclidean domain.
+    /// but can't be used in a `gcd` or `lcm` as the set of |r| is not finite. That is because Z[√5] is not a Euclidean domain.
     fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
-        if E::is_negative() {
-            // can't properly implement this to work for both reals and complex numbers
-            unimplemented!();
-        }
         if b.value.is_zero() && b.ext.is_zero() {
             // invalid division -> invalid result, which still holds up the equation self = q * div + r = r;
             return (T::zero().into(), self.clone());
@@ -695,7 +670,15 @@ where
         // then round both components and recover the original form.
         // this results in an error < 1/2 in the integer part and < 1/2 * ((√N - floor(√N)) in the rest,
         // which makes the error in the result less than 1, which in turn
-        // makes the remainder smaller than the divisor.
+        // makes the remainder abs_sqr smaller than the divisor abs_sqr.
+
+        // if we consider the field-norm ||x|^2 - N|y|^2| = |x+y√N|*|x-y√N|, we can prove, that
+        // there is more than one solution, as all solutions, where r is multiplied with a unit are also valid,
+        // as they have the same norm (the norm is multiplicative). (there is infinitely many units)
+
+        // If we consider the norm |z=x+y√N|^2=|x|^2+N|y|^2, there is a finite amount or remainders.
+        // (e.x + (e.y)√N)*(b.x + (b.y)√N) = e.x*b.x + N e.y*b.y + (e.x*b.y + e.y*b.x)√N
+        // -> |e.x*b.x + N e.y*b.y|^2 + N|e.x*b.y + e.y*b.x|^2 ≤ |b.x + N b.y|^2 / 4 + N|b.y + b.x|^2 / 4
 
         numer.value = numer.value + numer.ext.clone() * E::floor();
         if !denom.is_valid_euclid() {
@@ -715,10 +698,8 @@ where
         q.value = q.value - q.ext.clone() * E::floor();
         let mut r = self - &(b * &q);
         // The following breaks sqrt(2) and sqrt(3) as Euclidean domains, but it's needed to make the results positive.
-        // add/subtract 0 < √N-floor(√N) < 1
-        //let mut step = Self::new(-E::floor(), T::one());
         // add/subtract 1, this makes the gcd stable apparently (for N != 5) (TODO proof)
-        let mut step = Self::new(T::one(), T::zero());
+        let mut step = T::one();
         if b.is_valid_euclid() {
             step = -step;
         }
@@ -737,25 +718,25 @@ where
 }
 
 macro_rules! forward_assign_impl {
-    ($($AddAssign:ident, $Add:ident, $add_assign:ident, $add:ident);+) => {
-        $(impl<T: Num + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
-            where for<'a> &'a T: $Add<Output = T> {
+    ($($AddAssign:ident, ($($Owned:ident),*), ($($Add:ident),+), $add_assign:ident, $add:ident;)+) => {
+        $(impl<T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
+            where for<'a> &'a T: Sized $(+ $Add<Output = T>)+ {
             fn $add_assign(&mut self, rhs: SqrtExt<T, E>) {
                 take(self, |x| x.$add(rhs));
             }
         }
-        impl<T: Num, E: SqrtConst<T>> $AddAssign<T> for SqrtExt<T, E>
-            where for<'a> &'a T: Add<Output = T> + $Add<Output = T> {
+        impl<T: Num + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> $AddAssign<T> for SqrtExt<T, E>
+            where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
             fn $add_assign(&mut self, rhs: T) {
                 take(self, |x| x.$add(rhs));
             }
         }
-        impl<'a, T: Num + Add<Output = T> + $Add<Output = T>, E: SqrtConst<T>> $AddAssign<&'a SqrtExt<T, E>> for SqrtExt<T, E> {
+        impl<'a, T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign<&'a SqrtExt<T, E>> for SqrtExt<T, E> {
             fn $add_assign(&mut self, rhs: &'a SqrtExt<T, E>) {
                 take(self, |x| (&x).$add(rhs));
             }
         }
-        impl<'a, T: Num + Add<Output = T> + $Add<Output = T>, E: SqrtConst<T>> $AddAssign<&'a T> for SqrtExt<T, E> {
+        impl<'a, T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign<&'a T> for SqrtExt<T, E> {
             fn $add_assign(&mut self, rhs: &'a T) {
                 take(self, |x| (&x).$add(rhs));
             }
@@ -763,8 +744,11 @@ macro_rules! forward_assign_impl {
     };
 }
 forward_assign_impl!(
-    AddAssign, Add, add_assign, add; SubAssign, Sub, sub_assign, sub; MulAssign, Mul, mul_assign,
-    mul //, DivAssign, Div, div_assign, div, RemAssign, Div, rem_assign, rem // TODO
+    AddAssign, (), (Add), add_assign, add;
+    SubAssign, (), (Sub), sub_assign, sub;
+    MulAssign, (), (Mul), mul_assign, mul;
+    DivAssign, (One), (Add, Sub, Mul, Div), div_assign, div;
+    RemAssign, (One), (Add, Sub, Mul, Div, Rem), rem_assign, rem;
 );
 
 impl<T: Num + Zero + Add<Output = T>, E: SqrtConst<T>> Sum for SqrtExt<T, E>
@@ -811,6 +795,9 @@ impl<'a, T: Num + Zero + One + Add<Output = T>, E: SqrtConst<T>> Product<&'a Sqr
     }
 }
 
+// the following is the most intuitive implementation of Num.
+// However, interpreting the extension as "imaginary unit" and implementing
+// conj etc wrt that would also work and have desirable properties wrt Euclid.
 impl<T: Num + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>, E: SqrtConst<T>> Num
     for SqrtExt<T, E>
 where
@@ -823,32 +810,15 @@ where
     type Real = SqrtExt<T::Real, E::Real>;
     #[inline(always)]
     fn abs_sqr(&self) -> Self::Real {
-        if E::is_negative() {
-            // can't properly implement this to work for both reals and complex numbers
-            unimplemented!();
-            //let x = (self.value.clone() * self.ext.conj()).imag();
-            //Self::Real::new(
-            //    self.value.abs_sqr() - self.ext.abs_sqr() * E::sqr().re(),
-            //    x.clone() + x,
-            //)
-        } else {
-            let x = (self.value.clone() * self.ext.conj()).re();
-            Self::Real::new(
-                self.value.abs_sqr() + self.ext.abs_sqr() * E::sqr().re(),
-                x.clone() + x,
-            )
-        }
+        let x = (self.value.clone() * self.ext.conj()).re();
+        Self::Real::new(
+            self.value.abs_sqr() + self.ext.abs_sqr() * E::sqr().re(),
+            x.clone() + x,
+        )
     }
     #[inline(always)]
     fn re(&self) -> Self::Real {
-        if E::is_negative() {
-            // can't properly implement this to work for both reals and complex numbers
-            unimplemented!();
-            //Self::Real::new(self.value.re(), self.ext.imag())
-            //Self::Real::new(self.value.re(), T::zero())
-        } else {
-            Self::Real::new(self.value.re(), self.ext.re())
-        }
+        Self::Real::new(self.value.re(), self.ext.re())
     }
     #[inline(always)]
     fn is_unit(&self) -> bool {
@@ -859,7 +829,7 @@ where
 }
 
 impl<
-    F: FloatType,
+    F: FloatType + NumAlgebraic,
     T: Num + Cancel + PartialOrd + Div<Output = T> + Neg<Output = T>,
     E: SqrtConst<T>,
 > ApproxFloat<F> for SqrtExt<T, E>
@@ -900,8 +870,7 @@ where
     fn to_approx(&self) -> F {
         let c: F = E::sqr().to_approx();
         // evaluate to float, but be very careful to avoid cancellation
-        if E::is_negative()
-            || self.value.is_zero()
+        if self.value.is_zero()
             || self.ext.is_zero()
             || self.value.is_valid_euclid() == self.ext.is_valid_euclid()
         {
@@ -962,88 +931,112 @@ unsafe impl<T: Num + bytemuck::Pod, E: 'static + Copy + SqrtConst<T>> bytemuck::
 {
 }
 
+#[cfg(feature = "std")]
+fn fmt_sqrtext(
+    f: &mut fmt::Formatter<'_>,
+    value_zero: bool,
+    ext_one: bool,
+    value_args: fmt::Arguments<'_>,
+    ext_args: fmt::Arguments<'_>,
+    sqr_args: fmt::Arguments<'_>,
+    prefix: &str,
+) -> fmt::Result {
+    let value = &std::fmt::format(value_args);
+    let ext = if ext_one {
+        ""
+    } else {
+        &std::fmt::format(ext_args)
+    };
+    let ext_no_sign = ext.strip_prefix("-");
+    let is_number = !ext_no_sign
+        .unwrap_or(ext)
+        .chars()
+        .any(|c| c == '+' || c == '-' || c == '/');
+
+    let sqr = &std::fmt::format(sqr_args);
+    let sqr_no_sign = sqr.strip_prefix("-");
+    let sqr_is_number = sqr_no_sign
+        .unwrap_or(sqr)
+        .chars()
+        .all(|c| c.is_alphanumeric());
+    let sqr = if sqr_is_number {
+        std::format!("√{}", sqr)
+    } else {
+        std::format!("√({})", sqr)
+    };
+
+    let pre_pad = if ext_one {
+        &if value_zero {
+            sqr
+        } else {
+            std::format!("{}+{}", value, sqr)
+        }
+    } else {
+        &if value_zero {
+            if is_number {
+                std::format!("{}{}", ext, sqr)
+            } else {
+                std::format!("({}){}", ext, sqr)
+            }
+        } else {
+            if is_number {
+                if ext_no_sign.is_some() {
+                    std::format!("{}{}{}", value, ext, sqr)
+                } else {
+                    std::format!("{}+{}{}", value, ext, sqr)
+                }
+            } else {
+                std::format!("{}+({}){}", value, ext, sqr)
+            }
+        }
+    };
+    // TODO this can add zeros before parenthesis...
+    if let Some(pre_pad) = pre_pad.strip_prefix("-") {
+        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
+            f.pad_integral(false, prefix, pre_pad)
+        } else {
+            f.pad_integral(false, "", pre_pad)
+        }
+    } else {
+        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
+            f.pad_integral(true, prefix, pre_pad)
+        } else {
+            f.pad_integral(true, "", &pre_pad)
+        }
+    }
+}
+
 // String conversions
 macro_rules! impl_formatting {
     ($Display:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
-        #[cfg(feature = "std")]
         impl<T: Num + fmt::$Display + Clone + Zero + One, E: SqrtConst<T>> fmt::$Display
             for SqrtExt<T, E>
         {
+            #[cfg(feature = "std")]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 if self.ext.is_zero() {
                     return <T as fmt::$Display>::fmt(&self.value, f);
                 }
-                let value = if f.alternate() {
-                    &std::format!($fmt_alt, self.value)
+                if f.alternate() {
+                    fmt_sqrtext(
+                        f,
+                        self.value.is_zero(),
+                        self.ext.is_one(),
+                        format_args!($fmt_alt, self.value),
+                        format_args!($fmt_alt, self.ext),
+                        format_args!($fmt_alt, E::sqr()),
+                        $prefix,
+                    )
                 } else {
-                    &std::format!($fmt_str, self.value)
-                };
-                let ext = if self.ext.is_zero() || self.ext.is_one() {
-                    ""
-                } else if f.alternate() {
-                    &std::format!($fmt_alt, self.ext)
-                } else {
-                    &std::format!($fmt_str, self.ext)
-                };
-                let ext_no_sign = ext.strip_prefix("-");
-                let is_number = !ext_no_sign
-                    .unwrap_or(ext)
-                    .chars()
-                    .any(|c| c == '+' || c == '-' || c == '/');
-
-                let sqr = if f.alternate() {
-                    &std::format!($fmt_alt, E::sqr())
-                } else {
-                    &std::format!($fmt_str, E::sqr())
-                };
-                let sqr_no_sign = sqr.strip_prefix("-");
-                let sqr_is_number = sqr_no_sign
-                    .unwrap_or(sqr)
-                    .chars()
-                    .all(|c| c.is_alphanumeric());
-                let sqr = if sqr_is_number {
-                    std::format!("√{}", sqr)
-                } else {
-                    std::format!("√({})", sqr)
-                };
-
-                let pre_pad = if self.ext.is_one() {
-                    &if self.value.is_zero() {
-                        sqr
-                    } else {
-                        std::format!(concat!($fmt_str, "+{}"), self.value, sqr)
-                    }
-                } else {
-                    &if self.value.is_zero() {
-                        if is_number {
-                            std::format!("{}{}", ext, sqr)
-                        } else {
-                            std::format!("({}){}", ext, sqr)
-                        }
-                    } else {
-                        if is_number {
-                            if ext_no_sign.is_some() {
-                                std::format!("{}{}{}", value, ext, sqr)
-                            } else {
-                                std::format!("{}+{}{}", value, ext, sqr)
-                            }
-                        } else {
-                            std::format!("{}+({}){}", value, ext, sqr)
-                        }
-                    }
-                };
-                if let Some(pre_pad) = pre_pad.strip_prefix("-") {
-                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
-                        f.pad_integral(false, $prefix, pre_pad)
-                    } else {
-                        f.pad_integral(false, "", pre_pad)
-                    }
-                } else {
-                    if let Some(pre_pad) = pre_pad.strip_prefix($prefix) {
-                        f.pad_integral(true, $prefix, pre_pad)
-                    } else {
-                        f.pad_integral(true, "", &pre_pad)
-                    }
+                    fmt_sqrtext(
+                        f,
+                        self.value.is_zero(),
+                        self.ext.is_one(),
+                        format_args!($fmt_str, self.value),
+                        format_args!($fmt_str, self.ext),
+                        format_args!($fmt_str, E::sqr()),
+                        $prefix,
+                    )
                 }
             }
             #[cfg(not(feature = "std"))]
@@ -1099,7 +1092,7 @@ impl_formatting!(LowerExp, "", "{:e}", "{:#e}");
 impl_formatting!(UpperExp, "", "{:E}", "{:#E}");
 
 impl<T: Num + fmt::Debug, E: SqrtConst<T>> fmt::Debug for SqrtExt<T, E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         #[derive(Debug)]
         #[allow(dead_code)] // wrong warning, Debug derive reads the fields.
         struct SqrtExt<'a, T> {

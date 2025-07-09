@@ -1,68 +1,34 @@
 use core::ops::*;
 
-use crate::{rational::Ratio, Cancel, IntoDiscrete, Num, NumAnalytic, One, Zero};
+use crate::*;
+#[cfg(feature = "rational")]
+use crate::rational::Ratio;
 
-// adapted from num_traits
-// returns f = mantissa * 2^exponent
-fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
-    let bits: u32 = f.to_bits();
-    let mut exponent: i16 = ((bits >> 23) & 0xff) as i16;
-    let finite = exponent != 0xff;
-    let mut mantissa = bits & 0x7fffff;
-    let zero_mantissa = mantissa == 0;
-    if exponent == 0 {
-        mantissa <<= 1;
-    } else {
-        mantissa |= 0x800000;
-    }
-    // Exponent bias + mantissa shift
-    exponent -= 127 + 23;
-    let mut mantissa = if bits >> 31 == 0 {
-        mantissa as i32
-    } else {
-        -(mantissa as i32)
-    };
-    // cancel the mantissa
-    let c = mantissa.trailing_zeros();
-    mantissa >>= c;
-    exponent += c as i16;
-    (mantissa, exponent, finite, zero_mantissa)
-}
-// adapted from num_traits
-// returns f = mantissa * 2^exponent
-fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
-    let bits: u64 = f.to_bits();
-    let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
-    let finite = exponent != 0x7ff;
-    let mut mantissa = bits & 0xfffffffffffff;
-    let zero_mantissa = mantissa == 0;
-    if exponent == 0 {
-        mantissa <<= 1;
-    } else {
-        mantissa |= 0x10000000000000;
-    }
-    // Exponent bias + mantissa shift
-    exponent -= 1023 + 52;
-    let mut mantissa = if bits >> 63 == 0 {
-        mantissa as i64
-    } else {
-        -(mantissa as i64)
-    };
-    // cancel the mantissa
-    let c = mantissa.trailing_zeros();
-    mantissa >>= c;
-    exponent += c as i16;
-    (mantissa, exponent, finite, zero_mantissa)
-}
 
 /// Type for floats used with [ApproxFloat]. Otherwise it is never explicitly required.
+#[cfg(any(feature = "std", feature = "libm"))]
 pub trait FloatType: Clone
 + Zero
 + One
++ FromU64
 + PartialOrd
 + Cancel
 + Num<Real = Self>
-+ NumAnalytic
++ IntoDiscrete<Output = Self>
++ Div<Output = Self>
++ Neg<Output = Self>
++ NumAnalytic {
+    fn is_finite(&self) -> bool;
+    fn is_infinite(&self) -> bool;
+}
+#[cfg(not(any(feature = "std", feature = "libm")))]
+pub trait FloatType: Clone
++ Zero
++ One
++ FromU64
++ PartialOrd
++ Cancel
++ Num<Real = Self>
 + IntoDiscrete<Output = Self>
 + Div<Output = Self>
 + Neg<Output = Self> {
@@ -126,92 +92,176 @@ macro_rules! impl_approx_float {
 impl_approx_float!(f32; i32, i64, i128);
 impl_approx_float!(f64; i32, i64, i128);
 
-// specific implementations of TryFrom for Ratio.
-// note, f32::MAX can be represented using u128, but not using i128.
-macro_rules! impl_try_from {
-    ($float:ident, $integer_decode:ident, $($int:ident),+) => {
-        $(impl TryFrom<$float> for Ratio<$int> {
-            type Error = ();
-            fn try_from(value: $float) -> Result<Self, Self::Error> {
-                let (mantissa, exponent, finite, zero_mantissa) = $integer_decode(value);
-                let numer = mantissa as $int; // this is why no smaller integers are implemented.
-                if !finite && zero_mantissa {
-                    Ok(Ratio { numer: numer.signum(), denom: 0 })
-                }
-                else if !finite {
-                    Ok(Ratio { numer: 0, denom: 0 })
-                }
-                else if exponent <= 0 {
-                    match (1 as $int).checked_shl((-exponent) as u32) {
-                        Some(denom) => Ok(Ratio { numer, denom }),
-                        None => Err(()),
-                    }
-                } else {
-                    match numer.checked_shl(exponent as u32) {
-                        Some(x) => if x >> exponent == numer {
-                            Ok(Ratio { numer: x, denom: 1 })
-                        } else {
-                            Err(())
-                        },
-                        None => Err(()),
-                    }
-                }
-            }
-        })+
-    };
+impl ApproxFloat<f32> for f64 {
+    #[inline(always)]
+    fn to_approx(&self) -> f32 {
+        *self as f32
+    }
+    #[inline(always)]
+    fn from_approx(value: f32, _tol: f32) -> Option<Self> {
+        Some(value as f64)
+    }
 }
-impl_try_from!(f32, integer_decode_f32, i32, i64, i128);
-impl_try_from!(f64, integer_decode_f64, i64, i128);
+impl ApproxFloat<f64> for f32 {
+    #[inline(always)]
+    fn to_approx(&self) -> f64 {
+        *self as f64
+    }
+    #[inline(always)]
+    fn from_approx(value: f64, tol: f64) -> Option<Self> {
+        let v = value as f32;
+        ((v as f64 - value).abs() <= tol).then_some(v)
+    }
+}
 
-macro_rules! impl_bigint {
-    ($float:ident, $integer_decode:ident, $from:ident) => {
-        impl From<$float> for Ratio<num_bigint::BigInt> {
-            fn from(value: $float) -> Self {
-                let (mantissa, exponent, finite, zero_mantissa) = $integer_decode(value);
-                let numer = num_bigint::BigInt::from(mantissa);
-                let zero = num_bigint::BigInt::from(0i64);
-                let one = num_bigint::BigInt::from(1i64);
-                if !finite && zero_mantissa {
-                    Ratio {
-                        numer: one * mantissa.signum(),
-                        denom: zero,
+// adapted from num_traits
+// returns f = mantissa * 2^exponent
+#[cfg(any(feature = "rational", feature = "num-bigint"))]
+fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
+    let bits: u32 = f.to_bits();
+    let mut exponent: i16 = ((bits >> 23) & 0xff) as i16;
+    let finite = exponent != 0xff;
+    let mut mantissa = bits & 0x7fffff;
+    let zero_mantissa = mantissa == 0;
+    if exponent == 0 {
+        mantissa <<= 1;
+    } else {
+        mantissa |= 0x800000;
+    }
+    // Exponent bias + mantissa shift
+    exponent -= 127 + 23;
+    let mut mantissa = if bits >> 31 == 0 {
+        mantissa as i32
+    } else {
+        -(mantissa as i32)
+    };
+    // cancel the mantissa
+    let c = mantissa.trailing_zeros();
+    mantissa >>= c;
+    exponent += c as i16;
+    (mantissa, exponent, finite, zero_mantissa)
+}
+// adapted from num_traits
+// returns f = mantissa * 2^exponent
+#[cfg(any(feature = "rational", feature = "num-bigint"))]
+fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
+    let bits: u64 = f.to_bits();
+    let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
+    let finite = exponent != 0x7ff;
+    let mut mantissa = bits & 0xfffffffffffff;
+    let zero_mantissa = mantissa == 0;
+    if exponent == 0 {
+        mantissa <<= 1;
+    } else {
+        mantissa |= 0x10000000000000;
+    }
+    // Exponent bias + mantissa shift
+    exponent -= 1023 + 52;
+    let mut mantissa = if bits >> 63 == 0 {
+        mantissa as i64
+    } else {
+        -(mantissa as i64)
+    };
+    // cancel the mantissa
+    let c = mantissa.trailing_zeros();
+    mantissa >>= c;
+    exponent += c as i16;
+    (mantissa, exponent, finite, zero_mantissa)
+}
+
+#[cfg(feature = "rational")]
+mod rational {
+    use super::*;
+    // specific implementations of TryFrom for Ratio.
+    // note, f32::MAX can be represented using u128, but not using i128.
+    macro_rules! impl_try_from {
+        ($float:ident, $integer_decode:ident, $($int:ident),+) => {
+            $(impl TryFrom<$float> for Ratio<$int> {
+                type Error = ();
+                fn try_from(value: $float) -> Result<Self, Self::Error> {
+                    let (mantissa, exponent, finite, zero_mantissa) = $integer_decode(value);
+                    let numer = mantissa as $int; // this is why no smaller integers are implemented.
+                    if !finite && zero_mantissa {
+                        Ok(Ratio { numer: numer.signum(), denom: 0 })
                     }
-                } else if !finite {
-                    Ratio {
-                        numer: zero.clone(),
-                        denom: zero,
+                    else if !finite {
+                        Ok(Ratio { numer: 0, denom: 0 })
                     }
-                } else if exponent <= 0 {
-                    Ratio {
-                        numer,
-                        denom: one << (-exponent) as u32,
+                    else if exponent <= 0 {
+                        match (1 as $int).checked_shl((-exponent) as u32) {
+                            Some(denom) => Ok(Ratio { numer, denom }),
+                            None => Err(()),
+                        }
+                    } else {
+                        match numer.checked_shl(exponent as u32) {
+                            Some(x) => if x >> exponent == numer {
+                                Ok(Ratio { numer: x, denom: 1 })
+                            } else {
+                                Err(())
+                            },
+                            None => Err(()),
+                        }
                     }
-                } else {
-                    Ratio {
-                        numer: numer << exponent as u32,
-                        denom: one,
+                }
+            })+
+        };
+    }
+    impl_try_from!(f32, integer_decode_f32, i32, i64, i128);
+    impl_try_from!(f64, integer_decode_f64, i64, i128);
+}
+
+#[cfg(feature = "num-bigint")]
+mod bigint {
+    use super::*;
+    macro_rules! impl_bigint {
+        ($float:ident, $integer_decode:ident, $from:ident) => {
+            #[cfg(feature = "rational")]
+            impl From<$float> for Ratio<num_bigint::BigInt> {
+                fn from(value: $float) -> Self {
+                    let (mantissa, exponent, finite, zero_mantissa) = $integer_decode(value);
+                    let numer = num_bigint::BigInt::from(mantissa);
+                    let zero = num_bigint::BigInt::from(0i64);
+                    let one = num_bigint::BigInt::from(1i64);
+                    if !finite && zero_mantissa {
+                        Ratio {
+                            numer: one * mantissa.signum(),
+                            denom: zero,
+                        }
+                    } else if !finite {
+                        Ratio {
+                            numer: zero.clone(),
+                            denom: zero,
+                        }
+                    } else if exponent <= 0 {
+                        Ratio {
+                            numer,
+                            denom: one << (-exponent) as u32,
+                        }
+                    } else {
+                        Ratio {
+                            numer: numer << exponent as u32,
+                            denom: one,
+                        }
                     }
                 }
             }
-        }
 
-        impl ApproxFloat<$float> for num_bigint::BigInt {
-            #[inline(always)]
-            fn to_approx(&self) -> $float {
-                use num_traits::ToPrimitive;
-                self.to_f64().unwrap() as $float
+            impl ApproxFloat<$float> for num_bigint::BigInt {
+                #[inline(always)]
+                fn to_approx(&self) -> $float {
+                    use num_traits::ToPrimitive;
+                    self.to_f64().unwrap() as $float
+                }
+                #[inline(always)]
+                fn from_approx(value: $float, tol: $float) -> Option<Self> {
+                    use num_traits::FromPrimitive;
+                    let vf = value.round();
+                    let v = num_bigint::BigInt::$from(vf)?;
+                    ((vf - value).abs() <= tol).then_some(v)
+                }
             }
-            #[inline(always)]
-            fn from_approx(value: $float, tol: $float) -> Option<Self> {
-                use num_traits::FromPrimitive;
-                let vf = value.round();
-                let v = num_bigint::BigInt::$from(vf)?;
-                ((vf - value).abs() <= tol).then_some(v)
-            }
-        }
-    };
+        };
+    }
+    impl_bigint!(f32, integer_decode_f32, from_f32);
+    impl_bigint!(f64, integer_decode_f64, from_f64);
 }
-#[cfg(feature = "num-bigint")]
-impl_bigint!(f32, integer_decode_f32, from_f32);
-#[cfg(feature = "num-bigint")]
-impl_bigint!(f64, integer_decode_f64, from_f64);

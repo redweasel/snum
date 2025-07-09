@@ -449,15 +449,16 @@ impl<T: NumAnalytic<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Com
     pub fn arg(&self) -> T {
         self.im.atan2(&self.re)
     }
-    /// Convert to polar form (r, theta), such that
-    /// `self = r * exp(i * theta)`
+    /// Convert to polar form (r, theta), such that `self = r * exp(i * theta)`.
+    /// 
+    /// Returns (`r`, `theta`)
     #[inline]
     pub fn to_polar(&self) -> (T, T) {
         // implement abs_sqr without the reference based addition and multiplication to keep trait bound simpler.
         let abs_sqr = self.re.clone() * self.re.clone() + self.im.clone() * self.im.clone();
         (abs_sqr.sqrt(), self.arg())
     }
-    /// Convert a polar representation into a complex number.
+    /// Convert a polar representation  `r * exp(i * theta)` into a complex number.
     #[inline]
     pub fn from_polar(r: T, theta: T) -> Self {
         Self::new(r.clone() * theta.cos(), r * theta.sin())
@@ -493,7 +494,6 @@ where
     }
 }
 
-#[cfg(any(feature = "std", feature = "libm"))]
 impl<T: AlgebraicField<Real = T> + NumAnalytic + PartialOrd> NumAlgebraic for Complex<T>
 where
     Complex<T>: Num<Real = T>,
@@ -569,19 +569,17 @@ where
             // cbrt can NOT be done faster than with polar decomposition.
             // see: impossibility of the trisection of an angle.
             // exact formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
-            // Use NumAnalytic here!
             // alternatively, there would be an extremely fast converging algorithm using sqrt and cbrt.
             let one = T::one();
             let three = &one + &one + one;
-            let (r, theta) = self.to_polar();
+            let (r, theta) = self.to_polar(); // used NumAnalytic here!
             Self::from_polar(r.cbrt(), theta / three)
         }
     }
     #[inline(always)]
     fn abs(&self) -> Self::Real {
-        // ComplexFloat uses hypot.
+        // `ComplexFloat` in `num_complex` uses hypot.
         // Due to the trait bounds, I have to do it by sqrt(), which has slightly worse behavior.
-        // I have e.g. noticed slightly higher errors in eigenvalues.
         // This is 2x as fast as hypot. In most cases abs_sqr() should be sufficient though.
         self.abs_sqr().sqrt()
     }
@@ -716,7 +714,8 @@ where
     fn exp_m1(&self) -> Self {
         let r = self.re.exp_m1();
         let two = T::one() + T::one();
-        let s = (&self.im / &two).sin() * two;
+        let s = (&self.im / &two).sin();
+        let s = &s * &s * two;
         // (r + 1) * cos - 1 = r * cos + (cos - 1) // lossy at im~0
         // cos - 1 = -2sin(im/2)^2 // precise at im~0
         Self {
@@ -908,94 +907,61 @@ macro_rules! complex {
     };
 }
 
-macro_rules! write_complex {
-    ($f:ident, $t:expr, $prefix:expr, $re:expr, $im:expr, $T:ident) => {{
-        let abs_re = if $re < Zero::zero() {
-            $T::zero() - $re.clone()
-        } else {
-            $re.clone()
-        };
-        let abs_im = if $im < Zero::zero() {
-            $T::zero() - $im.clone()
-        } else {
-            $im.clone()
-        };
+fn fmt_re_im(
+    f: &mut fmt::Formatter<'_>,
+    re_neg: bool,
+    im_neg: bool,
+    real: fmt::Arguments<'_>,
+    imag: fmt::Arguments<'_>,
+    prefix: &str,
+) -> fmt::Result {
+    let sign = if re_neg {
+        "-"
+    } else if f.sign_plus() {
+        "+"
+    } else {
+        ""
+    };
 
-        return if let Some(prec) = $f.precision() {
-            fmt_re_im(
-                $f,
-                $re < $T::zero(),
-                $im < $T::zero(),
-                format_args!(concat!("{:.1$", $t, "}"), abs_re, prec),
-                format_args!(concat!("{:.1$", $t, "}"), abs_im, prec),
-            )
-        } else {
-            fmt_re_im(
-                $f,
-                $re < $T::zero(),
-                $im < $T::zero(),
-                format_args!(concat!("{:", $t, "}"), abs_re),
-                format_args!(concat!("{:", $t, "}"), abs_im),
-            )
-        };
+    if im_neg {
+        fmt_complex(
+            f,
+            format_args!(
+                "{}{pre}{re}-{pre}{im}i",
+                sign,
+                re = real,
+                im = imag,
+                pre = prefix
+            ),
+        )
+    } else {
+        fmt_complex(
+            f,
+            format_args!(
+                "{}{pre}{re}+{pre}{im}i",
+                sign,
+                re = real,
+                im = imag,
+                pre = prefix
+            ),
+        )
+    }
+}
 
-        fn fmt_re_im(
-            f: &mut fmt::Formatter<'_>,
-            re_neg: bool,
-            im_neg: bool,
-            real: fmt::Arguments<'_>,
-            imag: fmt::Arguments<'_>,
-        ) -> fmt::Result {
-            let prefix = if f.alternate() { $prefix } else { "" };
-            let sign = if re_neg {
-                "-"
-            } else if f.sign_plus() {
-                "+"
-            } else {
-                ""
-            };
+#[cfg(feature = "std")]
+// Currently, we can only apply width using an intermediate `String` (and thus `std`)
+fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
+    use std::string::ToString;
+    if let Some(width) = f.width() {
+        write!(f, "{0: >1$}", complex.to_string(), width)
+    } else {
+        write!(f, "{}", complex)
+    }
+}
 
-            if im_neg {
-                fmt_complex(
-                    f,
-                    format_args!(
-                        "{}{pre}{re}-{pre}{im}i",
-                        sign,
-                        re = real,
-                        im = imag,
-                        pre = prefix
-                    ),
-                )
-            } else {
-                fmt_complex(
-                    f,
-                    format_args!(
-                        "{}{pre}{re}+{pre}{im}i",
-                        sign,
-                        re = real,
-                        im = imag,
-                        pre = prefix
-                    ),
-                )
-            }
-        }
-
-        #[cfg(feature = "std")]
-        // Currently, we can only apply width using an intermediate `String` (and thus `std`)
-        fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
-            use std::string::ToString;
-            if let Some(width) = f.width() {
-                write!(f, "{0: >1$}", complex.to_string(), width)
-            } else {
-                write!(f, "{}", complex)
-            }
-        }
-
-        #[cfg(not(feature = "std"))]
-        fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
-            write!(f, "{}", complex)
-        }
-    }};
+#[cfg(not(feature = "std"))]
+fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
+    write!(f, "{}", complex)
 }
 
 // string conversions
@@ -1006,7 +972,37 @@ macro_rules! impl_display {
             T: fmt::$Display + Clone + Zero + PartialOrd + Sub<T, Output = T>,
         {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write_complex!(f, $s, $pre, self.re, self.im, T)
+                let abs_re = if self.re < Zero::zero() {
+                    T::zero() - self.re.clone()
+                } else {
+                    self.re.clone()
+                };
+                let abs_im = if self.im < Zero::zero() {
+                    T::zero() - self.im.clone()
+                } else {
+                    self.im.clone()
+                };
+        
+                let prefix = if f.alternate() { $pre } else { "" };
+                return if let Some(prec) = f.precision() {
+                    fmt_re_im(
+                        f,
+                        self.re < T::zero(),
+                        self.im < T::zero(),
+                        format_args!(concat!("{:.1$", $s, "}"), abs_re, prec),
+                        format_args!(concat!("{:.1$", $s, "}"), abs_im, prec),
+                        prefix,
+                    )
+                } else {
+                    fmt_re_im(
+                        f,
+                        self.re < T::zero(),
+                        self.im < T::zero(),
+                        format_args!(concat!("{:", $s, "}"), abs_re),
+                        format_args!(concat!("{:", $s, "}"), abs_im),
+                        prefix,
+                    )
+                };
             }
         }
     };

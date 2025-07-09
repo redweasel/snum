@@ -1,4 +1,4 @@
-use core::{fmt::Debug, ops::*};
+use core::{fmt::Debug, num::Wrapping, ops::*};
 
 // TODO consider `CommutativeAdd` and `CommutativeMul` traits,
 // which are just markers to make clear, that commutativity is given,
@@ -58,7 +58,7 @@ macro_rules! zero_one_impl {
     ($($t:ty),+; $z:expr, $o:expr) => {
         $(impl Zero for $t {
             #[inline(always)]
-            fn zero() -> $t {
+            fn zero() -> Self {
                 $z
             }
             #[inline(always)]
@@ -68,7 +68,7 @@ macro_rules! zero_one_impl {
         }
         impl One for $t {
             #[inline(always)]
-            fn one() -> $t {
+            fn one() -> Self {
                 $o
             }
             #[inline(always)]
@@ -83,9 +83,32 @@ zero_one_impl!(usize, u8, u16, u32, u64, u128; 0, 1);
 zero_one_impl!(isize, i8, i16, i32, i64, i128; 0, 1);
 zero_one_impl!(f32, f64; 0.0, 1.0);
 #[cfg(feature = "num-bigint")]
-zero_one_impl!(num_bigint::BigInt; num_bigint::BigInt::ZERO, num_bigint::BigInt::from(1i8));
+zero_one_impl!(num_bigint::BigInt; num_bigint::BigInt::from(0i8), num_bigint::BigInt::from(1i8));
 #[cfg(feature = "num-bigint")]
-zero_one_impl!(num_bigint::BigUint; num_bigint::BigUint::ZERO, num_bigint::BigUint::from(1u8));
+zero_one_impl!(num_bigint::BigUint; num_bigint::BigUint::from(0u8), num_bigint::BigUint::from(1u8));
+
+impl<T: Zero> Zero for Wrapping<T>
+where
+    Self: Add<Output = Self>,
+{
+    fn zero() -> Self {
+        Wrapping(T::zero())
+    }
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+impl<T: One> One for Wrapping<T>
+where
+    Self: Mul<Output = Self>,
+{
+    fn one() -> Self {
+        Wrapping(T::one())
+    }
+    fn is_one(&self) -> bool {
+        self.0.is_one()
+    }
+}
 
 pub trait AddMul:
     Sized + Add<Output = <Self as AddMul>::Output> + Mul<Output = <Self as AddMul>::Output>
@@ -194,6 +217,13 @@ impl_conjugate_real!(
 #[cfg(feature = "num-bigint")]
 impl_conjugate_real!(num_bigint::BigInt, num_bigint::BigUint);
 
+impl<T: Clone> Conjugate for Wrapping<T> {
+    #[inline(always)]
+    fn conj(&self) -> Self {
+        self.clone() // assume wrapping types are real integers.
+    }
+}
+
 /// Represents a number, which can be real or complex, floating point or integer, signed or unsigned.
 /// To differentiate between float and int, use `Num::Real: Ord`, as that is not implemented for floats.
 /// To differentiate between signed and unsigned use `Num::Real: Neg<Output = Num::Real>`.
@@ -274,48 +304,32 @@ pub trait NumAnalytic: NumAlgebraic {
     fn pow(&self, exp: &Self) -> Self;
 }
 
-/// Squared norm of a vector or matrix based on [Num::abs_sqr]
-pub trait NormSqr {
-    type Output;
-    #[must_use]
-    fn norm_sqr(&self) -> Self::Output;
-}
-/// Norm based on [NormSqr]
-pub trait Norm: NormSqr {
-    #[must_use]
-    fn norm(&self) -> Self::Output;
-}
-impl<S: ?Sized + NormSqr> Norm for S
-where
-    S::Output: NumAlgebraic,
-{
-    #[inline(always)]
-    fn norm(&self) -> Self::Output {
-        self.norm_sqr().sqrt()
-    }
-}
-
 /// like [Rem<T, Output = T>] but with euclidean division.
 pub trait Euclid: Sized {
-    /// Compute the euclidean division `q` and remainder `r` of `self`, such that `self = q * div + r`.
+    /// Compute the euclidean division `q` and remainder `r` of `self / d`, such that `self = q * d + r`.
     ///
-    /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `div` with `|r| < |div|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
-    /// - If the divisor is a unit, the remainder is required to be 0.
-    /// - If the number is signed, the positive sign solution is returned. In all cases `is_valid_euclid` needs to be true on the result remainder,
-    /// - The result must make the Euclidean algorithm to compute the gcd convergent.
-    /// - TODO figure this ou exactly. Euclidean means repeated sub/add with `q` being an integer.
-    /// - Division by zero may panic, or return the invalid value `(q=0, r=self)`.
+    /// There is two valid ways to interpret Euclidean division:
+    /// 1. Just `0 ≤ |r| < |d|` with some norm `|.|`, usually choosing the minimal |r| solution. Makes sense in rings.
+    /// 2. `q` is an integer, such that `0 ≤ |r| < |d|`. Makes sense in fields, where otherwise `r` can always be zero.
     ///
-    /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as `|r|` might be larger than `|div|`.
+    /// The hard rules (Axioms) are:
+    /// - There must exist a norm (in the strict mathematical sense!), such that `|r| < |d|`
+    ///   and such that the elements in |r| are finite and computable without panics. This makes the gcd converge.
+    /// - Division by zero returns the (potentially) invalid value `(q=0, r=self)`.
+    /// - `is_valid_euclid` must be true for all resulting remainders.
+    ///
+    /// Most implementations should follow the additional rules:
+    /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `d` with `|r| < |d|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
+    /// - If the number implements [PartialOrd], the positive sign solution is returned.
+    ///
+    /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as the chosen norm `|r|` might be larger than `|div|`.
     /// For fields on the other hand, the implementation `(q=self/div, r=0)` IS valid, however fields may also implement a
-    /// different notion of division here based on modulo, as that also fulfills the condition, but not with minimal `r`.
-    /// Note, that even if only `r=0` is returned, `is_valid_euclid` still has to consider all positive numbers to be valid,
-    /// due to it's condition that x or -x need to be valid.
+    /// different notion of division here based on modulo, as that also fulfills the condition, just not with minimal `r`.
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self);
     /// Return, whether the number could be the result of an Euclidean remainder.
-    /// Note, that zero is always "valid euclid".
     ///
-    /// For all x: x or -x need to be "valid euclid".
+    /// Axiom:
+    /// - For all x: x or -x need to be "valid euclid". Therefore zero is always "valid euclid"
     fn is_valid_euclid(&self) -> bool;
 }
 
@@ -328,7 +342,6 @@ macro_rules! impl_rem_euclid {
             }
             #[inline(always)]
             fn is_valid_euclid(&self) -> bool {
-                // the compiler optimizes this away for integers, but this works for non finite floats.
                 self >= &0
             }
         })+
@@ -350,15 +363,22 @@ macro_rules! impl_rem_euclid_float {
             }
             #[inline(always)]
             fn is_valid_euclid(&self) -> bool {
-                // the compiler optimizes this away for integers, but this works for non finite floats.
                 self >= &0.0 && self.is_finite()
             }
         })+
     };
 }
-impl_rem_euclid_float!(
-    f32, f64
-);
+impl_rem_euclid_float!(f32, f64);
+
+impl<T: Clone + Zero + Euclid> Euclid for Wrapping<T> {
+    /// Don't cancel Wrapping types, there is no useful norm on these and canceling doesn't extend the range.
+    fn div_rem_euclid(&self, _div: &Self) -> (Self, Self) {
+        (Wrapping(T::zero()), self.clone())
+    }
+    fn is_valid_euclid(&self) -> bool {
+        self.0.is_valid_euclid()
+    }
+}
 
 #[cfg(feature = "num-bigint")]
 mod bigint {
@@ -429,7 +449,10 @@ pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + Euclid
 /// Returns `((x, y), d)`.
 /// Note that `d` differs from the gcd if both arguments are zero.
 #[must_use]
-pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid>(mut a: T, mut b: T) -> ((T, T), T) {
+pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid>(
+    mut a: T,
+    mut b: T,
+) -> ((T, T), T) {
     if a.is_zero() {
         return if b.is_zero() {
             ((T::zero(), T::zero()), T::zero())
@@ -456,7 +479,6 @@ pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid
     } else {
         ((T::zero() - x0, T::zero() - y0), T::zero() - b)
     }
-    
 }
 
 pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + Euclid {
@@ -496,24 +518,30 @@ pub trait IntoDiscrete: PartialEq + From<Self::Output> {
 
 impl IntoDiscrete for f32 {
     type Output = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
+    #[inline(always)]
     fn floor(&self) -> Self::Output {
         f32::floor(*self)
     }
+    #[inline(always)]
     fn ceil(&self) -> Self::Output {
         f32::ceil(*self)
     }
+    #[inline(always)]
     fn round(&self) -> Self::Output {
         f32::round(*self)
     }
 }
 impl IntoDiscrete for f64 {
     type Output = f64;
+    #[inline(always)]
     fn floor(&self) -> Self::Output {
         f64::floor(*self)
     }
+    #[inline(always)]
     fn ceil(&self) -> Self::Output {
         f64::ceil(*self)
     }
+    #[inline(always)]
     fn round(&self) -> Self::Output {
         f64::round(*self)
     }
@@ -522,14 +550,17 @@ macro_rules! impl_into_discrete_int {
     ($($t:ty),+) => {
         $(impl IntoDiscrete for $t {
             type Output = $t;
+            #[inline(always)]
             fn floor(&self) -> Self::Output {
-                *self
+                self.clone()
             }
+            #[inline(always)]
             fn ceil(&self) -> Self::Output {
-                *self
+                self.clone()
             }
+            #[inline(always)]
             fn round(&self) -> Self::Output {
-                *self
+                self.clone()
             }
         })+
     };
@@ -537,6 +568,27 @@ macro_rules! impl_into_discrete_int {
 impl_into_discrete_int!(
     u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
 );
+#[cfg(feature = "num-bigint")]
+impl_into_discrete_int!(num_bigint::BigInt, num_bigint::BigUint);
+
+impl<T: Clone + PartialEq> IntoDiscrete for Wrapping<T>
+where
+    Self: Zero + One,
+{
+    type Output = Self;
+    #[inline(always)]
+    fn floor(&self) -> Self::Output {
+        self.clone()
+    }
+    #[inline(always)]
+    fn ceil(&self) -> Self::Output {
+        self.clone()
+    }
+    #[inline(always)]
+    fn round(&self) -> Self::Output {
+        self.clone()
+    }
+}
 
 macro_rules! signed_num_type {
     ($($type:ty),+) => {
@@ -576,23 +628,42 @@ macro_rules! unsigned_num_type {
         })+
     };
 }
+#[cfg(any(feature = "std", feature = "libm"))]
+#[rustfmt::skip]
 macro_rules! forward_math_impl {
     ($type:ty, $f: ident) => {
+        forward_math_impl!($type, $f, $f);
+    };
+    ($type:ty, $f: ident, $f_libm: ident) => {
         #[inline(always)]
         fn $f(&self) -> Self {
             #[cfg(feature = "std")]
-            {
-                <$type>::$f(*self)
-            }
+            { <$type>::$f(*self) }
             #[cfg(not(feature = "std"))]
-            {
-                libm::$f(*self)
-            }
+            { libm::$f_libm(*self as f64) as $type }
         }
     };
 }
+#[cfg(all(feature = "libm", not(feature = "std")))]
+macro_rules! libm_pow {
+    (f32:  $a:ident, $b:ident) => {
+        libm::powf(*$a, *$b)
+    };
+    (f64:  $a:ident, $b:ident) => {
+        libm::pow(*$a, *$b)
+    };
+}
+#[cfg(all(feature = "libm", not(feature = "std")))]
+macro_rules! libm_copysign {
+    (f32:  $a:ident, $b:ident) => {
+        libm::copysignf(*$a, *$b)
+    };
+    (f64:  $a:ident, $b:ident) => {
+        libm::copysign(*$a, *$b)
+    };
+}
 macro_rules! num_float_type {
-    ($($type:ty),+) => {
+    ($($type:ident),+) => {
         $(impl Num for $type {
             type Real = Self;
             #[inline(always)]
@@ -627,9 +698,10 @@ macro_rules! num_float_type {
                 #[cfg(feature = "std")]
                 { <$type>::copysign(*self, *sign) }
                 #[cfg(not(feature = "std"))]
-                { libm::copysign(*self, *sign) }
+                { libm_copysign!($type: self, sign) }
             }
         }
+        #[cfg(any(feature = "std", feature = "libm"))]
         impl NumAnalytic for $type {
             forward_math_impl!($type, sin);
             forward_math_impl!($type, cos);
@@ -638,9 +710,9 @@ macro_rules! num_float_type {
             forward_math_impl!($type, acos);
             forward_math_impl!($type, atan);
             forward_math_impl!($type, exp);
-            forward_math_impl!($type, exp_m1);
-            forward_math_impl!($type, ln);
-            forward_math_impl!($type, ln_1p);
+            forward_math_impl!($type, exp_m1, expm1);
+            forward_math_impl!($type, ln, log);
+            forward_math_impl!($type, ln_1p, log1p);
             forward_math_impl!($type, sinh);
             forward_math_impl!($type, cosh);
             forward_math_impl!($type, tanh);
@@ -652,14 +724,14 @@ macro_rules! num_float_type {
                 #[cfg(feature = "std")]
                 { <$type>::powf(*self, *exp) }
                 #[cfg(not(feature = "std"))]
-                { libm::powf(*self, *exp) }
+                { libm_pow!($type: self, exp) }
             }
             #[inline(always)]
             fn atan2(&self, x: &Self) -> Self {
                 #[cfg(feature = "std")]
                 { <$type>::atan2(*self, *x) }
                 #[cfg(not(feature = "std"))]
-                { libm::atan2(*self, *x) }
+                { libm::atan2(*self as f64, *x as f64) as $type }
             }
         })+
     };
@@ -672,5 +744,18 @@ signed_num_type!(num_bigint::BigInt);
 #[cfg(feature = "num-bigint")]
 unsigned_num_type!(num_bigint::BigUint);
 
-// the num_bigfloat library is incompatible with the operation constraints used in this library.
-// TODO check again!
+impl<T: Num> Num for Wrapping<T>
+where
+    Self: Mul<Output = Self>,
+{
+    type Real = Self;
+    fn abs_sqr(&self) -> Self::Real {
+        self.clone() * self.clone()
+    }
+    fn re(&self) -> Self::Real {
+        self.clone()
+    }
+    fn is_unit(&self) -> bool {
+        self.0.is_unit()
+    }
+}

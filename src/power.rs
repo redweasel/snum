@@ -1,5 +1,5 @@
-use crate::{One, Zero, Num};
-use core::ops::{Add, Mul, Div};
+use crate::{Num, One, Zero};
+use core::ops::Div;
 
 pub trait PowerU {
     /// Compute the power with an unsigned integer exponent.
@@ -8,10 +8,8 @@ pub trait PowerU {
     fn powu(&self, n: u64) -> Self;
 }
 
-impl<T: Clone + One> PowerU for T
-where
-    for<'a> &'a Self: Mul<&'a Self, Output = Self>,
-{
+impl<T: Clone + One> PowerU for T {
+    #[inline]
     fn powu(&self, n: u64) -> Self {
         // overflow-free power algorithm for u64.
         // It's u64 instead of u32 because many types never overflow.
@@ -21,9 +19,9 @@ where
         let mut p = self.clone();
         let mut mask = n.midpoint(2).next_power_of_two() >> 1; // mask highest set bit
         while mask != 0 {
-            p = &p * &p;
+            p = p.clone() * p;
             if (n & mask) != 0 {
-                p = &p * self;
+                p = p * self.clone();
             }
             mask >>= 1;
         }
@@ -37,10 +35,8 @@ pub trait PowerI {
     fn powi(&self, n: i64) -> Self;
 }
 
-impl<T: Num + One + Div<Output = T>> PowerI for T
-where
-    for<'a> &'a Self: Mul<&'a Self, Output = Self>,
-{
+impl<T: Num + One + Div<Output = T>> PowerI for T {
+    #[inline]
     fn powi(&self, n: i64) -> Self {
         let x = if n < 0 {
             assert!(self.is_unit());
@@ -62,8 +58,6 @@ pub trait IntMul {
 }
 
 impl<T: Clone + Zero> IntMul for T
-where
-    for<'a> &'a Self: Add<&'a Self, Output = Self>,
 {
     fn mulu(&self, n: u64) -> Self {
         if n == 0 {
@@ -72,9 +66,9 @@ where
         let mut p = self.clone();
         let mut mask = n.midpoint(2).next_power_of_two() >> 1; // mask highest set bit
         while mask != 0 {
-            p = &p + &p;
+            p = p.clone() + p;
             if (n & mask) != 0 {
-                p = &p + self;
+                p = p + self.clone();
             }
             mask >>= 1;
         }
