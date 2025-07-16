@@ -34,7 +34,7 @@ pub trait SqrtConst<T: Num> {
 }
 
 /// Type for field extentions with square roots of natural numbers.
-/// For runtime constants, use the `dynamic_sqrt_const!(SqrtN, n)` macro.
+/// For runtime constants, use the `dynamic_sqrt_const!` macro.
 pub struct Sqrt<T: FromU64, const N: u64>(PhantomData<T>); // not constructible
 impl<T: FromU64 + Num, const N: u64> SqrtConst<T> for Sqrt<T, N>
 where
@@ -45,6 +45,10 @@ where
         assert!(
             N.isqrt() * N.isqrt() != N,
             "N is not allowed to be a perfect square"
+        );
+        assert!(
+            T::CHAR == 0 || N <= T::CHAR,
+            "N is not allowed to be larger than the ring characteristic"
         );
         ()
     };
@@ -61,16 +65,58 @@ where
 
 #[macro_export]
 #[cfg(feature = "std")]
-/// Define a new square root constant using a u64 that can depend on variables in the current scope.
+/// Define a new square root constant using a `u64` that can depend on variables in the current scope.
+/// The resulting type can only be used on the thread, on which this macro has been executed.
 /// Note, this macro creates a global/static thread local variable, so use sparingly.
+///
+/// ### Examples
+///
+/// ```rust
+/// use snum::{*, extension::*, rational::*};
+/// for n in 5..9 {
+///     dynamic_sqrt_const!(N, n);
+///     println!("{}", Ratio::approx_sqrt::<N<i64>>(n));
+/// }
+/// ```
+/// When using threads, one has to be careful. One can not move the type `N` into a different thread.
+/// ```rust
+/// use snum::{*, extension::*};
+/// for n in 5..9 {
+///     dynamic_sqrt_const!(N, n);
+///     std::thread::spawn(move || {
+///         // N isn't "sent" to the new thread, so using it, panics.
+///         let _ = N::<i64>::sqr();
+///     }).join().expect_err("thread should panic");
+/// }
+/// ```
+/// To fix this, use it in a function like this:
+/// ```rust
+/// use snum::{*, extension::*};
+/// // define a function, which works for any thread (this is always safe)
+/// fn f(n: u64) -> i64 {
+///     dynamic_sqrt_const!(N, n);
+///     N::<i64>::sqr()
+/// }
+///
+/// let threads: Vec<_> = (5..9).map(|n|
+///     std::thread::spawn(move || {
+///         assert_eq!(f(n), n as i64);
+///     })
+/// ).collect();
+/// // threads running concurrently here
+/// for t in threads {
+///     t.join().expect("no thread should panic");
+/// }
+/// ```
+/// Any misuse like this results in a panic or compile time error.
 macro_rules! dynamic_sqrt_const {
     ($name:ident, $value:expr) => {
         std::thread_local! {
-            static _SQR_CONST: core::cell::Cell<u64> = core::cell::Cell::new(0);
-            static _SQRT_CONST: core::cell::Cell<u64> = core::cell::Cell::new(0);
+            static _SQR_CONST: core::cell::Cell<u64> = panic!("uninitialized constant");
+            static _SQRT_CONST: core::cell::Cell<u64> = panic!("uninitialized constant");
         }
         {
-            let n = $value;
+            let n: u64 = $value;
             let nsqrt = n.isqrt();
             assert!(
                 nsqrt * nsqrt != n,
@@ -79,7 +125,8 @@ macro_rules! dynamic_sqrt_const {
             _SQR_CONST.set(n);
             _SQRT_CONST.set(nsqrt);
         }
-        struct $name<T: FromU64>(core::marker::PhantomData<T>);
+        #[allow(dead_code)]
+        struct $name<T: FromU64>(*mut T); // no Send or Sync
         impl<T: FromU64 + Num> SqrtConst<T> for $name<T>
         where
             T::Real: FromU64,
@@ -210,14 +257,14 @@ impl<T: Zero + Num, E: SqrtConst<T>> SqrtExt<T, E> {
     }
 }
 
-impl<T: Num + Cancel, E: SqrtConst<T>> SqrtExt<T, E>
+impl<T: SafeDiv, E: SqrtConst<T>> SqrtExt<T, E>
 where
-    Self: Cancel + IntoDiscrete<Output = T>,
+    Self: SafeDiv + IntoDiscrete<Output = T>,
 {
     /// Returns the (positive) fundamental unit != 1 derived from [One] in `T`: x+y√N (satisfies `(x^2 - y^2 N).is_unit()`, `x,y > 0`)
     /// The number x-y√N (the generalized conjugate) is the inverse and all other units are integer powers of this one.
     /// See https://en.wikipedia.org/wiki/Dirichlet%27s_unit_theorem for more information.
-    /// 
+    ///
     /// This (non const) function is computing it, so avoid calling it multiple times and precompute it, if possible.
     pub fn unit() -> Self {
         if E::sqr().is_unit() {
@@ -339,6 +386,7 @@ where
             let w = Self::new(T::zero(), self.ext.clone());
             assert!(w > v.clone().into());
             let mut a = T::zero().floor();
+            // Note, if ext is a non finite float, this will result in an endless loop!
             let mut b = (self.ext.clone() + E::floor() - T::one()).floor();
             let two = (T::one() + T::one()).floor();
             loop {
@@ -374,7 +422,10 @@ impl<T: Num, E: SqrtConst<T>> SqrtExt<T, E> {
         if E::sqr() != E2::sqr().try_into().ok()? {
             return None;
         }
-        Some(Self::new(value.value.try_into().ok()?, value.ext.try_into().ok()?))
+        Some(Self::new(
+            value.value.try_into().ok()?,
+            value.ext.try_into().ok()?,
+        ))
     }
 }
 
@@ -808,6 +859,7 @@ where
     Self: From<SqrtExt<T::Real, E::Real>>,
 {
     type Real = SqrtExt<T::Real, E::Real>;
+    const CHAR: u64 = T::CHAR;
     #[inline(always)]
     fn abs_sqr(&self) -> Self::Real {
         let x = (self.value.clone() * self.ext.conj()).re();
@@ -954,11 +1006,7 @@ fn fmt_sqrtext(
         .any(|c| c == '+' || c == '-' || c == '/');
 
     let sqr = &std::fmt::format(sqr_args);
-    let sqr_no_sign = sqr.strip_prefix("-");
-    let sqr_is_number = sqr_no_sign
-        .unwrap_or(sqr)
-        .chars()
-        .all(|c| c.is_alphanumeric());
+    let sqr_is_number = sqr.chars().all(|c| c.is_alphanumeric());
     let sqr = if sqr_is_number {
         std::format!("√{}", sqr)
     } else {
@@ -990,106 +1038,103 @@ fn fmt_sqrtext(
             }
         }
     };
-    // TODO this can add zeros before parenthesis...
-    if let Some(pre_pad) = pre_pad.strip_prefix("-") {
-        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
-            f.pad_integral(false, prefix, pre_pad)
+    // this can add zeros before parenthesis, however that is a user problem
+    crate::rational::pad_expr(f, prefix, pre_pad)
+}
+#[cfg(not(feature = "std"))]
+fn fmt_sqrtext(
+    f: &mut fmt::Formatter<'_>,
+    value_zero: bool,
+    ext_one: bool,
+    value_args: fmt::Arguments<'_>,
+    ext_args: fmt::Arguments<'_>,
+    sqr_args: fmt::Arguments<'_>,
+    _prefix: &str,
+) -> fmt::Result {
+    // can't do any of the checking, so just always print with parenthesis to be on the safe side
+    if ext_one {
+        if value_zero {
+            write!(f, "√{}", sqr_args)
         } else {
-            f.pad_integral(false, "", pre_pad)
+            write!(f, "({})+√{}", value_args, sqr_args)
         }
     } else {
-        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
-            f.pad_integral(true, prefix, pre_pad)
+        if value_zero {
+            write!(f, "({})√{}", ext_args, sqr_args)
         } else {
-            f.pad_integral(true, "", &pre_pad)
+            write!(f, "({})+({})√{}", value_args, ext_args, sqr_args)
         }
     }
 }
 
 // String conversions
 macro_rules! impl_formatting {
-    ($Display:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
+    ($Display:ident, $prefix:expr, $fmt_str:expr) => {
         impl<T: Num + fmt::$Display + Clone + Zero + One, E: SqrtConst<T>> fmt::$Display
             for SqrtExt<T, E>
         {
-            #[cfg(feature = "std")]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 if self.ext.is_zero() {
                     return <T as fmt::$Display>::fmt(&self.value, f);
                 }
-                if f.alternate() {
-                    fmt_sqrtext(
-                        f,
-                        self.value.is_zero(),
-                        self.ext.is_one(),
-                        format_args!($fmt_alt, self.value),
-                        format_args!($fmt_alt, self.ext),
-                        format_args!($fmt_alt, E::sqr()),
-                        $prefix,
-                    )
-                } else {
-                    fmt_sqrtext(
-                        f,
-                        self.value.is_zero(),
-                        self.ext.is_one(),
-                        format_args!($fmt_str, self.value),
-                        format_args!($fmt_str, self.ext),
-                        format_args!($fmt_str, E::sqr()),
-                        $prefix,
-                    )
-                }
-            }
-            #[cfg(not(feature = "std"))]
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                if self.ext.is_zero() {
-                    return <T as fmt::$Display>::fmt(&self.value, f);
-                }
-                // can't do any of the checking, so just always print with parenthesis to be on the safe side
-                if self.value.is_zero() {
+                if let Some(prec) = f.precision() {
                     if f.alternate() {
-                        write!(
+                        fmt_sqrtext(
                             f,
-                            concat!("(", $fmt_alt, ")√", $fmt_alt),
-                            self.ext,
-                            E::sqr()
+                            self.value.is_zero(),
+                            self.ext.is_one(),
+                            format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.value, prec=prec),
+                            format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.ext, prec=prec),
+                            format_args!(concat!("{:#", $fmt_str, "}"), E::sqr()),
+                            $prefix,
                         )
                     } else {
-                        write!(
+                        fmt_sqrtext(
                             f,
-                            concat!("(", $fmt_str, ")√", $fmt_str),
-                            self.ext,
-                            E::sqr()
+                            self.value.is_zero(),
+                            self.ext.is_one(),
+                            format_args!(concat!("{:.prec$", $fmt_str, "}"), self.value, prec=prec),
+                            format_args!(concat!("{:.prec$", $fmt_str, "}"), self.ext, prec=prec),
+                            format_args!(concat!("{:", $fmt_str, "}"), E::sqr()),
+                            $prefix,
                         )
                     }
-                } else if f.alternate() {
-                    write!(
-                        f,
-                        concat!("(", $fmt_alt, ")+(", $fmt_alt, ")√", $fmt_alt),
-                        self.value,
-                        self.ext,
-                        E::sqr()
-                    )
-                } else {
-                    write!(
-                        f,
-                        concat!("(", $fmt_str, ")+(", $fmt_str, ")√", $fmt_str),
-                        self.value,
-                        self.ext,
-                        E::sqr()
-                    )
+                }
+                else {
+                    if f.alternate() {
+                        fmt_sqrtext(
+                            f,
+                            self.value.is_zero(),
+                            self.ext.is_one(),
+                            format_args!(concat!("{:#", $fmt_str, "}"), self.value),
+                            format_args!(concat!("{:#", $fmt_str, "}"), self.ext),
+                            format_args!(concat!("{:#", $fmt_str, "}"), E::sqr()),
+                            $prefix,
+                        )
+                    } else {
+                        fmt_sqrtext(
+                            f,
+                            self.value.is_zero(),
+                            self.ext.is_one(),
+                            format_args!(concat!("{:", $fmt_str, "}"), self.value),
+                            format_args!(concat!("{:", $fmt_str, "}"), self.ext),
+                            format_args!(concat!("{:", $fmt_str, "}"), E::sqr()),
+                            $prefix,
+                        )
+                    }
                 }
             }
         }
     };
 }
 
-impl_formatting!(Display, "", "{}", "{:#}");
-impl_formatting!(Octal, "0o", "{:o}", "{:#o}");
-impl_formatting!(Binary, "0b", "{:b}", "{:#b}");
-impl_formatting!(LowerHex, "0x", "{:x}", "{:#x}");
-impl_formatting!(UpperHex, "0x", "{:X}", "{:#X}");
-impl_formatting!(LowerExp, "", "{:e}", "{:#e}");
-impl_formatting!(UpperExp, "", "{:E}", "{:#E}");
+impl_formatting!(Display, "", "");
+impl_formatting!(Octal, "0o", "o");
+impl_formatting!(Binary, "0b", "b");
+impl_formatting!(LowerHex, "0x", "x");
+impl_formatting!(UpperHex, "0x", "X");
+impl_formatting!(LowerExp, "", "e");
+impl_formatting!(UpperExp, "", "E");
 
 impl<T: Num + fmt::Debug, E: SqrtConst<T>> fmt::Debug for SqrtExt<T, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

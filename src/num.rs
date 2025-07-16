@@ -4,9 +4,6 @@ use core::{fmt::Debug, num::Wrapping, ops::*};
 // which are just markers to make clear, that commutativity is given,
 // so algorithms don't have to say in their description,
 // whether they work for non commutative rings as well.
-// TODO similarly add a `TrueDiv` trait, so integers can no longer be used with `Field`.
-// anything that previously worked with `Field` and now doesn't, needs to use `Ring` with `Euclid`.
-// Note, that is_unit can already provide a way to check if a division is a true division, however those checks should be in `debug_assert!()`.
 
 /// Defines an additive identity element for `Self`.
 ///
@@ -230,13 +227,18 @@ impl<T: Clone> Conjugate for Wrapping<T> {
 /// To differentiate between real and complex, use `T: Num<Real = T>` and/or `Num: PartialOrd`.
 pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
     type Real: Num<Real = Self::Real>;
+    /// characteristic of a number ring. Limited to u64. If it is bigger, or not known at compile time, it's considered 0.
+    const CHAR: u64;
     /// real part of the number
     #[must_use]
     fn re(&self) -> Self::Real;
     /// absolute value squared
     #[must_use]
     fn abs_sqr(&self) -> Self::Real;
-    /// check if the element has a multiplicative inverse `x * 1/x * x = x` (1/x might not be unique).
+    /// Check if the element has a multiplicative inverse `x * 1/x * x = x` (1/x might not be unique).
+    ///
+    /// For fields it's recommended to use this instead of zero checks,
+    /// as non finite values are also not units and often indicate failure of an algorithm.
     #[must_use]
     fn is_unit(&self) -> bool;
 }
@@ -482,23 +484,51 @@ pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid
 }
 
 pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + Euclid {
+    /// Cancel two numbers by dividing by their (signed) greatest common divisor.
+    /// This will keep the signs intact if one of the numbers is zero.
+    /// 
+    /// This is based on the assumption, that `Div` is exact if `Euclid::div_rem_euclid` has zero remainder.
     #[must_use]
     fn cancel(self, b: Self) -> (Self, Self);
 }
-impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + Euclid> Cancel for T
-where
-    for<'a> &'a T: AddMulSubDiv<Output = T>,
-{
+impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + Div<Output = T> + Euclid> Cancel for T {
     fn cancel(self, b: Self) -> (Self, Self) {
         if self == b {
             if self.is_zero() {
                 return (T::zero(), T::zero());
             } else {
+                // Note, the sign is lost here!
                 return (T::one(), T::one());
             }
         }
         let gcd = gcd(self.clone(), b.clone());
-        (&self / &gcd, &b / &gcd)
+        //(self.div_rem_euclid(&gcd).0, b.div_rem_euclid(&gcd).0) // this messes with the signs...
+        (self / gcd.clone(), b / gcd)
+    }
+}
+
+pub trait SafeDiv: Num + Cancel + Div<Output = Self> {
+    /// Compute the division, but only divide as much as possible.
+    ///
+    /// - If the type is a field, this is guaranteed to be the same as normal division.
+    /// - If the type is an Euclidean ring, the result is the same as `cancel`.
+    /// - On division by zero, return `(self, 0)`
+    ///
+    /// This is useful, as cancel might be defined for some fields, even if it doesn't work.
+    ///
+    /// Returns `(p, q)` such that `self/rhs = p/q` with "best" `q`
+    #[must_use]
+    fn safe_div(self, rhs: Self) -> (Self, Self);
+}
+impl<T: Num + Cancel + Div<Output = T>> SafeDiv for T {
+    fn safe_div(self, rhs: Self) -> (Self, Self) {
+        if rhs.is_zero() {
+            (self, rhs)
+        } else if rhs.is_unit() {
+            (self / rhs, T::one())
+        } else {
+            self.cancel(rhs)
+        }
     }
 }
 
@@ -590,10 +620,14 @@ where
     }
 }
 
-macro_rules! signed_num_type {
-    ($($type:ty),+) => {
+macro_rules! int_num_type {
+    ($($type:ty),+;$unit:expr) => {
+        int_num_type!($($type, {<$type>::MAX as u64}),+;$unit);
+    };
+    ($($type:ty, $char:block),+;$unit:expr) => {
         $(impl Num for $type {
             type Real = Self;
+            const CHAR: u64 = $char;
             #[inline(always)]
             fn abs_sqr(&self) -> Self::Real {
                 self * self
@@ -604,68 +638,41 @@ macro_rules! signed_num_type {
             }
             #[inline(always)]
             fn is_unit(&self) -> bool {
-                self.is_one() || (-self).is_one()
+                $unit(self)
             }
         })+
     };
 }
-macro_rules! unsigned_num_type {
-    ($($type:ty),+) => {
-        $(impl Num for $type {
-            type Real = Self;
-            #[inline(always)]
-            fn abs_sqr(&self) -> Self::Real {
-                self * self
-            }
-            #[inline(always)]
-            fn re(&self) -> Self::Real {
-                self.clone()
-            }
-            #[inline(always)]
-            fn is_unit(&self) -> bool {
-                self.is_one()
-            }
-        })+
+#[cfg(all(feature = "libm", not(feature = "std")))]
+macro_rules! libm_func {
+    (f32::$f64:ident/$f32:ident($a:ident$(, $b:ident)?)) => {
+        libm::$f32(*$a$(, *$b)?)
+    };
+    (f64::$f64:ident/$f32:ident($a:ident$(, $b:ident)?)) => {
+        libm::$f64(*$a$(, *$b)?)
     };
 }
 #[cfg(any(feature = "std", feature = "libm"))]
 #[rustfmt::skip]
 macro_rules! forward_math_impl {
-    ($type:ty, $f: ident) => {
-        forward_math_impl!($type, $f, $f);
+    ($type:ident, $f:ident, $f32:ident) => {
+        forward_math_impl!($type, $f, $f, $f32);
     };
-    ($type:ty, $f: ident, $f_libm: ident) => {
+    ($type:ident, $f:ident, $f64_libm:ident, $f32_libm:ident$(, $x:ident)?) => {
         #[inline(always)]
-        fn $f(&self) -> Self {
+        fn $f(&self$(, $x: &Self)?) -> Self {
             #[cfg(feature = "std")]
-            { <$type>::$f(*self) }
+            { <$type>::$f(*self$(, *$x)?) }
             #[cfg(not(feature = "std"))]
-            { libm::$f_libm(*self as f64) as $type }
+            { libm_func!($type::$f64_libm/$f32_libm(self$(, $x)?)) }
         }
-    };
-}
-#[cfg(all(feature = "libm", not(feature = "std")))]
-macro_rules! libm_pow {
-    (f32:  $a:ident, $b:ident) => {
-        libm::powf(*$a, *$b)
-    };
-    (f64:  $a:ident, $b:ident) => {
-        libm::pow(*$a, *$b)
-    };
-}
-#[cfg(all(feature = "libm", not(feature = "std")))]
-macro_rules! libm_copysign {
-    (f32:  $a:ident, $b:ident) => {
-        libm::copysignf(*$a, *$b)
-    };
-    (f64:  $a:ident, $b:ident) => {
-        libm::copysign(*$a, *$b)
     };
 }
 macro_rules! num_float_type {
     ($($type:ident),+) => {
         $(impl Num for $type {
             type Real = Self;
+            const CHAR: u64 = 0;
             #[inline(always)]
             fn abs_sqr(&self) -> Self::Real {
                 self * self
@@ -683,8 +690,8 @@ macro_rules! num_float_type {
         }
         #[cfg(any(feature = "std", feature = "libm"))]
         impl NumAlgebraic for $type {
-            forward_math_impl!($type, sqrt);
-            forward_math_impl!($type, cbrt);
+            forward_math_impl!($type, sqrt, sqrtf);
+            forward_math_impl!($type, cbrt, cbrtf);
             #[inline(always)]
             fn abs(&self) -> Self::Real {
                 <$type>::abs(*self)
@@ -693,62 +700,51 @@ macro_rules! num_float_type {
             fn sign(&self) -> Self {
                 <$type>::one().copysign(*self)
             }
-            #[inline(always)]
-            fn copysign(&self, sign: &Self) -> Self {
-                #[cfg(feature = "std")]
-                { <$type>::copysign(*self, *sign) }
-                #[cfg(not(feature = "std"))]
-                { libm_copysign!($type: self, sign) }
-            }
+            forward_math_impl!($type, copysign, copysign, copysignf, sign);
         }
         #[cfg(any(feature = "std", feature = "libm"))]
         impl NumAnalytic for $type {
-            forward_math_impl!($type, sin);
-            forward_math_impl!($type, cos);
-            forward_math_impl!($type, tan);
-            forward_math_impl!($type, asin);
-            forward_math_impl!($type, acos);
-            forward_math_impl!($type, atan);
-            forward_math_impl!($type, exp);
-            forward_math_impl!($type, exp_m1, expm1);
-            forward_math_impl!($type, ln, log);
-            forward_math_impl!($type, ln_1p, log1p);
-            forward_math_impl!($type, sinh);
-            forward_math_impl!($type, cosh);
-            forward_math_impl!($type, tanh);
-            forward_math_impl!($type, asinh);
-            forward_math_impl!($type, acosh);
-            forward_math_impl!($type, atanh);
+            forward_math_impl!($type, sin, sinf);
+            forward_math_impl!($type, cos, cosf);
+            forward_math_impl!($type, tan, tanf);
+            forward_math_impl!($type, asin, asinf);
+            forward_math_impl!($type, acos, acosf);
+            forward_math_impl!($type, atan, atanf);
+            forward_math_impl!($type, exp, expf);
+            forward_math_impl!($type, exp_m1, expm1, expm1f);
+            forward_math_impl!($type, ln, log, logf);
+            forward_math_impl!($type, ln_1p, log1p, log1pf);
+            forward_math_impl!($type, sinh, sinhf);
+            forward_math_impl!($type, cosh, coshf);
+            forward_math_impl!($type, tanh, tanhf);
+            forward_math_impl!($type, asinh, asinhf);
+            forward_math_impl!($type, acosh, acoshf);
+            forward_math_impl!($type, atanh, atanhf);
+            forward_math_impl!($type, atan2, atan2, atan2f, x);
             #[inline(always)]
             fn pow(&self, exp: &Self) -> Self {
                 #[cfg(feature = "std")]
                 { <$type>::powf(*self, *exp) }
                 #[cfg(not(feature = "std"))]
-                { libm_pow!($type: self, exp) }
-            }
-            #[inline(always)]
-            fn atan2(&self, x: &Self) -> Self {
-                #[cfg(feature = "std")]
-                { <$type>::atan2(*self, *x) }
-                #[cfg(not(feature = "std"))]
-                { libm::atan2(*self as f64, *x as f64) as $type }
+                { libm_func!($type::pow/powf(self, exp)) }
             }
         })+
     };
 }
-signed_num_type!(i8, i16, i32, i64, i128, isize);
-unsigned_num_type!(u8, u16, u32, u64, u128, usize);
-num_float_type!(f32, f64); // can't just do it for Float as that conflicts with the complex types
+int_num_type!(i8, i16, i32, i64, i128, isize; (|x| x == &1 || x == &-1));
+int_num_type!(u8, u16, u32, u64, u128, usize; (|x| x == &1));
+num_float_type!(f32, f64);
 #[cfg(feature = "num-bigint")]
-signed_num_type!(num_bigint::BigInt);
+int_num_type!(num_bigint::BigInt, {0}; |x: &num_bigint::BigInt| x.is_one() || (-x).is_one());
 #[cfg(feature = "num-bigint")]
-unsigned_num_type!(num_bigint::BigUint);
+int_num_type!(num_bigint::BigUint, {0}; One::is_one);
 
 impl<T: Num> Num for Wrapping<T>
 where
     Self: Mul<Output = Self>,
 {
     type Real = Self;
+    const CHAR: u64 = T::CHAR;
     fn abs_sqr(&self) -> Self::Real {
         self.clone() * self.clone()
     }

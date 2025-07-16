@@ -479,6 +479,7 @@ where
     for<'a> &'a T: AddMul<Output = T>,
 {
     type Real = T;
+    const CHAR: u64 = T::CHAR;
     #[inline(always)]
     fn abs_sqr(&self) -> Self::Real {
         &(&self.re * &self.re) + &(&self.im * &self.im)

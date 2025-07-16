@@ -28,6 +28,7 @@ pub struct Ratio<T> {
 }
 
 impl<T> Ratio<T> {
+    /// create a rational number without cancelling.
     pub const fn new_raw(numer: T, denom: T) -> Self {
         Ratio { numer, denom }
     }
@@ -127,6 +128,8 @@ impl<T: Zero + Euclid + PartialEq> Ratio<T> {
     }
 }
 impl<T: Cancel> Ratio<T> {
+    /// Create a rational number with cancelling.
+    /// To create a `Ratio` in a const function, use `new_raw`.
     pub fn new(numer: T, denom: T) -> Self {
         let (mut numer, mut denom) = numer.cancel(denom);
         if !numer.is_zero() && !denom.is_valid_euclid() {
@@ -142,9 +145,10 @@ impl<T: Cancel> Ratio<T> {
     }
 }
 
-impl<T: Num + Cancel + Div<Output = T>> Ratio<T> {
+impl<T: SafeDiv> Ratio<T> {
     /// reduce, not only by canceling, but also by dividing by the denominator, if it has a representable inverse.
     pub fn reduced_full(mut self) -> Self {
+        // not using safe_div directly though, as this should also cancel x/0 to ±1/0 with correct sign.
         (self.numer, self.denom) = self.numer.cancel(self.denom);
         if self.denom.is_unit() {
             self.numer = self.numer / self.denom;
@@ -750,6 +754,7 @@ where
     Ratio<T>: From<Ratio<T::Real>>,
 {
     type Real = Ratio<T::Real>;
+    const CHAR: u64 = T::CHAR;
     #[inline(always)]
     fn abs_sqr(&self) -> Self::Real {
         Ratio {
@@ -888,6 +893,68 @@ impl<T: Clone + Zero + Euclid + Hash> Hash for Ratio<T> {
 }
 
 #[cfg(feature = "std")]
+pub(crate) fn pad_expr(f: &mut fmt::Formatter<'_>, prefix: &str, buf: &str) -> fmt::Result {
+    let mut width = buf.chars().count(); // this is why pad_integral doesn't work for me
+
+    let buf2 = buf.strip_prefix("-");
+    let minus = buf2.is_some();
+    let sign = if minus {
+        "-"
+    } else if f.sign_plus() {
+        width += 1;
+        "+"
+    } else {
+        ""
+    };
+    let buf_no_sign = buf2.unwrap_or(buf);
+
+    let buf2 = buf_no_sign.strip_prefix(prefix);
+    let prefix = if buf2.is_some() { prefix } else { "" };
+    let buf_no_prefix = buf2.unwrap_or(buf_no_sign);
+
+    // The `width` field is more of a `min-width` parameter at this point.
+    let min = f.width();
+    // check if it is a number
+    let number = buf_no_prefix
+        .chars()
+        .next()
+        .unwrap_or('0')
+        .is_ascii_alphanumeric();
+    let ascii = buf_no_prefix.chars().all(|c| c.is_ascii());
+    //std::println!("{width} vs {min}, {} {}", f.sign_aware_zero_pad(), number);
+    if width >= min.unwrap_or(0) {
+        // We're over the minimum width, so then we can just write the bytes.
+        f.write_str(sign)?;
+        f.write_str(buf_no_sign)
+    } else if f.sign_aware_zero_pad() && number && ascii {
+        // The sign and prefix goes before the padding if the fill character is zero
+        f.pad_integral(!minus, prefix, buf_no_prefix)
+    } else {
+        // Otherwise, the sign and prefix goes after the padding
+        //f.pad_integral(!minus, prefix, buf_no_prefix) // considers the string as ascii when computing the length :(
+        //f.pad(buf_sign) // precision is used for string cutoff :(
+        let buf_sign = if f.sign_plus() {
+            &std::format!("{sign}{buf_no_sign}")
+        } else {
+            buf // save allocation
+        };
+        // default to right alignment, pad defaults to left alignment
+        if f.precision().map_or(false, |p| p < width) || f.align().is_none() {
+            // drop the fill character to work around precision and wrong default alignment
+            let min = min.unwrap_or(1);
+            let align = f.align().unwrap_or(fmt::Alignment::Right);
+            match align {
+                fmt::Alignment::Right => write!(f, "{:>min$}", buf_sign),
+                fmt::Alignment::Center => write!(f, "{:^min$}", buf_sign),
+                fmt::Alignment::Left => write!(f, "{:<min$}", buf_sign),
+            }
+        } else {
+            f.pad(buf_sign)
+        }
+    }
+}
+
+#[cfg(feature = "std")]
 fn fmt_ratio(
     f: &mut fmt::Formatter<'_>,
     numer_zero: bool,
@@ -935,93 +1002,106 @@ fn fmt_ratio(
             }
         }
     };
-    // TODO this padding can add zeros before parenthesis...
-    if let Some(pre_pad) = pre_pad.strip_prefix("-") {
-        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
-            f.pad_integral(false, prefix, pre_pad)
+    pad_expr(f, prefix, pre_pad)
+}
+#[cfg(not(feature = "std"))]
+fn fmt_ratio(
+    f: &mut fmt::Formatter<'_>,
+    numer_zero: bool,
+    denom_zero: bool,
+    numer_args: fmt::Arguments<'_>,
+    denom_args: fmt::Arguments<'_>,
+    _prefix: &str,
+) -> fmt::Result {
+    // can't do any of the checking, so just always print with parenthesis to be on the safe side
+    if denom_zero {
+        if numer_zero {
+            write!(f, "NaN")
         } else {
-            f.pad_integral(false, "", pre_pad)
+            write!(f, "({})∞", numer_args)
         }
     } else {
-        if let Some(pre_pad) = pre_pad.strip_prefix(prefix) {
-            f.pad_integral(true, prefix, pre_pad)
-        } else {
-            f.pad_integral(true, "", &pre_pad)
-        }
+        write!(f, "({})/({})", numer_args, denom_args)
     }
 }
-// TODO extract the no_std case as well and use the same function in the macro part.
 
 // String conversions
 macro_rules! impl_formatting {
-    ($Display:ident, $prefix:expr, $fmt_str:expr, $fmt_alt:expr) => {
+    ($Display:ident, $prefix:expr, $fmt_str:expr) => {
         impl<T: fmt::$Display + Clone + Zero + One> fmt::$Display for Ratio<T> {
-            #[cfg(feature = "std")]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 if self.denom.is_one() {
                     return self.numer.fmt(f);
                 }
-                if f.alternate() {
-                    fmt_ratio(
-                        f,
-                        self.numer.is_zero(),
-                        self.denom.is_zero(),
-                        format_args!($fmt_alt, self.numer),
-                        format_args!($fmt_alt, self.denom),
-                        $prefix,
-                    )
-                } else {
-                    fmt_ratio(
-                        f,
-                        self.numer.is_zero(),
-                        self.denom.is_zero(),
-                        format_args!($fmt_str, self.numer),
-                        format_args!($fmt_str, self.denom),
-                        $prefix,
-                    )
-                }
-            }
-            #[cfg(not(feature = "std"))]
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                if self.denom.is_one() {
-                    return self.numer.fmt(f);
-                }
-                // can't do any of the checking, so just always print with parenthesis to be on the safe side
-                if self.denom.is_zero() {
-                    if self.numer.is_zero() {
-                        write!(f, "NaN")
+                if let Some(prec) = f.precision() {
+                    if f.alternate() {
+                        fmt_ratio(
+                            f,
+                            self.numer.is_zero(),
+                            self.denom.is_zero(),
+                            format_args!(
+                                concat!("{:#.prec$", $fmt_str, "}"),
+                                self.numer,
+                                prec = prec
+                            ),
+                            format_args!(
+                                concat!("{:#.prec$", $fmt_str, "}"),
+                                self.denom,
+                                prec = prec
+                            ),
+                            $prefix,
+                        )
                     } else {
-                        if f.alternate() {
-                            write!(f, concat!("(", $fmt_alt, ")∞"), self.numer)
-                        } else {
-                            write!(f, concat!("(", $fmt_str, ")∞"), self.numer)
-                        }
+                        fmt_ratio(
+                            f,
+                            self.numer.is_zero(),
+                            self.denom.is_zero(),
+                            format_args!(
+                                concat!("{:.prec$", $fmt_str, "}"),
+                                self.numer,
+                                prec = prec
+                            ),
+                            format_args!(
+                                concat!("{:.prec$", $fmt_str, "}"),
+                                self.denom,
+                                prec = prec
+                            ),
+                            $prefix,
+                        )
                     }
-                } else if f.alternate() {
-                    write!(
-                        f,
-                        concat!("(", $fmt_alt, ")/(", $fmt_alt, ")"),
-                        self.numer, self.denom
-                    )
                 } else {
-                    write!(
-                        f,
-                        concat!("(", $fmt_str, ")/(", $fmt_str, ")"),
-                        self.numer, self.denom
-                    )
+                    if f.alternate() {
+                        fmt_ratio(
+                            f,
+                            self.numer.is_zero(),
+                            self.denom.is_zero(),
+                            format_args!(concat!("{:#", $fmt_str, "}"), self.numer),
+                            format_args!(concat!("{:#", $fmt_str, "}"), self.denom),
+                            $prefix,
+                        )
+                    } else {
+                        fmt_ratio(
+                            f,
+                            self.numer.is_zero(),
+                            self.denom.is_zero(),
+                            format_args!(concat!("{:", $fmt_str, "}"), self.numer),
+                            format_args!(concat!("{:", $fmt_str, "}"), self.denom),
+                            $prefix,
+                        )
+                    }
                 }
             }
         }
     };
 }
 
-impl_formatting!(Display, "", "{}", "{:#}");
-impl_formatting!(Octal, "0o", "{:o}", "{:#o}");
-impl_formatting!(Binary, "0b", "{:b}", "{:#b}");
-impl_formatting!(LowerHex, "0x", "{:x}", "{:#x}");
-impl_formatting!(UpperHex, "0x", "{:X}", "{:#X}");
-impl_formatting!(LowerExp, "", "{:e}", "{:#e}");
-impl_formatting!(UpperExp, "", "{:E}", "{:#E}");
+impl_formatting!(Display, "", "");
+impl_formatting!(Octal, "0o", "o");
+impl_formatting!(Binary, "0b", "b");
+impl_formatting!(LowerHex, "0x", "x");
+impl_formatting!(UpperHex, "0x", "X");
+impl_formatting!(LowerExp, "", "e");
+impl_formatting!(UpperExp, "", "E");
 
 #[cfg(feature = "serde")]
 impl<T: serde::Serialize> serde::Serialize for Ratio<T> {

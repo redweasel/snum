@@ -133,7 +133,12 @@ fn test_gcd() {
     assert!(!f32::INFINITY.is_valid_euclid());
     assert!(!f64::INFINITY.is_valid_euclid());
 
-    fn test<T: Copy + Num + core::fmt::Display + Cancel + core::ops::Div<Output = T>>(a: T, b: T, _gcd: T, _lcm: T) {
+    fn test<T: Copy + Num + core::fmt::Display + Cancel + core::ops::Div<Output = T>>(
+        a: T,
+        b: T,
+        _gcd: T,
+        _lcm: T,
+    ) {
         assert_eq!(lcm(a, b), _lcm);
         assert_eq!(gcd(a, b), _gcd);
         assert_eq!(lcm(b, a), _lcm);
@@ -173,8 +178,8 @@ fn test_gcd() {
     test(a, -b, b, a);
 
     // gcd always converges, but here the result is tiny:
-    assert!(gcd(core::f64::consts::PI, core::f64::consts::E).abs() <= f64::EPSILON*2.);
-    assert!(bezout(core::f64::consts::PI, core::f64::consts::E).1.abs() <= f64::EPSILON*2.);
+    assert!(gcd(core::f64::consts::PI, core::f64::consts::E).abs() <= f64::EPSILON * 2.);
+    assert!(bezout(core::f64::consts::PI, core::f64::consts::E).1.abs() <= f64::EPSILON * 2.);
 }
 
 #[allow(non_upper_case_globals)]
@@ -1508,7 +1513,6 @@ mod rational {
         // alternate or not (#)
         // positive and negative
         // padding
-        // does not test precision (i.e. truncation)
         assert_fmt_eq!(format_args!("{}", _2), "2");
         assert_fmt_eq!(format_args!("{:+}", _2), "+2");
         assert_fmt_eq!(format_args!("{:-}", _2), "2");
@@ -1572,25 +1576,26 @@ mod rational {
         assert_fmt_eq!(format_args!("{:X}", -half_i8), "FF/2");
         assert_fmt_eq!(format_args!("{:#X}", -half_i8), "0xFF/0x2");
 
-        assert_fmt_eq!(format_args!("{:e}", -_2), "-2e0");
-        assert_fmt_eq!(format_args!("{:#e}", -_2), "-2e0");
-        assert_fmt_eq!(format_args!("{:+e}", -_2), "-2e0");
+        assert_fmt_eq!(format_args!("{:.2e}", -_2), "-2.00e0");
+        assert_fmt_eq!(format_args!("{:#.2e}", -_2), "-2.00e0");
+        assert_fmt_eq!(format_args!("{:+.2e}", -_2), "-2.00e0");
         assert_fmt_eq!(format_args!("{:e}", _BILLION), "1e9");
         assert_fmt_eq!(format_args!("{:+e}", _BILLION), "+1e9");
-        assert_fmt_eq!(format_args!("{:e}", _BILLION.recip()), "1e0/1e9");
-        assert_fmt_eq!(format_args!("{:+e}", _BILLION.recip()), "+1e0/1e9");
+        assert_fmt_eq!(format_args!("{:.2e}", _BILLION.recip()), "1.00e0/1.00e9");
+        assert_fmt_eq!(format_args!("{:+.2e}", _BILLION.recip()), "+1.00e0/1.00e9");
 
-        assert_fmt_eq!(format_args!("{:E}", -_2), "-2E0");
+        assert_fmt_eq!(format_args!("{:.2E}", -_2), "-2.00E0");
         assert_fmt_eq!(format_args!("{:#E}", -_2), "-2E0");
         assert_fmt_eq!(format_args!("{:+E}", -_2), "-2E0");
         assert_fmt_eq!(format_args!("{:E}", _BILLION), "1E9");
         assert_fmt_eq!(format_args!("{:+E}", _BILLION), "+1E9");
         assert_fmt_eq!(format_args!("{:E}", _BILLION.recip()), "1E0/1E9");
-        assert_fmt_eq!(format_args!("{:+E}", _BILLION.recip()), "+1E0/1E9");
+        assert_fmt_eq!(format_args!("{:+.2E}", _BILLION.recip()), "+1.00E0/1.00E9");
         assert_fmt_eq!(format_args!("{}", _NAN), "NaN");
         assert_fmt_eq!(format_args!("{}", _INF), "∞");
         assert_fmt_eq!(format_args!("{}", _NEG_INF), "-∞");
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(2, 0)), "2∞");
+        assert_fmt_eq!(format_args!("{:^6}", Ratio::new_raw(2, 0)), "  2∞  "); // centering with non unicode character
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(-2, 0)), "-2∞");
     }
 
@@ -2356,8 +2361,8 @@ mod rational {
 #[cfg(feature = "rational")]
 mod extension {
     use core::cmp::Ordering;
-
-    use crate::{complex::Complex, extension::*, rational::Ratio, *};
+    use super::*;
+    use crate::{complex::Complex, extension::*, rational::Ratio};
 
     #[test]
     fn test_extension() {
@@ -2372,7 +2377,6 @@ mod extension {
         const X: SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>> =
             SqrtExt::new(Complex::new(1, -3), Complex::new(2, 1));
         assert_eq!(X.abs_sqr(), SqrtExt::new(35, -2));
-        // TODO test with negative SqrtI<_, -1>, SqrtI<_, -2>
 
         // The gcd is currently not unique.
         let a = SqrtExt::<_, Sqrt<_, 2>>::new(2, 1);
@@ -2384,6 +2388,60 @@ mod extension {
         let b = SqrtExt::<_, Sqrt<_, 7>>::new(3, 5);
         let _ = gcd(a, b);
         let _ = lcm(a, b);
+    }
+
+    #[test]
+    #[allow(dead_code)]
+    fn test_extension_string_formatting() {
+        const ZERO: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 0);
+        const ONE: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 0);
+        const SQRT5: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 1);
+        const PHI: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 1);
+        const PHI2: SqrtExt<u32, Sqrt<u32, 5>> = SqrtExt::new(1, 1);
+        const RF: SqrtExt<f32, Sqrt<f32, 5>> = SqrtExt::new(1.5, -2.7);
+        const R: SqrtExt<Ratio<i32>, Sqrt<Ratio<i32>, 5>> =
+            SqrtExt::new(Ratio::new_raw(1, 2), Ratio::new_raw(1, 3));
+        // normal numbers are handled using the default formatter, so don't test these too much
+        assert_fmt_eq!(format_args!("{:5}", ZERO), "    0");
+        assert_fmt_eq!(format_args!("{:5}", ONE), "    1");
+        assert_fmt_eq!(format_args!("{:05}", -ONE), "-0001");
+        assert_fmt_eq!(format_args!("{:#b}", ZERO), "0b0");
+        assert_fmt_eq!(format_args!("{:.1}", 1000), "1000"); // this works
+        assert_fmt_eq!(format_args!("{:.1}", SQRT5), "√5"); // so this should also work (this fails if an alignment is given...)
+        assert_fmt_eq!(format_args!("{:#x}", SQRT5), "√0x5");
+        assert_fmt_eq!(format_args!("{:#X}", SQRT5), "√0x5");
+        assert_fmt_eq!(format_args!("{:#3x}", SQRT5), "√0x5");
+        assert_fmt_eq!(format_args!("{:#o}", SQRT5), "√0o5");
+        assert_fmt_eq!(format_args!("{:b}", SQRT5), "√101");
+        
+
+        #[cfg(feature = "std")]
+        {
+            // std is required for padding
+            assert_fmt_eq!(format_args!("{:#5x}", SQRT5), " √0x5");
+            assert_fmt_eq!(format_args!("{:#05x}", SQRT5), " √0x5");
+            assert_fmt_eq!(format_args!("{:-^8b}", SQRT5), "--√101--");
+            assert_fmt_eq!(format_args!("{:-^#10b}", SQRT5), "--√0b101--");
+            assert_fmt_eq!(format_args!("{:5}", -SQRT5), " -1√5");
+            assert_fmt_eq!(format_args!("{:+5}", SQRT5), "  +√5");
+            assert_fmt_eq!(format_args!("{:+5}", -SQRT5), " -1√5");
+            assert_fmt_eq!(format_args!("{:>5}", SQRT5), "   √5");
+            assert_fmt_eq!(format_args!("{:.>5}", SQRT5), "...√5");
+            assert_fmt_eq!(format_args!("{:<05}", 1), "00001"); // this is not nonsense! (in contrast to 0<5)
+            assert_fmt_eq!(format_args!("{:>05}", SQRT5), "   √5"); // so this is also not nonsense.
+            assert_fmt_eq!(format_args!("{:0>5}", SQRT5), "000√5");
+            // std has special features to make the printing prettier
+            assert_fmt_eq!(format_args!("{}", PHI), "1+√5");
+            assert_fmt_eq!(format_args!("{}", PHI2), "1+√5");
+            assert_fmt_eq!(format_args!("{}", -PHI), "-1-1√5");
+            // ratio is also printed differently in no_std environments
+            assert_fmt_eq!(format_args!("{}", R), "1/2+(1/3)√5");
+            assert_fmt_eq!(format_args!("{:#}", R), "1/2+(1/3)√5");
+            assert_fmt_eq!(format_args!("{}", RF), "1.5-2.7√5");
+            assert_fmt_eq!(format_args!("{:#}", RF), "1.5-2.7√5");
+            assert_fmt_eq!(format_args!("{:.3}", RF), "1.500-2.700√5");
+            assert_fmt_eq!(format_args!("{:#.3}", RF), "1.500-2.700√5");
+        }
     }
 
     #[test]
@@ -2510,7 +2568,7 @@ mod extension {
     #[cfg(feature = "num-bigint")]
     fn test_archimedes_cattle_problem() {
         type I = num_bigint::BigInt;
-        // originally the problem is to find the fundamental solution in √410286423278424
+        // originally the problem was to find the fundamental solution in √410286423278424
         // however the square free factorisation yields: 410286423278424 = 4729494 * 9314^2
         let unit = SqrtExt::<I, Sqrt<I, 4729494>>::unit();
         #[cfg(feature = "std")]
@@ -2539,18 +2597,25 @@ mod extension {
     #[cfg(feature = "std")] // TODO remove this cfg when dynamic_sqrt_const is available in no_std
     fn test_rational_sqrt() {
         fn test(n: u64, iter: u64) {
-            #[cfg(feature = "std")]
-            std::println!("start √{n}");
+            //std::println!("start √{n}");
             dynamic_sqrt_const!(N, n);
             for n in 0..iter {
                 let r = Ratio::approx_sqrt::<N<i64>>(n);
                 #[cfg(feature = "std")]
-                std::println!("{}", r);
+                //std::println!("{}", r);
                 let x = SqrtExt::<_, N<_>>::new(-r.numer, r.denom);
                 assert!(x > (-1).into());
                 assert!(x < 1.into());
                 assert_eq!(x.floor(), if x >= 0.into() { 0 } else { -1 });
             }
+            // N is neither Send nor Sync! The following panics in the thread:
+            #[cfg(feature = "std")]
+            std::thread::spawn(|| {
+                std::panic::set_hook(std::boxed::Box::new(|_| {}));
+                let _ = Ratio::approx_sqrt::<N<i64>>(3);
+            })
+            .join()
+            .unwrap_err();
         }
         test(2, 20);
         test(3, 12);
@@ -2562,8 +2627,7 @@ mod extension {
         let x = SqrtExt::<_, Sqrt<i64, 2>>::new(0, 2);
         for n in 0..12 {
             let _r = x.approx_rational(n);
-            #[cfg(feature = "std")]
-            std::println!("{}", _r);
+            //std::println!("{}", _r);
         }
     }
 
@@ -2659,12 +2723,10 @@ mod extension {
     }
 
     #[test]
-    #[allow(unused_variables)]
     fn test_continued_fraction() {
         // all pushed out to almost overflow
         {
-            #[cfg(feature = "std")]
-            std::println!("starting √2");
+            //std::println!("starting √2");
             let cf = [
                 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
                 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -2673,14 +2735,12 @@ mod extension {
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
                 assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
-                let r = cf[..n].iter().continued_fraction(1).last().unwrap();
-                #[cfg(feature = "std")]
-                std::println!("{}", r);
+                let _r = cf[..n].iter().continued_fraction(1).last().unwrap();
+                //std::println!("{}", _r);
             }
         }
         {
-            #[cfg(feature = "std")]
-            std::println!("starting √3");
+            //std::println!("starting √3");
             let cf = [
                 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1,
                 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1,
@@ -2690,14 +2750,12 @@ mod extension {
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
                 assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
-                let r = cf[..n].iter().continued_fraction(1).last().unwrap();
-                #[cfg(feature = "std")]
-                std::println!("{}", r);
+                let _r = cf[..n].iter().continued_fraction(1).last().unwrap();
+                //std::println!("{}", _r);
             }
         }
         {
-            #[cfg(feature = "std")]
-            std::println!("starting √5");
+            //std::println!("starting √5");
             let cf = [
                 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
                 4, 4, 4,
@@ -2706,26 +2764,22 @@ mod extension {
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
                 assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
-                let r = cf[..n].iter().continued_fraction(1).last().unwrap();
-                #[cfg(feature = "std")]
-                std::println!("{}", r);
+                let _r = cf[..n].iter().continued_fraction(1).last().unwrap();
+                //std::println!("{}", _r);
             }
         }
         {
-            #[cfg(feature = "std")]
-            std::println!("starting √24");
+            //std::println!("starting √24");
             let x = SqrtExt::<i64, Sqrt<i64, 24>>::new(0, 1);
             let mut iter1 = DevelopContinuedFraction::new(x);
             let mut iter2 = DevelopContinuedFraction::new(x).continued_fraction(1);
             for _ in 0..38 {
-                let (r1, r2) = (iter1.next().unwrap(), iter2.next().unwrap());
-                #[cfg(feature = "std")]
-                std::println!("{} -> {}", r1, r2);
+                let (_r1, _r2) = (iter1.next().unwrap(), iter2.next().unwrap());
+                //std::println!("{} -> {}", _r1, _r2);
             }
         }
         {
-            #[cfg(feature = "std")]
-            std::println!("starting √31");
+            //std::println!("starting √31");
             let cf = [
                 5, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1,
                 3, 5, 3, 1, 1, 10, 1, 1, 3, 5, 3, 1, 1, 10, 1, 1, 3,
@@ -2734,9 +2788,8 @@ mod extension {
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
                 assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
-                let r = cf[..n].iter().continued_fraction(1).last().unwrap();
-                #[cfg(feature = "std")]
-                std::println!("{}", r);
+                let _r = cf[..n].iter().continued_fraction(1).last().unwrap();
+                //std::println!("{}", _r);
             }
         }
         //std::println!("{}", Ratio::approx_sqrt::<extension::Sqrt<i64, 31>>(n as u64));
@@ -2750,7 +2803,7 @@ mod extension {
             SqrtExt::<_, S>::unit(),
             SqrtExt::<_, S>::new(Ratio::zero(), Ratio::one())
         ); // 1/sqrt(N) = sqrt(N)/N
-        // test cf development into fractions of sqrt terms using floats
+        // test cf development into fractions of sqrt terms using floats (testing for infinite loops)
         let mut iter = DevelopContinuedFraction::new(core::f64::consts::PI);
         let x = SqrtExt::<f64, Sqrt<f64, 2>>::new(core::f64::consts::PI, 0.0);
         let mut iter2 = DevelopContinuedFraction::new(Ratio::from(x));
@@ -2762,7 +2815,7 @@ mod extension {
         let mut iter = DevelopContinuedFraction::new(Ratio::from(x));
         for _ in 0..10 {
             let _next = iter.next().unwrap();
-            //println!("{}", _next);
+            //std::println!("{}", _next);
         }
         #[cfg(any(feature = "std", feature = "libm"))]
         {

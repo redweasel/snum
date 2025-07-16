@@ -23,7 +23,8 @@ impl<T: Cancel> ContinuedFraction for T {
     }
     fn end(accum: (Self, Self, Self, Self), end: T) -> Self::Output {
         let (a, b, c, d) = accum;
-        Ratio::new(a * end.clone() + b, c * end + d)
+        // uncancelled results. Usually they are already cancelled by construction
+        Ratio::new_raw(a * end.clone() + b, c * end + d)
     }
 }
 
@@ -120,7 +121,7 @@ impl<T: Cancel + IntoDiscrete> Iterator for DevelopContinuedFraction<T> {
             if r.is_zero() {
                 (T::zero(), T::zero()) // end
             } else {
-                //(self.denom.clone(), r)
+                // cancel is needed here!
                 self.denom.clone().cancel(r)
             }
         };
