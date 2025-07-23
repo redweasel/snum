@@ -39,15 +39,17 @@ impl<T> Ratio<T> {
         }
     }
 }
-impl<T: Zero> Ratio<T> {
+impl<T: Zero + PartialEq> Ratio<T> {
     pub fn is_finite(&self) -> bool {
-        !self.denom.is_zero()
+        !self.denom.is_zero() && self.numer == self.numer && self.denom == self.denom
     }
     pub fn is_nan(&self) -> bool {
-        self.denom.is_zero() && self.numer.is_zero()
+        (self.denom.is_zero() && self.numer.is_zero())
+            || self.numer != self.numer
+            || self.denom != self.denom
     }
 }
-impl<T: Zero + One> Ratio<T>
+impl<T: Zero + One + PartialEq> Ratio<T>
 where
     for<'a> &'a T: Div<&'a T, Output = T>,
 {
@@ -62,7 +64,7 @@ where
         }
     }
 }
-impl<T: Zero + One> Ratio<T>
+impl<T: Zero + One + PartialEq> Ratio<T>
 where
     for<'a> &'a T: Rem<&'a T, Output = T>,
 {
@@ -85,6 +87,12 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
     /// Panics if the rational is not finite.
     fn floor(&self) -> T {
         if !self.is_finite() {
+            if self.numer != self.numer {
+                return self.numer.clone(); // NaN
+            }
+            if self.denom != self.denom {
+                return self.denom.clone(); // NaN
+            }
             panic!("Called floor on non finite rational");
         }
         // TODO there is no guarantee, that this is the correct floor...
@@ -178,7 +186,7 @@ where
         }
     }
     fn is_zero(&self) -> bool {
-        self.numer.is_zero()
+        self.numer.is_zero() && !self.denom.is_zero()
     }
 }
 
@@ -199,6 +207,14 @@ where
 
 impl<T: Clone + Zero + PartialEq + Sub<Output = T> + Euclid> PartialEq for Ratio<T> {
     fn eq(&self, other: &Self) -> bool {
+        // detect nan to avoid endless loops
+        if self.numer != self.numer
+            || self.denom != self.denom
+            || other.numer != other.numer
+            || other.denom != other.denom
+        {
+            return false;
+        }
         if self.denom == other.denom {
             return if self.numer == other.numer {
                 true
@@ -844,6 +860,9 @@ where
         // To fix that, divided by 16 until the result is finite.
         let mut n = self.numer.to_approx();
         let mut denom = self.denom.clone();
+        if denom != denom {
+            return F::zero() / F::zero();
+        }
         let mut d = denom.to_approx();
         if !n.is_zero() && !d.is_finite() {
             let mut _16 = T::one() + T::one();

@@ -367,7 +367,7 @@ where
 impl<T: Num + Cancel + IntoDiscrete + Neg<Output = T> + PartialOrd, E: SqrtConst<T>> IntoDiscrete
     for SqrtExt<T, E>
 where
-    <T as IntoDiscrete>::Output: IntoDiscrete<Output = <T as IntoDiscrete>::Output>
+    <T as IntoDiscrete>::Output: fmt::Debug + IntoDiscrete<Output = <T as IntoDiscrete>::Output>
         + Add<Output = <T as IntoDiscrete>::Output>
         + Div<Output = <T as IntoDiscrete>::Output>,
 {
@@ -754,7 +754,8 @@ where
         if b.is_valid_euclid() {
             step = -step;
         }
-        while !r.is_valid_euclid() {
+        // with "while" this can lead to infinite loops for floats, if r is non finite.
+        while !r.is_valid_euclid() && r.value == r.value {
             q += &step;
             r = self - &(b * &q);
         }

@@ -409,7 +409,7 @@ mod bigint {
 /// Calculates the Greatest Common Divisor (GCD) of the number and
 /// `other`. The result is always positive (> 0).
 #[must_use]
-pub fn gcd<T: Zero + One + Sub<Output = T> + Euclid>(mut a: T, mut b: T) -> T {
+pub fn gcd<T: Zero + One + PartialEq + Sub<Output = T> + Euclid>(mut a: T, mut b: T) -> T {
     if a.is_zero() {
         return if b.is_zero() {
             T::one()
@@ -421,7 +421,7 @@ pub fn gcd<T: Zero + One + Sub<Output = T> + Euclid>(mut a: T, mut b: T) -> T {
             }
         };
     }
-    while !b.is_zero() {
+    while !b.is_zero() && b == b {
         (b, a) = (a.div_rem_euclid(&b).1, b);
     }
     if a.is_valid_euclid() {
@@ -434,7 +434,7 @@ pub fn gcd<T: Zero + One + Sub<Output = T> + Euclid>(mut a: T, mut b: T) -> T {
 /// Calculates the Least Common Multiple (LCM) of the number and
 /// `other`. The result is always `result.is_valid_euclid() == true` (usually that means >= 0).
 #[must_use]
-pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + Euclid>(
+pub fn lcm<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Div<T, Output = T> + Euclid>(
     mut a: T,
     mut b: T,
 ) -> T {
@@ -451,7 +451,7 @@ pub fn lcm<T: Clone + Zero + One + Sub<Output = T> + Div<T, Output = T> + Euclid
 /// Returns `((x, y), d)`.
 /// Note that `d` differs from the gcd if both arguments are zero.
 #[must_use]
-pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid>(
+pub fn bezout<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Mul<Output = T> + Euclid>(
     mut a: T,
     mut b: T,
 ) -> ((T, T), T) {
@@ -470,7 +470,7 @@ pub fn bezout<T: Clone + Zero + One + Sub<Output = T> + Mul<Output = T> + Euclid
     let mut x1 = T::one();
     let mut y0 = T::one();
     let mut y1 = T::zero();
-    while !a.is_zero() {
+    while !a.is_zero() && a == a {
         let q;
         ((q, a), b) = (b.div_rem_euclid(&a), a);
         (y0, y1) = (y1.clone(), y0 - q.clone() * y1);
@@ -491,7 +491,7 @@ pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + 
     #[must_use]
     fn cancel(self, b: Self) -> (Self, Self);
 }
-impl<T: Clone + Zero + PartialEq + One + Sub<Output = T> + Div<Output = T> + Euclid> Cancel for T {
+impl<T: Clone + Zero + One + Sub<Output = T> + PartialEq + Div<Output = T> + Euclid> Cancel for T {
     fn cancel(self, b: Self) -> (Self, Self) {
         if self == b {
             if self.is_zero() {

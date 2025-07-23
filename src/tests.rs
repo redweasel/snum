@@ -2356,6 +2356,32 @@ mod rational {
         let v: f32 = Ratio::<i32>::new_raw(0, 0).to_approx();
         assert!(v.is_nan());
     }
+
+    #[test]
+    fn test_continued_fractions() {
+        // extended version of the doctest in continued_fractions
+        for end in -1..3 {
+            let mut iter = [1, 2, 2].iter().continued_fraction(end);
+            assert_eq!(Some(_1 + end), iter.next());
+            let first = [1, 2, 2].iter().continued_fraction(end).nth(0);
+            assert_eq!(Some(_1 + end), first);
+
+            let second_expected = Some(_1 + _1/(_1*2 + end));
+            assert_eq!(second_expected, iter.next());
+            let second = [1, 2, 2].iter().continued_fraction(end).nth(1);
+            assert_eq!(second_expected, second);
+
+            let last_expected = Some(_1 + _1/(_1*2 + _1/(_1*2 + end)));
+            assert_eq!(last_expected, iter.next());
+            let last = [1, 2, 2].iter().continued_fraction(end).last();
+            assert_eq!(last_expected, last);
+            let last = [1, 2, 2].iter().continued_fraction(end).nth(2);
+            assert_eq!(last_expected, last);
+
+            assert_eq!(None, iter.next());
+            assert_eq!(None, [1, 2, 2].iter().continued_fraction(end).nth(3));
+        }
+    }
 }
 
 #[cfg(feature = "rational")]
@@ -2810,24 +2836,47 @@ mod extension {
         for _ in 0..20 {
             assert_eq!(iter2.next().unwrap(), iter.next().unwrap().into());
         }
-        // this next form gives different results including notably 22/7
-        let x = SqrtExt::<f64, Sqrt<f64, 6>>::new(0.0, core::f64::consts::PI);
+
+        // check for endless loops
+        let x = SqrtExt::<f64, Sqrt<f64, 10>>::new(0.0, 1.0/core::f64::consts::PI);
         let mut iter = DevelopContinuedFraction::new(Ratio::from(x));
         for _ in 0..10 {
             let _next = iter.next().unwrap();
-            //std::println!("{}", _next);
+            // TODO this has a problem with NaNs...
+            //std::println!("{}", next);
+            //assert!(next.value.is_finite() && next.ext.is_finite());
+        }
+
+        // this next form gives different results including notably 22/7
+        let x2 = SqrtExt::<f64, Sqrt<f64, 6>>::new(0.0, core::f64::consts::PI);
+        let mut iter = DevelopContinuedFraction::new(Ratio::from(x2));
+        for _ in 0..10 {
+            let next = iter.next().unwrap();
+            //std::println!("{}", next);
+            assert!(next.value.is_finite() && next.ext.is_finite());
         }
         #[cfg(any(feature = "std", feature = "libm"))]
         {
             // mostly testing that there is no infinite loops:
             let mut iter =
-                DevelopContinuedFraction::new(Ratio::from(x)).continued_fraction(One::one());
+                DevelopContinuedFraction::new(Ratio::from(x2)).continued_fraction(Zero::zero());
             for _ in 0..10 {
                 let v = iter.next().unwrap() / SqrtExt::new(0.0, 1.0);
                 let vf: f64 = v.to_approx();
                 let err = ((core::f64::consts::PI - vf) / core::f64::consts::PI).abs();
-                assert!(err < 0.1);
-                //println!("{v} error: {err:.2e}");
+                //std::println!("{v} error: {err:.2e}");
+                assert!(err < 0.05);
+            }
+            // alternative calculation:
+            let x = SqrtExt::<Ratio<i64>, Sqrt<Ratio<i64>, 10>>::new(Ratio::zero(), Ratio::from_approx(core::f64::consts::PI, 0.0).unwrap().recip());
+            let mut iter = DevelopContinuedFraction::new(Ratio::<SqrtExt::<i64, Sqrt<i64, 10>>>::from(x)).continued_fraction(Zero::zero());
+            for _ in 0..10 {
+                let next = iter.next().unwrap();
+                let vf: f64 = next.to_approx();
+                let vf = 10.0.sqrt() / vf;
+                let err = ((core::f64::consts::PI - vf) / core::f64::consts::PI).abs();
+                //std::println!("{next} error: {err:.2e}");
+                assert!(err < 0.007);
             }
             // test conversions
             let phi = SqrtExt::<_, Sqrt<_, 5>>::new(Ratio::new(1, 2), Ratio::new(1, 2));

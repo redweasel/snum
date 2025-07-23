@@ -2,7 +2,7 @@
 
 use core::borrow::Borrow;
 
-use crate::{rational::Ratio, Cancel, IntoDiscrete};
+use crate::{Cancel, IntoDiscrete, rational::Ratio};
 
 trait ContinuedFraction: Sized {
     type Output: Sized;
@@ -30,14 +30,24 @@ impl<T: Cancel> ContinuedFraction for T {
 
 /// Trait extension to iterators to allow evaluating them as continued fractions.
 /// This is done forward, so `[1, 2, 2]` turns into `[1+end, 1+1/(2+end), 1+1/(2+1/(2+end))]`
+/// ```rust
+/// use snum::*;
+/// use snum::rational::*;
+/// 
+/// let end = 2;
+/// let mut iter = [1, 2, 2].iter().continued_fraction(end);
+/// let _1 = Ratio::new(1, 1);
+/// assert_eq!(Some(_1 + end), iter.next());
+/// assert_eq!(Some(_1 + _1/(_1*2 + end)), iter.next());
+/// assert_eq!(Some(_1 + _1/(_1*2 + _1/(_1*2 + end))), iter.next());
+/// assert_eq!(None, iter.next());
+/// ```
 pub struct ContinuedFractionIter<T: Cancel, I: Iterator> {
     iter: I,
     accum: (T, T, T, T),
     end: T,
 }
-impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator
-    for ContinuedFractionIter<T, I>
-{
+impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFractionIter<T, I> {
     type Item = Ratio<T>;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|x| {
@@ -78,9 +88,7 @@ pub trait IntoContinuedFraction<T: Sized> {
     /// This is done forward, so `[1, 2, 2]` turns into `[1+1/1, 1+1/(2+1/1), 1+1/(2+1/(2+1/1))]`
     fn continued_fraction(self, end: T) -> Self::IntoIter;
 }
-impl<'a, T: 'a + Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T>
-    for I
-{
+impl<'a, T: 'a + Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T> for I {
     type IntoIter = ContinuedFractionIter<T, Self>;
     fn continued_fraction(self, end: T) -> ContinuedFractionIter<T, Self> {
         ContinuedFractionIter {
