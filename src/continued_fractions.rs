@@ -24,12 +24,12 @@ impl<T: Cancel> ContinuedFraction for T {
     fn end(accum: (Self, Self, Self, Self), end: T) -> Self::Output {
         let (a, b, c, d) = accum;
         // uncancelled results. Usually they are already cancelled by construction
-        Ratio::new_raw(a * end.clone() + b, c * end + d)
+        Ratio::new_raw(a + b * end.clone(), c + d * end)
     }
 }
 
 /// Trait extension to iterators to allow evaluating them as continued fractions.
-/// This is done forward, so `[1, 2, 2]` turns into `[1+1/1, 1+1/(2+1/1), 1+1/(2+1/(2+1/1))]`
+/// This is done forward, so `[1, 2, 2]` turns into `[1+end, 1+1/(2+end), 1+1/(2+1/(2+end))]`
 pub struct ContinuedFractionIter<T: Cancel, I: Iterator> {
     iter: I,
     accum: (T, T, T, T),

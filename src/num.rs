@@ -511,23 +511,29 @@ pub trait SafeDiv: Num + Cancel + Div<Output = Self> {
     /// Compute the division, but only divide as much as possible.
     ///
     /// - If the type is a field, this is guaranteed to be the same as normal division.
-    /// - If the type is an Euclidean ring, the result is the same as `cancel`.
+    /// - If the type is an Euclidean ring, the result is the same as `cancel`, but with guaranteed positive sign on `q`.
     /// - On division by zero, return `(self, 0)`
     ///
     /// This is useful, as cancel might be defined for some fields, even if it doesn't work.
     ///
-    /// Returns `(p, q)` such that `self/rhs = p/q` with "best" `q`
+    /// Returns `(p, q)` such that `self/rhs = p/q` with "best" `q`, which is "valid euclid".
     #[must_use]
     fn safe_div(self, rhs: Self) -> (Self, Self);
 }
 impl<T: Num + Cancel + Div<Output = T>> SafeDiv for T {
-    fn safe_div(self, rhs: Self) -> (Self, Self) {
+    fn safe_div(mut self, mut rhs: Self) -> (Self, Self) {
         if rhs.is_zero() {
             (self, rhs)
         } else if rhs.is_unit() {
             (self / rhs, T::one())
         } else {
-            self.cancel(rhs)
+            (self, rhs) = self.cancel(rhs);
+            // ensure q is positive
+            if !rhs.is_valid_euclid() {
+                rhs = T::zero() - rhs;
+                self = T::zero() - self;
+            }
+            (self, rhs)
         }
     }
 }
