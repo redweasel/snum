@@ -4,28 +4,18 @@ use core::borrow::Borrow;
 
 use crate::{Cancel, IntoDiscrete, rational::Ratio};
 
-trait ContinuedFraction: Sized {
-    type Output: Sized;
-    fn start() -> (Self, Self, Self, Self);
-    fn next(accum: (Self, Self, Self, Self), value: &Self) -> (Self, Self, Self, Self);
-    fn end(accum: (Self, Self, Self, Self), end: Self) -> Self::Output;
-}
-
 // forward evaluation of continued fractions is a bit harder than backwards evaluation, as one has to use Möbius transformations.
-impl<T: Cancel> ContinuedFraction for T {
-    type Output = Ratio<Self>;
-    fn start() -> (Self, Self, Self, Self) {
-        (Self::one(), Self::zero(), Self::zero(), Self::one())
-    }
-    fn next(accum: (Self, Self, Self, Self), x: &Self) -> (Self, Self, Self, Self) {
-        let (a, b, c, d) = accum;
-        (x.clone() * a.clone() + b, a, x.clone() * c.clone() + d, c)
-    }
-    fn end(accum: (Self, Self, Self, Self), end: T) -> Self::Output {
-        let (a, b, c, d) = accum;
-        // uncancelled results. Usually they are already cancelled by construction
-        Ratio::new_raw(a + b * end.clone(), c + d * end)
-    }
+fn start<T: Cancel>() -> (T, T, T, T) {
+    (T::one(), T::zero(), T::zero(), T::one())
+}
+fn next<T: Cancel>(accum: (T, T, T, T), x: &T) -> (T, T, T, T) {
+    let (a, b, c, d) = accum;
+    (x.clone() * a.clone() + b, a, x.clone() * c.clone() + d, c)
+}
+fn end<T: Cancel>(accum: (T, T, T, T), end: T) -> Ratio<T> {
+    let (a, b, c, d) = accum;
+    // uncancelled results. Usually they are already cancelled by construction
+    Ratio::new_raw(a + b * end.clone(), c + d * end)
 }
 
 /// Trait extension to iterators to allow evaluating them as continued fractions.
@@ -51,8 +41,8 @@ impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFract
     type Item = Ratio<T>;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|x| {
-            take_mut::take(&mut self.accum, |accum| T::next(accum, &x.borrow()));
-            T::end(self.accum.clone(), self.end.clone())
+            take_mut::take(&mut self.accum, |accum| next(accum, &x.borrow()));
+            end(self.accum.clone(), self.end.clone())
         })
     }
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -64,20 +54,20 @@ impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFract
         // doing multiple steps at once, makes the computation of the outputs in between unecessary.
         for _ in 0..=n {
             if let Some(x) = self.iter.next() {
-                take_mut::take(&mut self.accum, |accum| T::next(accum, &x.borrow()));
+                take_mut::take(&mut self.accum, |accum| next(accum, &x.borrow()));
             } else {
                 return None;
             }
         }
-        Some(T::end(self.accum.clone(), self.end.clone()))
+        Some(end(self.accum.clone(), self.end.clone()))
     }
     fn last(mut self) -> Option<Self::Item> {
         // in this case one can also backwards evaluated if the iterator is a DoubleEndedIterator, however that required specialisaton.
         // -> compute forwards until the end, don't compute intermediate outputs
         while let Some(x) = self.iter.next() {
-            take_mut::take(&mut self.accum, |accum| T::next(accum, &x.borrow()));
+            take_mut::take(&mut self.accum, |accum| next(accum, &x.borrow()));
         }
-        Some(T::end(self.accum, self.end))
+        Some(end(self.accum, self.end))
     }
 }
 
@@ -93,7 +83,7 @@ impl<'a, T: 'a + Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFract
     fn continued_fraction(self, end: T) -> ContinuedFractionIter<T, Self> {
         ContinuedFractionIter {
             iter: self,
-            accum: T::start(),
+            accum: start(),
             end,
         }
     }

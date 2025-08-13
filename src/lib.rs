@@ -8,7 +8,7 @@
 //! A central objective of this crate is to only have traits which are essential, or very useful.
 //! - Essential traits are e.g. [Zero], [One], [Num], [NumAlgebraic], [NumAnalytic] and [Euclid]. (these need to be implemented)
 //! - Grouping/alias traits are [Ring], [Field], [AlgebraicField] and [AddMulSubDiv] (+ lesser variants).
-//! - Derived traits are [Cancel], [Power], [IntMul].
+//! - Derived traits are [Cancel], [SafeDiv], [PowerU], [PowerI], [IntMul].
 //! 
 //! All operator implementations, which mix references and owned structs are considered bloat, as the
 //! real world performance benefit hasn't been demonstrated. Note that any type with expensive clone
@@ -17,15 +17,18 @@
 //! Similarly the assign operators like `AssignAdd` are implemented based on the reference `Add` operation.
 //! This is done without cloning thanks to [take_mut].
 //! 
-//! The resulting [complex::Complex] and [rational::Ratio] types are slightly different in some places, but largely compatible with `num`.
+//! The resulting [Complex] and [Ratio] types are slightly different in some places, but largely compatible with `num`.
 //! E.g. The multiplicative inverse on these commutative fields is called `recip` instead of `inv`, as some type might be an invertible
-//! (e.g. Moebius transform) function, which needs `inv` for inversion wrt composition, but can still have `recip`.
+//! function (e.g. Moebius transform), which needs `inv` for inversion wrt composition, but can still have `recip`.
+//! 
+//! Float approximations of numbers are implemented using the trait [ApproxFloat]. They can be chained through types.
+//! E.g. a [Ratio] with [SqrtExt] as numerator and denominator can directly be converted to a float.
 //! 
 //! # Features
 //! 
 //! - `std` (default, however not required)
 //! - `libm` as a replacement for `std` when using floats.
-//! - `rational` for the rational and sqrt extension types.
+//! - `rational` for the [Ratio] and [SqrtExt] types.
 //! - `bytemuck`
 //! - `num-bigint` to include trait implementations for it
 //! - `serde`
@@ -39,7 +42,7 @@
 //! There is many cases in the `rational` part, where the gcd doesn't converge (infinite loop),
 //! because e.g. it is evaluated on a domain which is not Euclidean. Some functions have relaxed
 //! trait bounds to the point, where they can be called on types that don't work.
-//! E.g. [extension::SqrtExt] in large part only works for types with commutative multiplication.
+//! E.g. [SqrtExt] in large part only works for types with commutative multiplication.
 //! Be careful.
 //! 
 //! # Limitations
@@ -50,12 +53,12 @@
 //! as that would require an implementation for every specific type (bloat for nothing).
 //! 
 //! Overflows are well avoided in [rational], but no checked functions are implemented.
-//! Other places, like [complex] and [extension] are prone to integer overflow. So get the checked or wrapping variants,
+//! Other places, like [mod@complex] and [extension] are prone to integer overflow. So get the checked or wrapping variants,
 //! use custom wrappers on the int types. E.g. `enum Checked<T> { Value(T), Overflow }`.
 //! 
 //! ### TODOs
 //! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
-//! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`
+//! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!] and [impl_euclid_field!].
 //! - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
 //! - Hide approximation from floats for rational and sqrt types behind a feature flag.
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
@@ -86,6 +89,13 @@ mod continued_fractions;
 
 #[cfg(feature = "rational")]
 pub use continued_fractions::*;
+
+// global imports for docs and tests
+#[cfg(feature = "rational")]
+#[allow(unused_imports)] // they are for the docs
+use self::{rational::*, extension::*};
+#[allow(unused_imports)] // they are for the docs
+use self::{complex::*};
 
 #[cfg(test)]
 mod tests;

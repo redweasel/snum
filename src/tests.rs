@@ -185,7 +185,6 @@ fn test_gcd() {
 #[allow(non_upper_case_globals)]
 mod complex {
     use super::*;
-    use crate::complex::*;
     use core::*;
 
     type Complex64 = Complex<f64>;
@@ -2081,6 +2080,45 @@ mod rational {
         test(_3_2, 3, Ratio::new(27, 8));
     }
 
+    #[test]
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn test_algebraic() {
+        // test the abs, sqrt, cbrt, sign functions from NumAlgebraic
+        // to do that, use ratios of floats
+        let v = 2.0f64;
+        let vr = Ratio::new_raw(6.0f64, 3.0);
+        let err: f64 = (vr.sqrt() - v.sqrt()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        let err: f64 = (vr.cbrt() - v.cbrt()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        let err: f64 = (vr.abs() - v.abs()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        assert_eq!(vr.sign(), Ratio::new_raw(1., 1.));
+        // test with different representation
+        let vr = Ratio::new_raw(-6.0f64, -3.0);
+        let err: f64 = (vr.sqrt() - v.sqrt()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        let err: f64 = (vr.cbrt() - v.cbrt()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        let err: f64 = (vr.abs() - v.abs()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        assert_eq!(vr.sign(), Ratio::new_raw(-1., -1.));
+        // test with negative number
+        let vr = Ratio::new_raw(-6.0f64, 3.0);
+        let err: f64 = vr.sqrt().to_approx();
+        assert!(err.is_nan(), "error {err}");
+        let err: f64 = (vr.cbrt() + v.cbrt()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        let err: f64 = (vr.abs() - v.abs()).to_approx();
+        assert!(err.abs() < 1e-15f64, "error {err}");
+        assert_eq!(vr.sign(), Ratio::new_raw(-1., 1.));
+        // test copysign
+        assert_eq!(vr.copysign(&Ratio::new_raw(1., 1.)), Ratio::new_raw(6., 3.));
+        assert_eq!(vr.copysign(&Ratio::new_raw(-1., 1.)), Ratio::new_raw(-6., 3.));
+        assert_eq!(vr.copysign(&Ratio::new_raw(1., -1.)), Ratio::new_raw(6., -3.));
+        assert_eq!(vr.copysign(&Ratio::new_raw(-1., -1.)), Ratio::new_raw(-6., -3.));
+    }
+
     /*#[test]
     #[cfg(feature = "std")]
     fn test_to_from_str() {
@@ -2388,7 +2426,6 @@ mod rational {
 mod extension {
     use core::cmp::Ordering;
     use super::*;
-    use crate::{complex::Complex, extension::*, rational::Ratio};
 
     #[test]
     fn test_extension() {
@@ -2664,12 +2701,12 @@ mod extension {
                 for a in -5..=5 {
                     for b in -5..=5 {
                         //println!("{i} {j} {a} {b}");
+                        let x = SqrtExt::<_, Sqrt<_, 2>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 2>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert_eq!(q * d + r, x);
                         if i != 0 || j != 0 {
-                            let x = SqrtExt::<_, Sqrt<_, 2>>::new(a, b);
-                            let d = SqrtExt::<_, Sqrt<_, 2>>::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
                             assert!(r.is_valid_euclid());
-                            assert_eq!(q * d + r, x);
                             assert!(
                                 r.abs_sqr() < d.abs_sqr(),
                                 "({x})/({d}) -> ({q}, {r}) [ab={}, b_sqr={}]",
@@ -2677,12 +2714,14 @@ mod extension {
                                 d.abs_sqr_ext()
                             );
                             //assert!(r.abs_sqr_ext().abs() < d.abs_sqr_ext().abs());
+                        }
 
-                            let x = SqrtExt::<_, Sqrt<_, 3>>::new(a, b);
-                            let d = SqrtExt::<_, Sqrt<_, 3>>::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
+                        let x = SqrtExt::<_, Sqrt<_, 3>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 3>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert_eq!(q * d + r, x);
+                        if i != 0 || j != 0 {
                             assert!(r.is_valid_euclid());
-                            assert_eq!(q * d + r, x);
                             assert!(
                                 r.abs_sqr() < d.abs_sqr(),
                                 "({x})/({d}) -> ({q}, {r}) [ab={}, b_sqr={}]",
@@ -2690,35 +2729,43 @@ mod extension {
                                 d.abs_sqr_ext()
                             );
                             //assert!(r.abs_sqr_ext().abs() < d.abs_sqr_ext().abs());
+                        }
 
-                            let x = SqrtExt::<_, Sqrt<_, 5>>::new(a, b);
-                            let d = SqrtExt::<_, Sqrt<_, 5>>::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
+                        let x = SqrtExt::<_, Sqrt<_, 5>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 5>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert_eq!(q * d + r, x);
+                        if i != 0 || j != 0 {
                             assert!(r.is_valid_euclid());
-                            assert_eq!(q * d + r, x);
-                            assert!(r.abs_sqr() < d.abs_sqr());
-
-                            let x = SqrtExt::<_, Sqrt<_, 6>>::new(a, b);
-                            let d = SqrtExt::<_, Sqrt<_, 6>>::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
-                            assert!(r.is_valid_euclid());
-                            assert_eq!(q * d + r, x);
-                            assert!(r.abs_sqr() < d.abs_sqr());
-
-                            let x = SqrtExt::<_, Sqrt<_, 7>>::new(a, b);
-                            let d = SqrtExt::<_, Sqrt<_, 7>>::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
-                            assert!(r.is_valid_euclid());
-                            assert_eq!(q * d + r, x);
                             assert!(r.abs_sqr() < d.abs_sqr());
                         }
-                        if i != 0 && j != 0 && b != 0 {
+
+                        let x = SqrtExt::<_, Sqrt<_, 6>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 6>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert_eq!(q * d + r, x);
+                        if i != 0 || j != 0 {
+                            assert!(r.is_valid_euclid());
+                            assert!(r.abs_sqr() < d.abs_sqr());
+                        }
+
+                        let x = SqrtExt::<_, Sqrt<_, 7>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 7>>::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert_eq!(q * d + r, x);
+                        if i != 0 || j != 0 {
+                            assert!(r.is_valid_euclid());
+                            assert!(r.abs_sqr() < d.abs_sqr());
+                        }
+                        if j != 0 && b != 0 {
                             let x = Ratio::new(a, b);
                             let d = Ratio::new(i, j);
                             let (q, r) = x.div_rem_euclid(&d);
-                            assert!(r.is_valid_euclid());
                             assert_eq!(q * d + r, x);
-                            assert!(r.abs_sqr() < d.abs_sqr());
+                            if i != 0 {
+                                assert!(r.is_valid_euclid());
+                                assert!(r.abs_sqr() < d.abs_sqr());
+                            }
                         }
                     }
                 }

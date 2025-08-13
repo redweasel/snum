@@ -84,6 +84,24 @@ zero_one_impl!(num_bigint::BigInt; num_bigint::BigInt::from(0i8), num_bigint::Bi
 #[cfg(feature = "num-bigint")]
 zero_one_impl!(num_bigint::BigUint; num_bigint::BigUint::from(0u8), num_bigint::BigUint::from(1u8));
 
+/// Automatically implement [Zero] using [Default].
+/// Only use this, if constructing the default has no significant overhead.
+#[macro_export]
+macro_rules! impl_zero_default {
+    ($($T:ty),+) => {
+        $(impl $crate::Zero for $T {
+            #[inline(always)]
+            fn zero() -> Self {
+                <$T>::default()
+            }
+            #[inline(always)]
+            fn is_zero(&self) -> bool {
+                self == &<$T>::default()
+            }
+        })+
+    };
+}
+
 impl<T: Zero> Zero for Wrapping<T>
 where
     Self: Add<Output = Self>,
@@ -197,10 +215,11 @@ pub trait Conjugate {
     #[must_use]
     fn conj(&self) -> Self;
 }
+/// automatically implement Conjugate on a real type with `impl_conjugate_real!(u64);`
 #[macro_export]
 macro_rules! impl_conjugate_real {
     ($($type:ty),+) => {
-        $(impl Conjugate for $type {
+        $(impl $crate::Conjugate for $type {
             #[inline(always)]
             fn conj(&self) -> Self {
                 self.clone()
@@ -372,6 +391,27 @@ macro_rules! impl_rem_euclid_float {
 }
 impl_rem_euclid_float!(f32, f64);
 
+/// Automatically implement [Euclid] for a field using the trivial implementation based on [Zero] and [Div].
+#[macro_export]
+macro_rules! impl_euclid_field {
+    ($($T:ty),+) => {
+        $(impl $crate::Euclid for $T {
+            fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
+                if div.is_zero() {
+                    (Self::zero(), self.clone())
+                }
+                else {
+                    // always exactly divisible, since it's a field
+                    (self / div, Self::zero())
+                }
+            }
+            fn is_valid_euclid(&self) -> bool {
+                true
+            }
+        })+
+    };
+}
+
 impl<T: Clone + Zero + Euclid> Euclid for Wrapping<T> {
     /// Don't cancel Wrapping types, there is no useful norm on these and canceling doesn't extend the range.
     fn div_rem_euclid(&self, _div: &Self) -> (Self, Self) {
@@ -421,8 +461,22 @@ pub fn gcd<T: Zero + One + PartialEq + Sub<Output = T> + Euclid>(mut a: T, mut b
             }
         };
     }
+    let mut count = 0;
     while !b.is_zero() && b == b {
-        (b, a) = (a.div_rem_euclid(&b).1, b);
+        let r = a.div_rem_euclid(&b).1;
+        if r == a {
+            // abort when the division failed, avoid infinite loops!
+            // could not determine the gcd, so the gcd is 1.
+            if count > 2 {
+                return T::one();
+            } else {
+                count += 1;
+            }
+        }
+        else {
+            count = 0;
+        }
+        (b, a) = (r, b);
     }
     if a.is_valid_euclid() {
         a

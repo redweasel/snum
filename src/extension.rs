@@ -263,7 +263,7 @@ where
 {
     /// Returns the (positive) fundamental unit != 1 derived from [One] in `T`: x+y√N (satisfies `(x^2 - y^2 N).is_unit()`, `x,y > 0`)
     /// The number x-y√N (the generalized conjugate) is the inverse and all other units are integer powers of this one.
-    /// See https://en.wikipedia.org/wiki/Dirichlet%27s_unit_theorem for more information.
+    /// See <https://en.wikipedia.org/wiki/Dirichlet%27s_unit_theorem> for more information.
     ///
     /// This (non const) function is computing it, so avoid calling it multiple times and precompute it, if possible.
     pub fn unit() -> Self {

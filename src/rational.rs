@@ -677,19 +677,22 @@ impl<'a, T: Cancel + Div<Output = T>> Rem<&'a T> for &'a Ratio<T> {
     }
 }
 
+// alternative: rational division as integers
+// -> bring them to the same denominator, then do the remainder
+// problem: overflows easily.
 impl<T: Cancel> Euclid for Ratio<T> {
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
-        // always exactly divisible.
-        let f = self / div;
-        (f, T::zero().into())
-        // alternative: rational division as integers
-        // -> bring them to the same denominator, then do the remainder
-        // problem: overflows easily.
+        if div.numer.is_zero() {
+            (T::zero().into(), self.clone())
+        } else {
+            // always exactly divisible.
+            (self / div, T::zero().into())
+        }
     }
     fn is_valid_euclid(&self) -> bool {
         // only the finite 0 is a possible output of `div_rem_euclid`, however either x or -x need to be valid,
         // so use rem_euclid on the numerator and call some more numbers valid euclid.
-        self.numer.is_valid_euclid() && !self.denom.is_zero()
+        (self.numer.is_valid_euclid() == self.denom.is_valid_euclid()) && !self.denom.is_zero()
     }
 }
 
@@ -801,6 +804,37 @@ where
         // +oo and -oo have inverse 0, but 0 has no unique inverse, since there is two infinities,
         // so exclude all 3 values.
         !self.numer.is_zero() && !self.denom.is_zero()
+    }
+}
+impl<T: NumAlgebraic + Cancel> NumAlgebraic for Ratio<T>
+where
+    T::Real: Num + Cancel,
+    Ratio<T>: From<Ratio<T::Real>>,
+{
+    fn abs(&self) -> Self::Real {
+        Ratio::new_raw(self.numer.abs(), self.denom.abs())
+    }
+    fn sqrt(&self) -> Self {
+        if self.denom.is_valid_euclid() {
+            Ratio::new_raw(self.numer.sqrt(), self.denom.sqrt())
+        } else {
+            Ratio::new_raw(
+                (T::zero() - self.numer.clone()).sqrt(),
+                (T::zero() - self.denom.clone()).sqrt(),
+            )
+        }
+    }
+    fn cbrt(&self) -> Self {
+        Ratio::new_raw(self.numer.cbrt(), self.denom.cbrt())
+    }
+    fn sign(&self) -> Self {
+        Ratio::new(self.numer.sign(), self.denom.sign())
+    }
+    fn copysign(&self, sign: &Self) -> Self {
+        let mut r: Self = self.abs().into();
+        r.numer = r.numer.copysign(&sign.numer);
+        r.denom = r.denom.copysign(&sign.denom);
+        r
     }
 }
 
