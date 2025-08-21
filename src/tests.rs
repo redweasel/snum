@@ -57,54 +57,36 @@ macro_rules! for_integers {
 #[cfg(not(feature = "std"))]
 use core::fmt::{self, Write};
 #[cfg(not(feature = "std"))]
-#[derive(Debug)]
 struct NoStdTester {
     cursor: usize,
-    buf: [u8; NoStdTester::BUF_SIZE],
+    buf: [u8; Self::BUF_SIZE],
 }
 
 #[cfg(not(feature = "std"))]
 impl NoStdTester {
-    fn new() -> NoStdTester {
-        NoStdTester {
-            buf: [0; Self::BUF_SIZE],
+    const WRITE_ERR: &'static str = "Formatted output too long";
+    const BUF_SIZE: usize = 64;
+
+    fn new() -> Self {
+        Self {
             cursor: 0,
+            buf: [0; Self::BUF_SIZE],
         }
     }
 
-    fn clear(&mut self) {
-        self.buf = [0; Self::BUF_SIZE];
-        self.cursor = 0;
+    fn to_str(&self) -> Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(&self.buf[..self.cursor])
     }
-
-    const WRITE_ERR: &'static str = "Formatted output too long";
-    const BUF_SIZE: usize = 32;
 }
 
 #[cfg(not(feature = "std"))]
 impl Write for NoStdTester {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for byte in s.bytes() {
-            self.buf[self.cursor] = byte;
+            *self.buf.get_mut(self.cursor).ok_or(fmt::Error {})? = byte;
             self.cursor += 1;
-            if self.cursor >= self.buf.len() {
-                return Err(fmt::Error {});
-            }
         }
         Ok(())
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl PartialEq<str> for NoStdTester {
-    fn eq(&self, other: &str) -> bool {
-        let other = other.as_bytes();
-        for index in 0..self.cursor {
-            if self.buf.get(index) != other.get(index) {
-                return false;
-            }
-        }
-        true
     }
 }
 
@@ -114,13 +96,10 @@ macro_rules! assert_fmt_eq {
         {
             let mut tester = NoStdTester::new();
             write!(tester, "{}", $fmt_args).expect(NoStdTester::WRITE_ERR);
-            assert_eq!(tester, *$string);
-            tester.clear();
+            assert_eq!(tester.to_str(), Ok($string));
         }
         #[cfg(feature = "std")]
-        {
-            assert_eq!(std::fmt::format($fmt_args), $string);
-        }
+        assert_eq!(std::fmt::format($fmt_args), $string);
     };
 }
 
@@ -1439,12 +1418,12 @@ mod rational {
             assert!(a != b);
             // this next one is already 115 recursive calls deep
             let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640194710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918659764818204710348765103865981732091731441876457091".parse().unwrap());
-            let b = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640194710871024710484619846901480758165698749156931477484913832".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918659764818204710348765103865981732091731441876457092".parse().unwrap());
+            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
             assert!(a > b);
             assert!(a != b);
             // next: 184 recursive calls deep
             let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640110498471864871634871264917298419374547129369126471546537312391294687154894710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918129848913648716481270321798476735481146918349817439216351940424141246876659764818204710348765103865981732091731441876457091".parse().unwrap());
-            let b = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640110498471864871634871264917298419374547129369126471546537312391294687154894710871024710484619846901480758165698749156931477484913832".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918129848913648716481270321798476735481146918349817439216351940424141246876659764818204710348765103865981732091731441876457092".parse().unwrap());
+            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
             assert!(a > b);
             assert!(a != b);
             // 390
@@ -2114,9 +2093,18 @@ mod rational {
         assert_eq!(vr.sign(), Ratio::new_raw(-1., 1.));
         // test copysign
         assert_eq!(vr.copysign(&Ratio::new_raw(1., 1.)), Ratio::new_raw(6., 3.));
-        assert_eq!(vr.copysign(&Ratio::new_raw(-1., 1.)), Ratio::new_raw(-6., 3.));
-        assert_eq!(vr.copysign(&Ratio::new_raw(1., -1.)), Ratio::new_raw(6., -3.));
-        assert_eq!(vr.copysign(&Ratio::new_raw(-1., -1.)), Ratio::new_raw(-6., -3.));
+        assert_eq!(
+            vr.copysign(&Ratio::new_raw(-1., 1.)),
+            Ratio::new_raw(-6., 3.)
+        );
+        assert_eq!(
+            vr.copysign(&Ratio::new_raw(1., -1.)),
+            Ratio::new_raw(6., -3.)
+        );
+        assert_eq!(
+            vr.copysign(&Ratio::new_raw(-1., -1.)),
+            Ratio::new_raw(-6., -3.)
+        );
     }
 
     /*#[test]
@@ -2404,12 +2392,12 @@ mod rational {
             let first = [1, 2, 2].iter().continued_fraction(end).nth(0);
             assert_eq!(Some(_1 + end), first);
 
-            let second_expected = Some(_1 + _1/(_1*2 + end));
+            let second_expected = Some(_1 + _1 / (_1 * 2 + end));
             assert_eq!(second_expected, iter.next());
             let second = [1, 2, 2].iter().continued_fraction(end).nth(1);
             assert_eq!(second_expected, second);
 
-            let last_expected = Some(_1 + _1/(_1*2 + _1/(_1*2 + end)));
+            let last_expected = Some(_1 + _1 / (_1 * 2 + _1 / (_1 * 2 + end)));
             assert_eq!(last_expected, iter.next());
             let last = [1, 2, 2].iter().continued_fraction(end).last();
             assert_eq!(last_expected, last);
@@ -2424,8 +2412,8 @@ mod rational {
 
 #[cfg(feature = "rational")]
 mod extension {
-    use core::cmp::Ordering;
     use super::*;
+    use core::cmp::Ordering;
 
     #[test]
     fn test_extension() {
@@ -2476,7 +2464,6 @@ mod extension {
         assert_fmt_eq!(format_args!("{:#3x}", SQRT5), "√0x5");
         assert_fmt_eq!(format_args!("{:#o}", SQRT5), "√0o5");
         assert_fmt_eq!(format_args!("{:b}", SQRT5), "√101");
-        
 
         #[cfg(feature = "std")]
         {
@@ -2885,7 +2872,7 @@ mod extension {
         }
 
         // check for endless loops
-        let x = SqrtExt::<f64, Sqrt<f64, 10>>::new(0.0, 1.0/core::f64::consts::PI);
+        let x = SqrtExt::<f64, Sqrt<f64, 10>>::new(0.0, 1.0 / core::f64::consts::PI);
         let mut iter = DevelopContinuedFraction::new(Ratio::from(x));
         for _ in 0..10 {
             let _next = iter.next().unwrap();
@@ -2915,8 +2902,15 @@ mod extension {
                 assert!(err < 0.05);
             }
             // alternative calculation:
-            let x = SqrtExt::<Ratio<i64>, Sqrt<Ratio<i64>, 10>>::new(Ratio::zero(), Ratio::from_approx(core::f64::consts::PI, 0.0).unwrap().recip());
-            let mut iter = DevelopContinuedFraction::new(Ratio::<SqrtExt::<i64, Sqrt<i64, 10>>>::from(x)).continued_fraction(Zero::zero());
+            let x = SqrtExt::<Ratio<i64>, Sqrt<Ratio<i64>, 10>>::new(
+                Ratio::zero(),
+                Ratio::from_approx(core::f64::consts::PI, 0.0)
+                    .unwrap()
+                    .recip(),
+            );
+            let mut iter =
+                DevelopContinuedFraction::new(Ratio::<SqrtExt<i64, Sqrt<i64, 10>>>::from(x))
+                    .continued_fraction(Zero::zero());
             for _ in 0..10 {
                 let next = iter.next().unwrap();
                 let vf: f64 = next.to_approx();

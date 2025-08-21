@@ -264,8 +264,7 @@ pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
 
 /// A number that supports sqrt and cbrt (E.g. a float).
 /// Integers should not implement this, as their sqrt and cbrt are approx.
-// NOTE: general powf could be added here, but strictly speaking algebraic just means pow(p/q) with p, q integers.
-// In any case, sqrt and cbrt are enough to get all analytic polynomial solutions working, which was the goal with this type.
+// sqrt and cbrt are enough to get all analytic polynomial solutions working, which was the goal with this type.
 pub trait NumAlgebraic: Num {
     #[must_use]
     fn sqrt(&self) -> Self;
