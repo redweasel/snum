@@ -461,7 +461,7 @@ where
     }
 }
 
-impl<T: NumAnalytic<Real = T> + Zero + One> Quaternion<T>
+impl<T: NumElementary<Real = T> + Zero + One> Quaternion<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
@@ -495,7 +495,7 @@ where
     }
 }
 
-impl<T: NumAnalytic<Real = T> + AlgebraicField + PartialOrd> NumAlgebraic for Quaternion<T>
+impl<T: NumElementary<Real = T> + AlgebraicField + PartialOrd> NumAlgebraic for Quaternion<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
@@ -604,7 +604,7 @@ macro_rules! forward_function {
 
 // The following elementary functions can also be derived from SU(2) matrices.
 // They are the same as for complex numbers, because they always act on a complex orbit.
-impl<T: NumAnalytic + AlgebraicField<Real = T> + PartialOrd> NumAnalytic for Quaternion<T>
+impl<T: NumElementary + AlgebraicField<Real = T> + PartialOrd> NumElementary for Quaternion<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {

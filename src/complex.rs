@@ -440,7 +440,7 @@ where
     }
 }
 
-impl<T: NumAnalytic<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
+impl<T: NumElementary<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
     /// Calculate the principal Arg of self.
     #[inline(always)]
     pub fn arg(&self) -> T {
@@ -490,7 +490,7 @@ where
     }
 }
 
-impl<T: AlgebraicField<Real = T> + NumAnalytic + PartialOrd> NumAlgebraic for Complex<T>
+impl<T: AlgebraicField<Real = T> + NumElementary + PartialOrd> NumAlgebraic for Complex<T>
 where
     Complex<T>: Num<Real = T>,
     for<'a> &'a T: AddMulSubDiv<Output = T>,
@@ -566,7 +566,7 @@ where
             // alternatively, there would be an extremely fast converging algorithm using sqrt and cbrt.
             let one = T::one();
             let three = &one + &one + one;
-            let (r, theta) = self.to_polar(); // used NumAnalytic here!
+            let (r, theta) = self.to_polar(); // used NumElementary here!
             Self::from_polar(r.cbrt(), theta / three)
         }
     }
@@ -597,8 +597,8 @@ where
     }
 }
 
-// NumAnalytic implementation with very few conditionals (only based on zero check)
-impl<T: NumAnalytic + AlgebraicField<Real = T> + PartialOrd> NumAnalytic for Complex<T>
+// NumElementary implementation with very few conditionals (only based on zero check)
+impl<T: NumElementary + AlgebraicField<Real = T> + PartialOrd> NumElementary for Complex<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {

@@ -79,7 +79,7 @@ zero_one_impl!(num_bigint::BigInt; num_bigint::BigInt::from(0i8), num_bigint::Bi
 #[cfg(feature = "num-bigint")]
 zero_one_impl!(num_bigint::BigUint; num_bigint::BigUint::from(0u8), num_bigint::BigUint::from(1u8));
 
-/// Automatically implement [Zero] using [Default].
+/// Automatically implement [Zero] using [Default], assuming that they return the same value.
 /// Only use this, if constructing the default has no significant overhead.
 #[macro_export]
 macro_rules! impl_zero_default {
@@ -281,7 +281,7 @@ pub trait NumAlgebraic: Num {
 }
 
 /// A number that supports trigonometric and exponential functions.
-pub trait NumAnalytic: NumAlgebraic {
+pub trait NumElementary: NumAlgebraic {
     #[must_use]
     fn sin(&self) -> Self;
     #[must_use]
@@ -758,7 +758,7 @@ macro_rules! num_float_type {
             forward_math_impl!($type, copysign, copysign, copysignf, sign);
         }
         #[cfg(any(feature = "std", feature = "libm"))]
-        impl NumAnalytic for $type {
+        impl NumElementary for $type {
             forward_math_impl!($type, sin, sinf);
             forward_math_impl!($type, cos, cosf);
             forward_math_impl!($type, tan, tanf);

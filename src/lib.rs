@@ -6,7 +6,7 @@
 //! There is no dependence on [Copy] anywhere and nothing is limited to buildin types.
 //! 
 //! A central objective of this crate is to only have traits which are essential, or very useful.
-//! - Essential traits are e.g. [Zero], [One], [Num], [NumAlgebraic], [NumAnalytic] and [Euclid]. (these need to be implemented)
+//! - Essential traits are e.g. [Zero], [One], [Num], [NumAlgebraic], [NumElementary] and [Euclid]. (these need to be implemented)
 //! - Grouping/alias traits are [Ring], [Field], [AlgebraicField] and [AddMulSubDiv] (+ lesser variants).
 //! - Derived traits are [Cancel], [SafeDiv], [PowerU], [PowerI], [IntMul].
 //! 
@@ -37,6 +37,7 @@
 //! 
 //! - `std` (default, however not required)
 //! - `libm` as a replacement for `std` when using floats.
+//! - `quaternion` for the [Quaternion] type.
 //! - `rational` for the [Ratio] and [SqrtExt] types.
 //! - `bytemuck`
 //! - `num-bigint` to include trait implementations for it
@@ -52,27 +53,26 @@
 //! because e.g. it is evaluated on a domain which is not Euclidean. Some functions have relaxed
 //! trait bounds to the point, where they can be called on types that don't work.
 //! E.g. [SqrtExt] in large part only works for types with commutative multiplication.
-//! Be careful.
+//! Be careful and respect math.
 //! 
 //! # Limitations
 //! To make other crates, which are not considered in this one, work, one needs to implement `Num` for them.
 //! This can only be done in said crate, or by creating a wrapper and forwarding all functionallity.
 //! 
-//! For complex numbers, binary operations lke `T + Complex<T>` are not implemented,
+//! For complex numbers, binary operations like `T + Complex<T>` are not implemented,
 //! as that would require an implementation for every specific type (bloat for nothing).
 //! 
 //! Overflows are well avoided in [rational], but no checked functions are implemented.
-//! Other places, like [mod@complex] and [extension] are prone to integer overflow. So get the checked or wrapping variants,
-//! use custom wrappers on the int types. E.g. `enum Checked<T> { Value(T), Overflow }`.
+//! Other places, like [mod@complex] and [extension] are prone to integer overflow.
+//! Use custom wrappers on the int types. E.g. `enum Checked<T> { Value(T), Overflow }` to manage the overflows.
 //! 
 //! ### TODOs
 //! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
 //! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!] and [impl_euclid_field!].
 //! - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
-//! - Hide approximation from floats for rational and sqrt types behind a feature flag.
+//! - Hide approximation from floats for rational and sqrt types behind a feature flag (test if this is beneficial for compile times).
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
-//! - It appears, that the reference implementation need to use the non reference implementations to avoid recursive trait evaluations. Check this again! Otherwise switch to using the optimal operations.
-//! - Rename NumAnalytic to NumElementary, as that is more fitting
+//! - The reference implementation need to use the non reference implementations to avoid recursive trait evaluations by SIMD types. Make sure to never do clones for nothing and use optimal operations as much as possible!
 
 #![no_std]
 
@@ -106,6 +106,9 @@ pub use continued_fractions::*;
 #[cfg(feature = "rational")]
 #[allow(unused_imports)] // they are for the docs
 use self::{rational::*, extension::*};
+#[cfg(feature = "quaternion")]
+#[allow(unused_imports)] // they are for the docs
+use self::quaternion::*;
 #[allow(unused_imports)] // they are for the docs
 use self::{complex::*};
 

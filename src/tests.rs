@@ -520,11 +520,11 @@ mod complex {
             }
             assert!(close(
                 (_1_0i * 1e-12).exp_m1(),
-                _1_0i * (NumAnalytic::exp_m1(&1e-12))
+                _1_0i * (NumElementary::exp_m1(&1e-12))
             ));
             assert!(close(
                 (_1_0i * 1e-16).exp_m1(),
-                _1_0i * (NumAnalytic::exp_m1(&1e-16))
+                _1_0i * (NumElementary::exp_m1(&1e-16))
             ));
             assert!(close((_0_1i * 1e-16).exp_m1(), _0_1i * 1e-16));
         }

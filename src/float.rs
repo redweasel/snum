@@ -17,7 +17,7 @@ pub trait FloatType: Clone
 + IntoDiscrete<Output = Self>
 + Div<Output = Self>
 + Neg<Output = Self>
-+ NumAnalytic {
++ NumElementary {
     fn is_finite(&self) -> bool;
     fn is_infinite(&self) -> bool;
 }
