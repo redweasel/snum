@@ -251,7 +251,7 @@ impl<T: Num + Default, E: SqrtConst<T>> Default for SqrtExt<T, E> {
 
 impl<T: Zero + Num, E: SqrtConst<T>> SqrtExt<T, E> {
     /// Returns true if the number can be written as a normal number.
-    #[inline]
+    #[inline(always)]
     pub fn is_integral(&self) -> bool {
         self.ext.is_zero()
     }
@@ -501,6 +501,7 @@ impl<T: Num + FromU64 + Zero, E: SqrtConst<T>> FromU64 for SqrtExt<T, E> {
 }
 
 impl<T: Num + Neg<Output = T>, E: SqrtConst<T>> Conjugate for SqrtExt<T, E> {
+    #[inline(always)]
     fn conj(&self) -> Self {
         Self::new(self.value.conj(), self.ext.conj())
     }
@@ -919,7 +920,6 @@ where
             }
         }
     }
-    #[inline]
     fn to_approx(&self) -> F {
         let c: F = E::sqr().to_approx();
         // evaluate to float, but be very careful to avoid cancellation
@@ -985,6 +985,7 @@ unsafe impl<T: Num + bytemuck::Pod, E: 'static + Copy + SqrtConst<T>> bytemuck::
 }
 
 #[cfg(feature = "std")]
+#[inline(never)]
 fn fmt_sqrtext(
     f: &mut fmt::Formatter<'_>,
     value_zero: bool,
@@ -1043,6 +1044,7 @@ fn fmt_sqrtext(
     crate::rational::pad_expr(f, prefix, pre_pad)
 }
 #[cfg(not(feature = "std"))]
+#[inline(never)]
 fn fmt_sqrtext(
     f: &mut fmt::Formatter<'_>,
     value_zero: bool,

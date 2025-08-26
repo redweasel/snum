@@ -1,10 +1,5 @@
 use core::{fmt::Debug, num::Wrapping, ops::*};
 
-// TODO consider `CommutativeAdd` and `CommutativeMul` traits,
-// which are just markers to make clear, that commutativity is given,
-// so algorithms don't have to say in their description,
-// whether they work for non commutative rings as well.
-
 /// Defines an additive identity element for `Self`.
 ///
 /// # Laws
@@ -19,7 +14,7 @@ pub trait Zero: Sized + Add<Self, Output = Self> {
     fn zero() -> Self;
 
     /// Sets `self` to the additive identity element of `Self`, `0`.
-    #[inline]
+    #[inline(always)]
     fn set_zero(&mut self) {
         *self = Zero::zero();
     }
@@ -245,6 +240,7 @@ impl<T: Clone> Conjugate for Wrapping<T> {
 /// To differentiate between signed and unsigned use `Num::Real: Neg<Output = Num::Real>`.
 /// To differentiate between real and complex, use `T: Num<Real = T>` and/or `Num: PartialOrd`.
 pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
+    // TODO think about this constraint. It makes a lot of things simpler and is probably reasonable, but it's not essential.
     type Real: Num<Real = Self::Real>;
     /// characteristic of a number ring. Limited to u64. If it is bigger, or not known at compile time, it's considered 0.
     const CHAR: u64;

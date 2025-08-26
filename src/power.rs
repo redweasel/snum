@@ -9,7 +9,6 @@ pub trait PowerU {
 }
 
 impl<T: Clone + One> PowerU for T {
-    #[inline]
     fn powu(&self, n: u64) -> Self {
         // overflow-free power algorithm for u64.
         // It's u64 instead of u32 because many types never overflow.
@@ -36,7 +35,6 @@ pub trait PowerI {
 }
 
 impl<T: Num + One + Div<Output = T>> PowerI for T {
-    #[inline]
     fn powi(&self, n: i64) -> Self {
         let x = if n < 0 {
             assert!(self.is_unit());

@@ -313,10 +313,7 @@ impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T
         // NOTE: this is very performance critical code, yet it needs precise function
         let b_sqr = b.re.clone() * b.re.clone() + b.im.clone() * b.im.clone(); // avoid some trait bounds
         if b_sqr.is_unit() {
-            return (
-                &(a * &b.conj()) / &b_sqr,
-                T::zero().into(),
-            );
+            return (&(a * &b.conj()) / &b_sqr, T::zero().into());
         }
         let two = T::one() + T::one();
         // https://stackoverflow.com/a/18067292
@@ -445,21 +442,19 @@ where
 
 impl<T: NumAnalytic<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
     /// Calculate the principal Arg of self.
-    #[inline]
+    #[inline(always)]
     pub fn arg(&self) -> T {
         self.im.atan2(&self.re)
     }
     /// Convert to polar form (r, theta), such that `self = r * exp(i * theta)`.
-    /// 
+    ///
     /// Returns (`r`, `theta`)
-    #[inline]
     pub fn to_polar(&self) -> (T, T) {
         // implement abs_sqr without the reference based addition and multiplication to keep trait bound simpler.
         let abs_sqr = self.re.clone() * self.re.clone() + self.im.clone() * self.im.clone();
         (abs_sqr.sqrt(), self.arg())
     }
     /// Convert a polar representation  `r * exp(i * theta)` into a complex number.
-    #[inline]
     pub fn from_polar(r: T, theta: T) -> Self {
         Self::new(r.clone() * theta.cos(), r * theta.sin())
     }
@@ -500,7 +495,6 @@ where
     Complex<T>: Num<Real = T>,
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
-    #[inline(always)]
     fn sqrt(&self) -> Self {
         if self.is_zero() {
             return Self {
@@ -521,7 +515,7 @@ where
             }
         }
         // Use angle bisection
-        // Note currently it's limited by the types epsilon at 1.0 for re << 0
+        // Note, this approach is limited by the types epsilon at 1.0 for re << 0
         // e.g. in theory (-1.0 + 1e-20 i).sqrt() = (0.5e-20 + i), but rounding will occur here.
         // However (-1.0f64 + 2e-8 i).sqrt() = (1e-8 + i) still works.
         let len = self.abs(); // sqrt eval 1
@@ -541,7 +535,6 @@ where
     /// Note that this does not match the usual result for the cube root of
     /// negative real numbers. For example, the real cube root of `-8` is `-2`,
     /// but the principal complex cube root of `-8` is `1 + i√3`.
-    #[inline]
     fn cbrt(&self) -> Self {
         if self.im.is_zero() {
             if self.re >= T::zero() {
@@ -609,7 +602,6 @@ impl<T: NumAnalytic + AlgebraicField<Real = T> + PartialOrd> NumAnalytic for Com
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
-    #[inline]
     fn sin(&self) -> Self {
         Self {
             re: self.re.sin() * self.im.cosh(),
@@ -617,7 +609,6 @@ where
         }
     }
 
-    #[inline]
     fn cos(&self) -> Self {
         Self {
             re: self.re.cos() * self.im.cosh(),
@@ -625,7 +616,6 @@ where
         }
     }
 
-    #[inline]
     fn tan(&self) -> Self {
         let x = self + self;
         let d = x.re.cos() + x.im.cosh();
@@ -643,7 +633,6 @@ where
     /// * `(1, ∞)`, continuous from below.
     ///
     /// The branch satisfies `-π/2 ≤ Re(asin(z)) ≤ π/2`.
-    #[inline]
     fn asin(&self) -> Self {
         // formula: arcsin(z) = -i ln(sqrt(1-z^2) + iz)
         -(self.clone().mul_i() + (-(self * self - T::one())).sqrt())
@@ -659,7 +648,6 @@ where
     /// * `(1, ∞)`, continuous from below.
     ///
     /// The branch satisfies `0 ≤ Re(acos(z)) ≤ π`.
-    #[inline]
     fn acos(&self) -> Self {
         // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
         -(self + &(-(self * self - T::one())).sqrt().mul_i())
@@ -675,7 +663,6 @@ where
     /// * `[i, ∞i)`, continuous from the right.
     ///
     /// The branch satisfies `-π/2 ≤ Re(atan(z)) ≤ π/2`.
-    #[inline]
     fn atan(&self) -> Self {
         // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
         let one = T::one();
@@ -688,15 +675,24 @@ where
     /// For real x > 0, this is equivalent to arctan(y/x), where `y = self`.
     ///
     /// This function has branchcuts defined by the implicit equations:
-    /// y * x* - y* * sqrt(x^2 + y^2) purely imaginary and |y| >= |x + sqrt(x^2 + y^2)|
+    /// `y * x* - y* * sqrt(x^2 + y^2)` purely imaginary and `|y| >= |x + sqrt(x^2 + y^2)|`
     fn atan2(&self, x: &Self) -> Self {
-        // to get this without conditionals, implement it as
+        if self.is_zero() && x.is_zero() {
+            return Complex::zero(); // avoid NaN
+        }
+        // implement it as one function
         // formula: 2*arctan(y / (x + (x*x + y*y).sqrt()))
-        let res = (self / &(x + &(x * x + self * self).sqrt())).atan();
+        let div = x + &(x * x + self * self).sqrt();
+        let res = if div.is_zero() {
+            // directly at the branchcut, decide for one side.
+            // TODO what happens here for complex values???
+            T::zero().acos().copysign(&(self * &div.conj()).re()).into()
+        } else {
+            (self / &div).atan()
+        };
         &res + &res
     }
 
-    #[inline]
     fn exp(&self) -> Self {
         let r = self.re.exp();
         if r.is_zero() {
@@ -711,7 +707,6 @@ where
         }
     }
 
-    #[inline]
     fn exp_m1(&self) -> Self {
         let r = self.re.exp_m1();
         let two = T::one() + T::one();
@@ -732,7 +727,7 @@ where
     /// * `(-∞, 0]`, continuous from above.
     ///
     /// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.
-    #[inline]
+    #[inline(always)]
     fn ln(&self) -> Self {
         let (r, phi) = self.to_polar();
         Self {
@@ -748,13 +743,12 @@ where
     /// * `(-∞, -1]`, continuous from above.
     ///
     /// The branch satisfies `-π ≤ arg(ln(z+1)) ≤ π`.
-    #[inline]
+    #[inline(always)]
     fn ln_1p(&self) -> Self {
         // no good way to write this without conditionals...
         (self + &T::one()).ln()
     }
 
-    #[inline]
     fn sinh(&self) -> Self {
         Self {
             re: self.re.sinh() * self.im.cos(),
@@ -762,7 +756,6 @@ where
         }
     }
 
-    #[inline]
     fn cosh(&self) -> Self {
         Self {
             re: self.re.cosh() * self.im.cos(),
@@ -770,7 +763,6 @@ where
         }
     }
 
-    #[inline]
     fn tanh(&self) -> Self {
         // formula: tanh(a + bi) = (sinh(2a) + i*sin(2b))/(cosh(2a) + cos(2b))
         let x = self + self;
@@ -789,9 +781,8 @@ where
     /// * `(i, ∞i)`, continuous from the right.
     ///
     /// The branch satisfies `-π/2 ≤ Im(asinh(z)) ≤ π/2`.
-    #[inline]
     fn asinh(&self) -> Self {
-        // formula: arcsinh(z) = ln(z + sqrt(1+z^2))
+        // formula: arsinh(z) = ln(z + sqrt(1+z^2))
         (self + &(self * self + T::one()).sqrt()).ln()
     }
 
@@ -802,9 +793,8 @@ where
     /// * `(-∞, 1)`, continuous from above.
     ///
     /// The branch satisfies `-π ≤ Im(acosh(z)) ≤ π` and `0 ≤ Re(acosh(z)) < ∞`.
-    #[inline]
     fn acosh(&self) -> Self {
-        // formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
+        // formula: arcosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
         let one = &T::one();
         let two = &(one + one);
         let res = &((&(self + one) / two).sqrt() + (&(self - one) / two).sqrt()).ln();
@@ -819,16 +809,15 @@ where
     /// * `[1, ∞)`, continuous from below.
     ///
     /// The branch satisfies `-π/2 ≤ Im(atanh(z)) ≤ π/2`.
-    #[inline]
     fn atanh(&self) -> Self {
-        // formula: arctanh(z) = (ln(1+z) - ln(1-z))/2
+        // formula: artanh(z) = (ln(1+z) - ln(1-z))/2
+        // TODO can these ln be combined into one?
         let one = &T::one();
         let two = one + one;
-        ((self + one).ln() - (&Complex::one() - self).ln()) / two
+        ((self + one).ln() - Complex::new(one - &self.re, -self.im.clone()).ln()) / two
     }
 
     /// Raises `self` to a complex power.
-    #[inline]
     fn pow(&self, exp: &Self) -> Self {
         // a slight branch here to handle the zero cases
         if exp.is_zero() {
@@ -892,22 +881,23 @@ macro_rules! complex {
         $crate::complex::Complex::new($x, -$y)
     };
     ($x:literal i) => {
-        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+        $crate::complex::Complex::new($crate::Zero::zero(), $x)
     };
     ($x:literal j) => {
-        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+        $crate::complex::Complex::new($crate::Zero::zero(), $x)
     };
     (($x:expr) i) => {
-        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+        $crate::complex::Complex::new($crate::Zero::zero(), $x)
     };
     (($x:expr) j) => {
-        <$crate::complex::Complex<_> as From<_>>::from($x) * $crate::complex::Complex::i()
+        $crate::complex::Complex::new($crate::Zero::zero(), $x)
     };
     ($x:expr) => {
         $x.into()
     };
 }
 
+#[inline(never)]
 fn fmt_re_im(
     f: &mut fmt::Formatter<'_>,
     re_neg: bool,
@@ -950,18 +940,25 @@ fn fmt_re_im(
 }
 
 #[cfg(feature = "std")]
+#[inline(always)]
 // Currently, we can only apply width using an intermediate `String` (and thus `std`)
-fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
+pub(crate) fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
     use std::string::ToString;
     if let Some(width) = f.width() {
-        write!(f, "{0: >1$}", complex.to_string(), width)
+        let s = complex.to_string();
+        match f.align() {
+            None | Some(fmt::Alignment::Right) => write!(f, "{s:>0$}", width),
+            Some(fmt::Alignment::Center) => write!(f, "{s:^0$}", width),
+            Some(fmt::Alignment::Left) => write!(f, "{s:<0$}", width),
+        }
     } else {
         write!(f, "{}", complex)
     }
 }
 
 #[cfg(not(feature = "std"))]
-fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
+#[inline(always)]
+pub(crate) fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
     write!(f, "{}", complex)
 }
 
@@ -983,8 +980,8 @@ macro_rules! impl_display {
                 } else {
                     self.im.clone()
                 };
-        
-                let prefix = if f.alternate() { $pre } else { "" };
+
+                let prefix = if f.alternate() { $pre } else { "" }; // TODO this is not quite right... e.g. take Complex<Ratio<i32>>
                 return if let Some(prec) = f.precision() {
                     fmt_re_im(
                         f,

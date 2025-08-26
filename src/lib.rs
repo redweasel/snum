@@ -10,12 +10,21 @@
 //! - Grouping/alias traits are [Ring], [Field], [AlgebraicField] and [AddMulSubDiv] (+ lesser variants).
 //! - Derived traits are [Cancel], [SafeDiv], [PowerU], [PowerI], [IntMul].
 //! 
+//! After implementing ring and field traits, one might ask for a commutative marker trait for multiplication and addition,
+//! however that is explicitly not implemented, as it's not essential to a functioning type system in Rust. Algorithms
+//! should tell in their description if they work for commutative types only, if not obvious.
+//! 
 //! All operator implementations, which mix references and owned structs are considered bloat, as the
 //! real world performance benefit hasn't been demonstrated. Note that any type with expensive clone
-//! could just internally use `Arc` to make it cheap again. Usually one can already write equations
+//! could just internally use `Arc` or `Cow` to make it cheap again. Usually one can already write equations
 //! optimal with non-mixed operations. Moreover, no crates (should) depend on having the mixed operators.
 //! Similarly the assign operators like `AssignAdd` are implemented based on the reference `Add` operation.
 //! This is done without cloning thanks to [take_mut].
+//! 
+//! Whenever deciding between precision and performance, the question of *what is required more frequently*
+//! and *what can be implemented outside of this library* is asked. E.g. the [Ratio] type does expensive
+//! canceling to get the most range out of its integers, whereas [Complex] doesn't do that, as it's usually
+//! used with floats.
 //! 
 //! The resulting [Complex] and [Ratio] types are slightly different in some places, but largely compatible with `num`.
 //! E.g. The multiplicative inverse on these commutative fields is called `recip` instead of `inv`, as some type might be an invertible
@@ -63,6 +72,7 @@
 //! - Hide approximation from floats for rational and sqrt types behind a feature flag.
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
 //! - It appears, that the reference implementation need to use the non reference implementations to avoid recursive trait evaluations. Check this again! Otherwise switch to using the optimal operations.
+//! - Rename NumAnalytic to NumElementary, as that is more fitting
 
 #![no_std]
 
@@ -74,6 +84,8 @@ mod from;
 mod power;
 pub mod complex;
 mod float;
+#[cfg(feature = "quaternion")]
+pub mod quaternion;
 
 pub use num::*;
 pub use from::*;

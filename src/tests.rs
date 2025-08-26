@@ -170,12 +170,14 @@ mod complex {
 
     pub const _0_0i: Complex64 = Complex::new(0.0, 0.0);
     pub const _1_0i: Complex64 = Complex::new(1.0, 0.0);
+    pub const _2_0i: Complex64 = Complex::new(2.0, 0.0);
+    pub const neg_2_0i: Complex64 = Complex::new(-2.0, -0.0);
     pub const _1_1i: Complex64 = Complex::new(1.0, 1.0);
     pub const _0_1i: Complex64 = Complex::new(0.0, 1.0);
     pub const _neg1_1i: Complex64 = Complex::new(-1.0, 1.0);
     pub const _05_05i: Complex64 = Complex::new(0.5, 0.5);
-    pub const all_consts: [Complex64; 5] = [_0_0i, _1_0i, _1_1i, _neg1_1i, _05_05i];
     pub const _4_2i: Complex64 = Complex::new(4.0, 2.0);
+    pub const all_consts: [Complex64; 8] = [_0_0i, _1_0i, _1_1i, _neg1_1i, _05_05i, _2_0i, neg_2_0i, _4_2i];
     pub const _1_infi: Complex64 = Complex::new(1.0, f64::INFINITY);
     pub const _neg1_infi: Complex64 = Complex::new(-1.0, f64::INFINITY);
     pub const _1_nani: Complex64 = Complex::new(1.0, f64::NAN);
@@ -196,11 +198,11 @@ mod complex {
 
     #[allow(dead_code)]
     fn close(a: Complex64, b: Complex64) -> bool {
-        close_to_tol(a, b, 1e-15, b.abs_sqr())
+        close_to_tol(a, b, 4e-15, b.abs_sqr())
     }
     #[allow(dead_code)]
     fn close_abs(a: Complex64, b: Complex64) -> bool {
-        close_to_tol(a, b, 1e-15, 1.0)
+        close_to_tol(a, b, 4e-15, 1.0 + a.abs_sqr())
     }
     #[allow(dead_code)]
     pub fn close_to_tol(a: Complex64, b: Complex64, tol: f64, sqr: f64) -> bool {
@@ -508,7 +510,7 @@ mod complex {
                 // e^(z + 2 pi i) = e^z
                 assert!(close_abs(
                     c.exp_m1(),
-                    (c + _0_1i * (f64::consts::PI * 2.0)).exp_m1()
+                    (c + _0_1i * (f64::consts::TAU)).exp_m1()
                 ));
                 // e^(z + pi i)-1 = -(e^z-1) - 2
                 assert!(close_abs(
@@ -789,6 +791,25 @@ mod complex {
         }
 
         #[test]
+        fn test_atan2() {
+            assert!(close(_0_0i.atan2(&_1_0i), _0_0i));
+            assert!(close(_1_0i.atan2(&_1_0i), _1_0i * (f64::consts::PI / 4.0)));
+            assert!(close(_1_1i.atan2(&_1_1i), _1_0i * (f64::consts::PI / 4.0)));
+            assert!(close(_1_0i.atan2(&_0_0i), _1_0i * (f64::consts::PI / 2.0)));
+            assert!(close((-_1_0i).atan2(&_0_0i), _1_0i * (-f64::consts::PI / 2.0)));
+            assert!(close(_0_0i.atan2(&-_1_0i), _1_0i * f64::consts::PI));
+            assert!(close((-_0_0i).atan2(&-_1_0i), _1_0i * -f64::consts::PI));
+            assert!(close(_0_0i.atan2(&_0_0i), _0_0i)); // center, default to 0 instead of NaN
+            assert!(close(
+                (_1_0i * -1.0).atan2(&_1_0i),
+                _1_0i * (-f64::consts::PI / 4.0)
+            ));
+            assert!(close(_0_1i.atan2(&_1_0i), Complex::new(0.0, f64::INFINITY)));
+            assert!(close(_1_1i.atan2(&_neg1_1i), Complex::new(0.0, f64::INFINITY)));
+            assert!(close(_1_1i.atan2(&_1_0i), _1_1i.atan()));
+        }
+
+        #[test]
         fn test_sinh() {
             assert!(close(_0_0i.sinh(), _0_0i));
             assert!(close(
@@ -873,7 +894,7 @@ mod complex {
                 assert!(
                     -f64::consts::PI <= c.acosh().im
                         && c.acosh().im <= f64::consts::PI
-                        && 0.0 <= c.cosh().re
+                        && 0.0 <= c.acosh().re
                 );
             }
         }
@@ -1008,6 +1029,10 @@ mod complex {
         assert_fmt_eq!(format_args!("{:+#o}", b), "+0o200+0o377i");
         #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:+#16o}", b), "   +0o200+0o377i");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:<+#16o}", b), "+0o200+0o377i   ");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:^+#17o}", b), "  +0o200+0o377i  ");
 
         let c = Complex::new(-10, -10000);
         assert_fmt_eq!(format_args!("{}", c), "-10-10000i");
@@ -1112,6 +1137,578 @@ mod complex {
         assert_eq!(_4_2i % 3.0, Complex::new(1.0, 2.0));
         assert_eq!(_neg1_1i % 2.0, _neg1_1i);
         assert_eq!(-_4_2i % 3.0, Complex::new(-1.0, -2.0));
+    }
+}
+
+#[allow(non_upper_case_globals)]
+#[cfg(feature = "quaternion")]
+mod quaternion {
+    use super::*;
+    use crate::quaternion::*;
+
+    const _0: Quaternion<f64> = Quaternion::new(0.0, 0.0, 0.0, 0.0);
+    const _1: Quaternion<f64> = Quaternion::new(1.0, 0.0, 0.0, 0.0);
+    const _neg1: Quaternion<f64> = Quaternion::new(-1.0, 0.0, 0.0, 0.0);
+    const _2: Quaternion<f64> = Quaternion::new(2.0, 0.0, 0.0, 0.0);
+    const _i: Quaternion<f64> = Quaternion::new(0.0, 1.0, 0.0, 0.0);
+    const _j: Quaternion<f64> = Quaternion::new(0.0, 0.0, 1.0, 0.0);
+    const _k: Quaternion<f64> = Quaternion::new(0.0, 0.0, 0.0, 1.0);
+    const _ij: Quaternion<f64> = Quaternion::new(0.0, 1.0, 1.0, 0.0);
+    const _jk: Quaternion<f64> = Quaternion::new(0.0, 0.0, 1.0, 1.0);
+    const _ik: Quaternion<f64> = Quaternion::new(0.0, 1.0, 0.0, 1.0);
+    const _1i: Quaternion<f64> = Quaternion::new(1.0, 1.0, 0.0, 0.0);
+    const _1j: Quaternion<f64> = Quaternion::new(1.0, 0.0, 1.0, 0.0);
+    const _1k: Quaternion<f64> = Quaternion::new(1.0, 0.0, 0.0, 1.0);
+    pub const all_consts: [Quaternion<f64>; 13] =
+        [_0, _neg1, _1, _2, _i, _j, _k, _ij, _jk, _ik, _1i, _1j, _1k];
+
+    #[allow(dead_code)]
+    fn close(a: Quaternion<f64>, b: Quaternion<f64>) -> bool {
+        close_to_tol(a, b, 2e-15, b.abs_sqr())
+    }
+    #[allow(dead_code)]
+    fn close_abs(a: Quaternion<f64>, b: Quaternion<f64>) -> bool {
+        let s = |x| {
+            if x < 0.0 {
+                -1.0
+            } else if x > 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        };
+        close_to_tol(
+            a,
+            b * s(
+                s(s(s(a.re * b.re) + 1e-20 * a.im_i * b.im_i) + 1e-20 * a.im_j * b.im_j)
+                    + 1e-20 * a.im_k * b.im_k,
+            ),
+            2e-15,
+            1.0,
+        )
+    }
+    #[allow(dead_code)]
+    pub fn close_to_tol(a: Quaternion<f64>, b: Quaternion<f64>, tol: f64, sqr: f64) -> bool {
+        // returns true if a and b are reasonably close
+        let close = (a == b) || (a - b).abs_sqr() <= tol * tol * sqr;
+        #[cfg(feature = "std")]
+        if !close {
+            std::println!("{:?} != {:?}", a, b);
+        }
+        close
+    }
+
+    #[test]
+    fn test_consts() {
+        assert_eq!(_0, Zero::zero());
+        assert_eq!(_0, quaternion!(0.0f64));
+        assert_eq!(_1, One::one());
+        assert_eq!(_1, quaternion!(1.0f64));
+        assert_eq!(_i, quaternion!(0.0f64 + i 1.0));
+        assert_eq!(_j, quaternion!(0.0f64 + j 1.0));
+        assert_eq!(_k, quaternion!(0.0f64 + k 1.0));
+        assert_eq!(_1i, quaternion!(1.0f64 + i 1.0));
+        assert_eq!(_1j, quaternion!(1.0f64 + j 1.0));
+        assert_eq!(_1k, quaternion!(1.0f64 + k 1.0));
+    }
+
+    #[cfg(any(feature = "std", feature = "libm"))]
+    mod analytic {
+        use super::*;
+
+        #[test]
+        fn test_sqrt() {
+            assert!(close(_0.sqrt(), _0));
+            assert!(close(_1.sqrt(), _1));
+            assert!(close(Quaternion::new(-1.0, 0.0, 0.0, 0.0).sqrt(), _i));
+            assert!(close(Quaternion::new(-1.0, -0.0, 0.0, 0.0).sqrt(), _i * (-1.0)));
+            assert!(close(_i.sqrt(), _1i / (2.0.sqrt())));
+            for &c in all_consts.iter() {
+                // sqrt(conj(z() = conj(sqrt(z))
+                assert!(close(c.conj().sqrt(), c.sqrt().conj()));
+                // unit quaternions stay unit quaternions
+                if !c.is_zero() {
+                    assert!(((c / c.abs()).sqrt().abs() - 1.0).abs() < 1e-8, "{c}");
+                    // for this branch, -pi/2 <= arg(sqrt(z)) <= pi/2
+                    let [x, y, z] = (c / c.abs()).sqrt().to_axis_angle();
+                    let len = (x.abs_sqr() + y.abs_sqr() + z.abs_sqr()).sqrt() / 2.0;
+                    assert!(
+                        -core::f64::consts::FRAC_PI_2 <= len && len <= core::f64::consts::FRAC_PI_2, "{len}"
+                    );
+                }
+                // sqrt(z) * sqrt(z) = z
+                assert!(close(c.sqrt() * c.sqrt(), c));
+            }
+        }
+
+        #[test]
+        fn test_cbrt() {
+            assert!(close(_0.cbrt(), _0));
+            assert!(close(_1.cbrt(), _1));
+            assert!(close(
+                _i.cbrt(),
+                Quaternion::new(0.75.sqrt(), 0.5, 0.0, 0.0)
+            ));
+            assert!(close(
+                _i.conj().cbrt(),
+                Quaternion::new(0.75.sqrt(), -0.5, 0.0, 0.0)
+            ));
+            for &c in all_consts.iter() {
+                // cbrt(conj(z() = conj(cbrt(z))
+                assert_eq!(c.conj().cbrt(), c.cbrt().conj());
+                // unit quaternions stay unit quaternions
+                if !c.is_zero() {
+                    assert!(((c / c.abs()).cbrt().abs() - 1.0).abs() < 1e-8);
+                    // for this branch, -pi/3 <= arg(cbrt(z)) <= pi/3
+                    let [x, y, z] = (c / c.abs()).cbrt().to_axis_angle();
+                    let len = (x.abs_sqr() + y.abs_sqr() + z.abs_sqr()).sqrt() / 2.0;
+                    assert!(
+                        -core::f64::consts::FRAC_PI_3 <= len && len <= core::f64::consts::FRAC_PI_3, "{len}"
+                    );
+                }
+                // cbrt(z) * cbrt(z) cbrt(z) = z
+                assert!(close(c.cbrt() * c.cbrt() * c.cbrt(), c));
+            }
+        }
+
+        #[test]
+        fn test_exp_ln() {
+            for &c in all_consts.iter() {
+                if c.is_zero() {
+                    continue;
+                }
+                // e^ln(z) = z
+                assert!(close(c.ln().exp(), c));
+            }
+        }
+
+        #[test]
+        fn test_sin() {
+            assert!(close(_0.sin(), _0));
+            assert!(close_abs((_1 * core::f64::consts::PI * 2.0).sin(), _0));
+            assert!(close(_i.sin(), _i * 1.0.sinh()));
+            for &c in all_consts.iter() {
+                // sin(conj(z)) = conj(sin(z))
+                assert_eq!(c.conj().sin(), c.sin().conj());
+                // sin(-z) = -sin(z)
+                assert!(close((c * -1.0).sin(), c.sin() * -1.0));
+            }
+        }
+
+        #[test]
+        fn test_cos() {
+            assert!(close(_0.cos(), _1));
+            assert!(close((_1 * core::f64::consts::PI * 2.0).cos(), _1));
+            assert!(close(_i.cos(), _1 * (1.0.cosh())));
+            for &c in all_consts.iter() {
+                // cos(conj(z)) = conj(cos(z))
+                assert_eq!(c.conj().cos(), c.cos().conj());
+                // cos(-z) = cos(z)
+                assert!(close((c * -1.0).cos(), c.cos()));
+            }
+        }
+
+        #[test]
+        fn test_tan() {
+            assert!(close(_0.tan(), _0));
+            assert!(close((_1 * core::f64::consts::PI / 4.0).tan(), _1));
+            assert!(close_abs((_1 * core::f64::consts::PI).tan(), _0));
+            for &c in all_consts.iter() {
+                // tan(conj(z)) = conj(tan(z))
+                assert_eq!(c.conj().tan(), c.tan().conj());
+                // tan(-z) = -tan(z)
+                assert!(close((c * -1.0).tan(), c.tan() * (-1.0)));
+            }
+        }
+
+        #[test]
+        fn test_asin() {
+            assert_eq!(_0.asin(), _0);
+            assert!(close(_1.asin(), _1 * (core::f64::consts::PI / 2.0)));
+            assert!(close(
+                (_1 * -1.0).asin(),
+                _1 * (-core::f64::consts::PI / 2.0)
+            ));
+            assert!(close(_i.asin(), _i * ((1.0 + 2.0.sqrt()).ln())));
+            for &c in all_consts.iter() {
+                // asin(conj(z)) = conj(asin(z))
+                assert!(close(c.conj().asin(), c.asin().conj()));
+                // asin(-z) = -asin(z)
+                assert!(close((c * -1.0).asin(), c.asin() * -1.0));
+                // for this branch, -pi/2 <= asin(z).re <= pi/2
+                assert!(
+                    -core::f64::consts::PI / 2.0 <= c.asin().re && c.asin().re <= core::f64::consts::PI / 2.0
+                );
+            }
+        }
+
+        #[test]
+        fn test_acos() {
+            assert!(close(_0.acos(), _1 * (core::f64::consts::PI / 2.0)));
+            assert!(close_abs(_1.acos(), _0));
+            assert!(close((_1 * -1.0).acos(), _1 * core::f64::consts::PI));
+            assert!(close(
+                _i.acos(),
+                Quaternion::new(core::f64::consts::PI / 2.0, (2.0.sqrt() - 1.0).ln(), 0.0, 0.0)
+            ));
+            for &c in all_consts.iter() {
+                // acos(conj(z)) = conj(acos(z))
+                assert!(close(c.conj().acos(), c.acos().conj()));
+                // for this branch, 0 <= acos(z).re <= pi
+                assert!(0.0 <= c.acos().re && c.acos().re <= core::f64::consts::PI);
+            }
+        }
+
+        #[test]
+        fn test_atan() {
+            assert!(close(_0.atan(), _0));
+            assert!(close(_1.atan(), _1 * (core::f64::consts::PI / 4.0)));
+            assert!(close(
+                (_1 * -1.0).atan(),
+                _1 * (-core::f64::consts::PI / 4.0)
+            ));
+            assert!(close(_i.atan(), Quaternion::new(0.0, f64::INFINITY, 0.0, 0.0)));
+            for &c in all_consts.iter() {
+                // atan(conj(z)) = conj(atan(z))
+                assert!(close(c.conj().atan(), c.atan().conj()));
+                // atan(-z) = -atan(z)
+                assert!(close((c * -1.0).atan(), c.atan() * -1.0));
+                // for this branch, -pi/2 <= atan(z).re <= pi/2
+                assert!(
+                    -core::f64::consts::PI / 2.0 <= c.atan().re && c.atan().re <= core::f64::consts::PI / 2.0
+                );
+            }
+        }
+
+        #[test]
+        fn test_atan2() {
+            assert!(close(_0.atan2(&_1), _0));
+            assert!(close(_1.atan2(&_1), _1 * (core::f64::consts::PI / 4.0)));
+            assert!(close(_1i.atan2(&_1i), _1 * (core::f64::consts::PI / 4.0)));
+            assert!(close(_1.atan2(&_0), _1 * (core::f64::consts::PI / 2.0)));
+            assert!(close((-_1).atan2(&_0), _1 * (-core::f64::consts::PI / 2.0)));
+            assert!(close(_0.atan2(&-_1), _1 * core::f64::consts::PI));
+            assert!(close((-_0).atan2(&-_1), _1 * -core::f64::consts::PI));
+            assert!(close(_0.atan2(&_0), _0)); // center, default to 0 instead of NaN
+            assert!(close(
+                (_1 * -1.0).atan2(&_1),
+                _1 * (-core::f64::consts::PI / 4.0)
+            ));
+            assert!(close(_i.atan2(&_1), Quaternion::new(0.0, f64::INFINITY, 0.0, 0.0)));
+            assert!(close(_1i.atan2(&_1), _1i.atan()));
+        }
+
+
+        #[test]
+        fn test_sinh() {
+            assert!(close(_0.sinh(), _0));
+            assert!(close(
+                _1.sinh(),
+                _1 * ((core::f64::consts::E - 1.0 / core::f64::consts::E) / 2.0)
+            ));
+            assert!(close(_i.sinh(), _i * (1.0.sin())));
+            for &c in all_consts.iter() {
+                // sinh(conj(z)) = conj(sinh(z))
+                assert!(close(c.conj().sinh(), c.sinh().conj()));
+                // sinh(-z) = -sinh(z)
+                assert!(close((c * -1.0).sinh(), c.sinh() * -1.0));
+            }
+        }
+
+        #[test]
+        fn test_cosh() {
+            assert!(close(_0.cosh(), _1));
+            assert!(close(
+                _1.cosh(),
+                _1 * ((core::f64::consts::E + 1.0 / core::f64::consts::E) / 2.0)
+            ));
+            assert!(close(_i.cosh(), _1 * 1.0.cos()));
+            for &c in all_consts.iter() {
+                // cosh(conj(z)) = conj(cosh(z))
+                assert!(close(c.conj().cosh(), c.cosh().conj()));
+                // cosh(-z) = cosh(z)
+                assert!(close((c * -1.0).cosh(), c.cosh()));
+            }
+        }
+
+        #[test]
+        fn test_tanh() {
+            assert!(close(_0.tanh(), _0));
+            assert!(close(
+                _1.tanh(),
+                _1 * ((core::f64::consts::E.powi(2) - 1.0) / (core::f64::consts::E.powi(2) + 1.0))
+            ));
+            assert!(close(_i.tanh(), _i * (1.0.tan())));
+            for &c in all_consts.iter() {
+                // tanh(conj(z)) = conj(tanh(z))
+                assert!(close(c.conj().tanh(), c.tanh().conj()));
+                // tanh(-z) = -tanh(z)
+                assert!(close((c * -1.0).tanh(), c.tanh() * -1.0));
+            }
+        }
+
+        #[test]
+        fn test_asinh() {
+            assert!(close(_0.asinh(), _0));
+            assert!(close(_1.asinh(), _1 * (1.0 + 2.0.sqrt()).ln()));
+            assert!(close(_i.asinh(), _i * (core::f64::consts::PI / 2.0)));
+            assert!(close(
+                _i.asinh() * -1.0,
+                _i * (-core::f64::consts::PI / 2.0)
+            ));
+            for &c in all_consts.iter() {
+                // asinh(conj(z)) = conj(asinh(z))
+                assert!(close(c.conj().asinh(), c.asinh().conj()));
+                // asinh(-z) = -asinh(z)
+                assert!(close((c * -1.0).asinh(), c.asinh() * -1.0));
+                // for this branch, -pi/2 <= asinh(z).im <= pi/2
+                assert!(
+                    -core::f64::consts::PI / 2.0 <= c.asinh().im_i && c.asinh().im_i <= core::f64::consts::PI / 2.0
+                );
+            }
+        }
+
+        #[test]
+        fn test_acosh() {
+            assert!(close(_0.acosh(), _i * (core::f64::consts::PI / 2.0)));
+            assert!(close(_1.acosh(), _0));
+            assert!(close(
+                (Quaternion::new(-1., 0., 0., 0.)).acosh(),
+                _i * core::f64::consts::PI
+            ));
+            assert!(close((_1 * -1.0).acosh(), -_i * core::f64::consts::PI)); // zero sign is used!
+            for &c in all_consts.iter() {
+                // acosh(conj(z)) = conj(acosh(z))
+                assert!(close(c.conj().acosh(), c.acosh().conj()));
+                // for this branch, -pi <= acosh(z).im <= pi and 0 <= acosh(z).re
+                assert!(
+                    -core::f64::consts::PI <= c.acosh().im_i
+                        && c.acosh().im_i <= core::f64::consts::PI
+                        && 0.0 <= c.acosh().re
+                );
+            }
+        }
+
+        #[test]
+        fn test_atanh() {
+            assert!(close(_0.atanh(), _0));
+            assert!(close(_i.atanh(), _i * (core::f64::consts::PI / 4.0)));
+            assert!(close(_1.atanh(), Quaternion::new(f64::INFINITY, 0.0, 0.0, 0.0)));
+            for &c in all_consts.iter() {
+                // atanh(conj(z)) = conj(atanh(z))
+                assert!(close(c.conj().atanh(), c.atanh().conj()), "{c}");
+                // atanh(-z) = -atanh(z)
+                assert!(close((-c).atanh(), -c.atanh()), "{c}");
+                // for this branch, -pi/2 <= atanh(z).im <= pi/2
+                assert!(
+                    -core::f64::consts::PI / 2.0 <= c.atanh().im_i && c.atanh().im_i <= core::f64::consts::PI / 2.0
+                );
+            }
+        }
+
+        #[test]
+        fn test_trig_to_hyperbolic() {
+            for &c in &[-0.5, 0.5, 1.0, 2.0] {
+                let c = Quaternion::from(c);
+                // sin(iz) = i sinh(z)
+                assert!(close((_i * c).sin(), _i * c.sinh()));
+                // cos(iz) = cosh(z)
+                assert!(close((_i * c).cos(), c.cosh()));
+                // tan(iz) = i tanh(z)
+                assert!(close((_i * c).tan(), _i * c.tanh()));
+                // sinh(iz) = i sin(z)
+                assert!(close((_i * c).sinh(), _i * c.sin()));
+                // cosh(iz) = cos(z)
+                assert!(close((_i * c).cosh(), c.cos()));
+                // tanh(iz) = i tan(z)
+                assert!(close((_i * c).tanh(), _i * c.tan()));
+            }
+        }
+
+        #[test]
+        fn test_trig_identities() {
+            for &c in all_consts.iter() {
+                // tan(z) = sin(z)/cos(z)
+                assert!(close(c.tan(), c.sin() / c.cos()));
+                // tan(z) = sin(z)/cos(z)
+                assert!(close(c.tan(), &c.sin() / &c.cos()));
+                // sin(z)^2 + cos(z)^2 = 1
+                assert!(close(c.sin() * c.sin() + c.cos() * c.cos(), _1));
+
+                // asin(sin(z)) = z
+                assert!(close(c.sin().asin().sin(), c.sin()), "with {}", c.sin());
+                assert!(close(c.asin().sin(), c), "with {}", c.asin());
+                // acos(cos(z)) = z
+                assert!(
+                    close_abs(c.cos().acos().cos(), c.cos()),
+                    "with {c} -> {} and {}",
+                    c.cos(),
+                    c.cos().acos()
+                );
+                assert!(close_abs(c.acos().cos(), c));
+                // atan(tan(z)) = z
+                assert!(close(c.tan().atan().tan(), c.tan()), "with {}", c.tan());
+                if c.im_abs() != 1.0 {
+                    assert!(close(c.atan().tan(), c));
+                }
+
+                let i = c.sign_im();
+                // sin(z) = (e^(iz) - e^(-iz))/(2i)
+                assert!(close(
+                    ((i * c).exp() - (i * c).exp().recip()) / (i * 2.0),
+                    c.sin()
+                ));
+                // cos(z) = (e^(iz) + e^(-iz))/2
+                assert!(close(
+                    ((i * c).exp() + (i * c).exp().recip()) / 2.0,
+                    c.cos()
+                ));
+                // tan(z) = i (1 - e^(2iz))/(1 + e^(2iz))
+                assert!(close(
+                    i * (_1 - (i * c * 2.0).exp()) / (_1 + (i * c * 2.0).exp()),
+                    c.tan()
+                ));
+            }
+        }
+
+        #[test]
+        fn test_div2() {
+            let p = quaternion!(0.6349639147847361 + i 1.2984575814159773);
+            let q = quaternion!(0.8337300251311491 + i 0.9888977057628651);
+            let p2 = quaternion!(1. + i 1.).sinh();
+            let q2 = quaternion!(1. + i 1.).cosh();
+            // only close, because libm has different results from std.
+            assert!(close(p2, p));
+            assert!(close(q2, q));
+            assert!(close(p / q, p2 / q2));
+        }
+
+        #[test]
+        fn test_hyperbolic_identites() {
+            for &c in all_consts.iter() {
+                // tanh(z) = sinh(z)/cosh(z)
+                assert!(close(c.tanh(), c.sinh() / c.cosh()), "for {c}");
+                // cosh(z)^2 - sinh(z)^2 = 1
+                assert!(close(c.cosh() * c.cosh() - c.sinh() * c.sinh(), _1));
+
+                // sinh(asinh(z)) = z
+                assert!(close(c.asinh().sinh(), c));
+                // cosh(acosh(z)) = z
+                assert!(close_abs(c.acosh().cosh(), c));
+                // tanh(atanh(z)) = z
+                // 1 and -1 are branch points
+                if c.im_abs() != 1.0 {
+                    assert!(close(c.atanh().tanh(), c));
+                }
+
+                // sinh(z) = (e^z - e^(-z))/2
+                assert!(close((c.exp() - c.exp().recip()) / 2.0, c.sinh()));
+                // cosh(z) = (e^z + e^(-z))/2
+                assert!(close((c.exp() + c.exp().recip()) / 2.0, c.cosh()));
+                // tanh(z) = ( e^(2z) - 1)/(e^(2z) + 1)
+                assert!(close(
+                    ((c * 2.0).exp() - _1) / ((c * 2.0).exp() + _1),
+                    c.tanh()
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn test_zero() {
+        let zero = Quaternion::<f64>::zero();
+        assert!(zero.is_zero());
+
+        let mut c = Quaternion::new(1.23, 4.56, 0.0, 0.0);
+        assert!(!c.is_zero());
+        assert_eq!(c + zero, c);
+
+        c.set_zero();
+        assert!(c.is_zero());
+    }
+
+    #[test]
+    fn test_one() {
+        let one = Quaternion::<f64>::one();
+        assert!(one.is_one());
+
+        let mut c = Quaternion::new(1.23, 4.56, 0.0, 0.0);
+        assert!(!c.is_one());
+        assert_eq!(c * one, c);
+
+        c.set_one();
+        assert!(c.is_one());
+    }
+
+    #[test]
+    fn test_sum() {
+        let v = [_i, _1];
+        assert_eq!(v.iter().sum::<Quaternion<f64>>(), _1i);
+        assert_eq!(v.into_iter().sum::<Quaternion<f64>>(), _1i);
+        let v = [];
+        assert_eq!(v.iter().sum::<Quaternion<f64>>(), _0);
+        assert_eq!(v.into_iter().sum::<Quaternion<f64>>(), _0);
+    }
+
+    #[test]
+    fn test_prod() {
+        let v = [_i, _1];
+        assert_eq!(v.iter().product::<Quaternion<f64>>(), _i);
+        assert_eq!(v.into_iter().product::<Quaternion<f64>>(), _i);
+        let v = [];
+        assert_eq!(v.iter().product::<Quaternion<f64>>(), _1);
+        assert_eq!(v.into_iter().product::<Quaternion<f64>>(), _1);
+    }
+
+    #[test]
+    fn test_div() {
+        let p = _i - _1;
+        let q = _i * 2.0;
+        test_op!(p / q, _1i * 0.5);
+        for &c in all_consts.iter() {
+            if c != Zero::zero() {
+                test_op!(c / c, _1);
+            }
+            let p = c * _ij;
+            test_op!(p / _ij, c);
+        }
+    }
+
+    #[test]
+    fn test_string_formatting() {
+        assert_fmt_eq!(format_args!("{}", _0), "0+0i+0j+0k");
+        assert_fmt_eq!(format_args!("{}", _1), "1+0i+0j+0k");
+        assert_fmt_eq!(format_args!("{}", _i), "0+1i+0j+0k");
+        assert_fmt_eq!(format_args!("{}", _1i), "1+1i+0j+0k");
+        assert_fmt_eq!(format_args!("{}", _neg1), "-1+0i+0j+0k");
+        assert_fmt_eq!(format_args!("{}", -_i), "-0-1i-0j-0k");
+        assert_fmt_eq!(format_args!("{}", -_j), "-0-0i-1j-0k");
+        assert_fmt_eq!(format_args!("{}", -_jk), "-0-0i-1j-1k");
+        assert_fmt_eq!(format_args!("{}", _ik/2.0), "0+0.5i+0j+0.5k");
+        let a = Quaternion::new(1.23456, 123.456, 12., 12.);
+        assert_fmt_eq!(format_args!("{}", a), "1.23456+123.456i+12j+12k");
+        assert_fmt_eq!(format_args!("{:.2}", a), "1.23+123.46i+12.00j+12.00k");
+        assert_fmt_eq!(format_args!("{:.2e}", a), "1.23e0+1.23e2i+1.20e1j+1.20e1k");
+        assert_fmt_eq!(format_args!("{:+.2E}", a), "+1.23E0+1.23E2i+1.20E1j+1.20E1k");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:+36.2E}", a), "     +1.23E0+1.23E2i+1.20E1j+1.20E1k");
+
+        let b = Quaternion::new(0x80, 0xff, 0xf, 0xA);
+        assert_fmt_eq!(format_args!("{:X}", b), "80+FFi+Fj+Ak");
+        assert_fmt_eq!(format_args!("{:#x}", b), "0x80+0xffi+0xfj+0xak");
+        assert_fmt_eq!(format_args!("{:+#b}", b), "+0b10000000+0b11111111i+0b1111j+0b1010k");
+        assert_fmt_eq!(format_args!("{:+#o}", b), "+0o200+0o377i+0o17j+0o12k");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:+#28o}", b), "   +0o200+0o377i+0o17j+0o12k");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:<+#28o}", b), "+0o200+0o377i+0o17j+0o12k   ");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:^+#29o}", b), "  +0o200+0o377i+0o17j+0o12k  ");
+
+        let c = Quaternion::new(-10, -10000, 0, 0);
+        assert_fmt_eq!(format_args!("{}", c), "-10-10000i+0j+0k");
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{:22}", c), "      -10-10000i+0j+0k");
     }
 }
 

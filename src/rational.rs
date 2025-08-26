@@ -55,7 +55,6 @@ where
 {
     /// rounds to the next integer towards zero by dividing the numerator
     /// by the denominator and setting the new denominator to one.
-    #[inline]
     pub fn trunc(self) -> Self {
         if self.is_finite() {
             Self::from(&self.numer / &self.denom)
@@ -71,7 +70,6 @@ where
     /// Returns the fractional part of a number, with division rounded towards zero. (based on [Rem])
     ///
     /// Satisfies `self == self.trunc() + self.fract()`.
-    #[inline]
     pub fn fract(self) -> Ratio<T> {
         if self.is_finite() {
             Ratio::new_raw(&self.numer % &self.denom, self.denom)
@@ -130,7 +128,6 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
 }
 impl<T: Zero + Euclid + PartialEq> Ratio<T> {
     /// Returns true if the rational number can be written as a normal number (i.e. `self == self.trunc()`).
-    #[inline]
     pub fn is_integral(&self) -> bool {
         self.is_finite() && self.numer.div_rem_euclid(&self.denom).1.is_zero()
     }
@@ -404,6 +401,7 @@ impl<T: FromU64 + One> FromU64 for Ratio<T> {
 }
 
 impl<T: Conjugate> Conjugate for Ratio<T> {
+    #[inline(always)]
     fn conj(&self) -> Self {
         Self {
             numer: self.numer.conj(),
@@ -885,7 +883,6 @@ where
         }
         None
     }
-    #[inline]
     fn to_approx(&self) -> F {
         // not always safe to just compute it directly.
         // The unsafe case is, where the denominator is so big,
@@ -946,6 +943,7 @@ impl<T: Clone + Zero + Euclid + Hash> Hash for Ratio<T> {
 }
 
 #[cfg(feature = "std")]
+#[inline(always)]
 pub(crate) fn pad_expr(f: &mut fmt::Formatter<'_>, prefix: &str, buf: &str) -> fmt::Result {
     let mut width = buf.chars().count(); // this is why pad_integral doesn't work for me
 
@@ -1008,6 +1006,7 @@ pub(crate) fn pad_expr(f: &mut fmt::Formatter<'_>, prefix: &str, buf: &str) -> f
 }
 
 #[cfg(feature = "std")]
+#[inline(never)]
 fn fmt_ratio(
     f: &mut fmt::Formatter<'_>,
     numer_zero: bool,
@@ -1058,6 +1057,7 @@ fn fmt_ratio(
     pad_expr(f, prefix, pre_pad)
 }
 #[cfg(not(feature = "std"))]
+#[inline(never)]
 fn fmt_ratio(
     f: &mut fmt::Formatter<'_>,
     numer_zero: bool,
