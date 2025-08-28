@@ -54,21 +54,21 @@ impl<T: FromU64 + Neg<Output = T>> FromI64 for T {
     }
 }
 
-#[cfg(feature = "num-bigint")]
+#[cfg(feature = "ibig")]
 mod bigint {
     use super::*;
-    use num_bigint::*;
+    use ibig::*;
 
-    impl FromU64 for BigInt {
+    impl FromU64 for IBig {
         #[inline(always)]
         fn from_u64(value: u64) -> Self {
-            value.to_bigint().unwrap()
+            Self::from(value)
         }
     }
-    impl FromU64 for BigUint {
+    impl FromU64 for UBig {
         #[inline(always)]
         fn from_u64(value: u64) -> Self {
-            value.to_biguint().unwrap()
+            Self::from(value)
         }
     }
 }

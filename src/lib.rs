@@ -40,7 +40,7 @@
 //! - `quaternion` for the [Quaternion] type.
 //! - `rational` for the [Ratio] and [SqrtExt] types.
 //! - `bytemuck`
-//! - `num-bigint` to include trait implementations for it
+//! - `ibig` to include trait implementations for `ibig`
 //! - `serde`
 //! 
 //! # Testing Status
@@ -110,7 +110,7 @@ use self::{rational::*, extension::*};
 #[allow(unused_imports)] // they are for the docs
 use self::quaternion::*;
 #[allow(unused_imports)] // they are for the docs
-use self::{complex::*};
+use self::complex::*;
 
 #[cfg(test)]
 mod tests;

@@ -866,8 +866,16 @@ where
             _16 = _16.clone() * _16;
             _16 = _16.clone() * _16;
             let _16f: F = _16.to_approx();
-            // Note, this can lead to stack overflow, but not to an endless loop.
-            return Some(&Self::from_approx(value * _16f.clone(), tol * _16f.clone())? / &_16);
+            // do a loop instead of recursion to avoid stack overflows at all cost.
+            let mut normalized = value * _16f.clone();
+            let mut norm_tol = tol * _16f.clone();
+            let mut fac = _16.clone();
+            while !(F::one() / normalized.clone()).is_finite() {
+                normalized = normalized *  _16f.clone();
+                norm_tol = norm_tol * _16f.clone();
+                fac = fac * _16.clone();
+            }
+            return Some(&Self::from_approx(normalized, norm_tol)? / &fac);
         }
         let iter = DevelopContinuedFraction::new(value.clone()).continued_fraction(F::one());
         for x in iter {

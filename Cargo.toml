@@ -10,16 +10,7 @@ bytemuck = { version = "1.9", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, optional = true }
 # the following crate version is almost compatible, just that it unnecessarily depends on std.
 #checked = { version = "0.4", default-features = false, optional = true }
-
-[dependencies.num-bigint]
-optional = true          # needs std until Rust 1.36
-version = "*"
-default-features = false
-
-[dependencies.num-traits]
-optional = true
-version = "*"
-default-features = false
+ibig = { version = "0.3.6", default-features = false, optional = true }
 
 [features]
 default = ["std"]
@@ -28,7 +19,7 @@ libm = ["dep:libm"]
 rational = []
 quaternion = []
 bytemuck = ["dep:bytemuck"]
-num-bigint = ["dep:num-bigint", "dep:num-traits"]
+ibig = ["dep:ibig"]
 serde = ["dep:serde"]
 
 [package.metadata.docs.rs]

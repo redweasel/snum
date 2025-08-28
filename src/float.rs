@@ -116,7 +116,7 @@ impl ApproxFloat<f64> for f32 {
 
 // adapted from num_traits
 // returns f = mantissa * 2^exponent
-#[cfg(any(feature = "rational", feature = "num-bigint"))]
+#[cfg(any(feature = "rational", feature = "ibig"))]
 fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
     let bits: u32 = f.to_bits();
     let mut exponent: i16 = ((bits >> 23) & 0xff) as i16;
@@ -143,7 +143,7 @@ fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
 }
 // adapted from num_traits
 // returns f = mantissa * 2^exponent
-#[cfg(any(feature = "rational", feature = "num-bigint"))]
+#[cfg(any(feature = "rational", feature = "ibig"))]
 fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
     let bits: u64 = f.to_bits();
     let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
@@ -210,18 +210,18 @@ mod rational {
     impl_try_from!(f64, integer_decode_f64, i64, i128);
 }
 
-#[cfg(feature = "num-bigint")]
+#[cfg(feature = "ibig")]
 mod bigint {
     use super::*;
     macro_rules! impl_bigint {
-        ($float:ident, $integer_decode:ident, $from:ident) => {
+        ($float:ident, $integer_decode:ident) => {
             #[cfg(feature = "rational")]
-            impl From<$float> for Ratio<num_bigint::BigInt> {
+            impl From<$float> for Ratio<ibig::IBig> {
                 fn from(value: $float) -> Self {
                     let (mantissa, exponent, finite, zero_mantissa) = $integer_decode(value);
-                    let numer = num_bigint::BigInt::from(mantissa);
-                    let zero = num_bigint::BigInt::from(0i64);
-                    let one = num_bigint::BigInt::from(1i64);
+                    let numer = ibig::IBig::from(mantissa);
+                    let zero = ibig::IBig::from(0i64);
+                    let one = ibig::IBig::from(1i64);
                     if !finite && zero_mantissa {
                         Ratio {
                             numer: one * mantissa.signum(),
@@ -235,33 +235,35 @@ mod bigint {
                     } else if exponent <= 0 {
                         Ratio {
                             numer,
-                            denom: one << (-exponent) as u32,
+                            denom: one << (-exponent) as usize,
                         }
                     } else {
                         Ratio {
-                            numer: numer << exponent as u32,
+                            numer: numer << exponent as usize,
                             denom: one,
                         }
                     }
                 }
             }
 
-            impl ApproxFloat<$float> for num_bigint::BigInt {
+            impl ApproxFloat<$float> for ibig::IBig {
                 #[inline(always)]
                 fn to_approx(&self) -> $float {
-                    use num_traits::ToPrimitive;
-                    self.to_f64().unwrap() as $float
+                    self.to_f64() as $float
                 }
                 #[inline(always)]
                 fn from_approx(value: $float, tol: $float) -> Option<Self> {
-                    use num_traits::FromPrimitive;
+                    // in contrast to num_bigint, ibig doesn't have this functionallity build in.
                     let vf = value.round();
-                    let v = num_bigint::BigInt::$from(vf)?;
-                    ((vf - value).abs() <= tol).then_some(v)
+                    let (mantissa, exponent, finite, _) = $integer_decode(vf);
+                    if !finite || exponent < 0 || (vf - value).abs() > tol {
+                        return None;
+                    }
+                    Some(ibig::IBig::from(mantissa) << exponent as usize)
                 }
             }
         };
     }
-    impl_bigint!(f32, integer_decode_f32, from_f32);
-    impl_bigint!(f64, integer_decode_f64, from_f64);
+    impl_bigint!(f32, integer_decode_f32);
+    impl_bigint!(f64, integer_decode_f64);
 }

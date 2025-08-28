@@ -74,10 +74,10 @@ macro_rules! zero_one_impl {
 zero_one_impl!(usize, u8, u16, u32, u64, u128; 0, 1);
 zero_one_impl!(isize, i8, i16, i32, i64, i128; 0, 1);
 zero_one_impl!(f32, f64; 0.0, 1.0);
-#[cfg(feature = "num-bigint")]
-zero_one_impl!(num_bigint::BigInt; num_bigint::BigInt::from(0i8), num_bigint::BigInt::from(1i8));
-#[cfg(feature = "num-bigint")]
-zero_one_impl!(num_bigint::BigUint; num_bigint::BigUint::from(0u8), num_bigint::BigUint::from(1u8));
+#[cfg(feature = "ibig")]
+zero_one_impl!(ibig::IBig; ibig::IBig::from(0i8), ibig::IBig::from(1i8));
+#[cfg(feature = "ibig")]
+zero_one_impl!(ibig::UBig; ibig::UBig::from(0u8), ibig::UBig::from(1u8));
 
 /// Automatically implement [Zero] using [Default], assuming that they return the same value.
 /// Only use this, if constructing the default has no significant overhead.
@@ -225,8 +225,8 @@ macro_rules! impl_conjugate_real {
 impl_conjugate_real!(
     u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
 );
-#[cfg(feature = "num-bigint")]
-impl_conjugate_real!(num_bigint::BigInt, num_bigint::BigUint);
+#[cfg(feature = "ibig")]
+impl_conjugate_real!(ibig::IBig, ibig::UBig);
 
 impl<T: Clone> Conjugate for Wrapping<T> {
     #[inline(always)]
@@ -417,23 +417,21 @@ impl<T: Clone + Zero + Euclid> Euclid for Wrapping<T> {
     }
 }
 
-#[cfg(feature = "num-bigint")]
+#[cfg(feature = "ibig")]
 mod bigint {
     use crate::*;
-    // num_bigint is written based on num_traits
-    use num_traits::Signed;
 
-    impl Euclid for num_bigint::BigInt {
+    impl Euclid for ibig::IBig {
         fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
-            <Self as num_traits::Euclid>::div_rem_euclid(self, div)
+            <Self as ibig::ops::DivRemEuclid>::div_rem_euclid(self.clone(), div.clone())
         }
         fn is_valid_euclid(&self) -> bool {
-            !self.is_negative()
+            self >= &ibig::IBig::from(0)
         }
     }
-    impl Euclid for num_bigint::BigUint {
+    impl Euclid for ibig::UBig {
         fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
-            <Self as num_traits::Euclid>::div_rem_euclid(self, div)
+            <Self as ibig::ops::DivRemEuclid>::div_rem_euclid(self.clone(), div.clone())
         }
         fn is_valid_euclid(&self) -> bool {
             true
@@ -653,8 +651,8 @@ macro_rules! impl_into_discrete_int {
 impl_into_discrete_int!(
     u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
 );
-#[cfg(feature = "num-bigint")]
-impl_into_discrete_int!(num_bigint::BigInt, num_bigint::BigUint);
+#[cfg(feature = "ibig")]
+impl_into_discrete_int!(ibig::IBig, ibig::UBig);
 
 impl<T: Clone + PartialEq> IntoDiscrete for Wrapping<T>
 where
@@ -789,10 +787,10 @@ macro_rules! num_float_type {
 int_num_type!(i8, i16, i32, i64, i128, isize; (|x| x == &1 || x == &-1));
 int_num_type!(u8, u16, u32, u64, u128, usize; (|x| x == &1));
 num_float_type!(f32, f64);
-#[cfg(feature = "num-bigint")]
-int_num_type!(num_bigint::BigInt, {0}; |x: &num_bigint::BigInt| x.is_one() || (-x).is_one());
-#[cfg(feature = "num-bigint")]
-int_num_type!(num_bigint::BigUint, {0}; One::is_one);
+#[cfg(feature = "ibig")]
+int_num_type!(ibig::IBig, {0}; |x: &ibig::IBig| x.is_one() || (-x).is_one());
+#[cfg(feature = "ibig")]
+int_num_type!(ibig::UBig, {0}; One::is_one);
 
 impl<T: Num> Num for Wrapping<T>
 where

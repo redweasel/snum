@@ -1144,7 +1144,6 @@ mod complex {
 #[cfg(feature = "quaternion")]
 mod quaternion {
     use super::*;
-    use crate::quaternion::*;
 
     const _0: Quaternion<f64> = Quaternion::new(0.0, 0.0, 0.0, 0.0);
     const _1: Quaternion<f64> = Quaternion::new(1.0, 0.0, 0.0, 0.0);
@@ -1715,11 +1714,10 @@ mod quaternion {
 #[cfg(feature = "rational")]
 mod rational {
     use super::*;
-    use crate::complex::Complex;
-    #[cfg(feature = "num-bigint")]
-    use num_bigint::*;
-    #[cfg(feature = "num-bigint")]
-    type BigRational = Ratio<BigInt>;
+    #[cfg(feature = "ibig")]
+    use ibig::{IBig as IBig, UBig as UBig}; // note that choosing the names makes it library agnostic.
+    #[cfg(feature = "ibig")]
+    type BigRational = Ratio<IBig>;
     use crate::rational::Ratio;
     type Rational64 = Ratio<i64>;
 
@@ -1764,11 +1762,11 @@ mod rational {
     pub const _INF: Rational64 = Ratio::new_raw(1, 0);
     pub const _NEG_INF: Rational64 = Ratio::new_raw(-1, 0);
 
-    #[cfg(feature = "num-bigint")]
+    #[cfg(feature = "ibig")]
     pub fn to_big(n: Rational64) -> BigRational {
         Ratio::new_raw(
-            (n.numer).to_bigint().unwrap(),
-            (n.denom).to_bigint().unwrap(),
+            IBig::from(n.numer),
+            IBig::from(n.denom),
         )
     }
 
@@ -1964,7 +1962,7 @@ mod rational {
             }
         }
 
-        #[cfg(feature = "num-bigint")]
+        #[cfg(feature = "ibig")]
         {
             // test recursion limits
             let a = BigRational::new(
@@ -2015,27 +2013,27 @@ mod rational {
             assert!(a != b);
             // this next one is already 115 recursive calls deep
             let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640194710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918659764818204710348765103865981732091731441876457091".parse().unwrap());
-            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            let b = Ratio::new_raw(&a.numer + &IBig::one(), &a.denom + &IBig::one());
             assert!(a > b);
             assert!(a != b);
             // next: 184 recursive calls deep
             let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640110498471864871634871264917298419374547129369126471546537312391294687154894710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918129848913648716481270321798476735481146918349817439216351940424141246876659764818204710348765103865981732091731441876457091".parse().unwrap());
-            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            let b = Ratio::new_raw(&a.numer + &IBig::one(), &a.denom + &IBig::one());
             assert!(a > b);
             assert!(a != b);
             // 390
             let a = &a * &a;
-            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            let b = Ratio::new_raw(&a.numer + &IBig::one(), &a.denom + &IBig::one());
             assert!(a > b);
             assert!(a != b);
             // 728
             let a = &a * &a;
-            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            let b = Ratio::new_raw(&a.numer + &IBig::one(), &a.denom + &IBig::one());
             assert!(a > b);
             assert!(a != b);
             // probably ~1300
             let a = &a * &a;
-            let b = Ratio::new_raw(&a.numer + &BigInt::one(), &a.denom + &BigInt::one());
+            let b = Ratio::new_raw(&a.numer + &IBig::one(), &a.denom + &IBig::one());
             assert!(a > b);
             assert!(a != b);
         }
@@ -2181,7 +2179,7 @@ mod rational {
         fn test_add() {
             fn test(a: Rational64, b: Rational64, c: Rational64) {
                 test_op!(a + b, c);
-                #[cfg(feature = "num-bigint")]
+                #[cfg(feature = "ibig")]
                 assert_eq!(to_big(a) + to_big(b), to_big(c));
                 if b.denom == 1 {
                     let b = b.numer;
@@ -2221,7 +2219,7 @@ mod rational {
         fn test_sub() {
             fn test(a: Rational64, b: Rational64, c: Rational64) {
                 test_op!(a - b, c);
-                #[cfg(feature = "num-bigint")]
+                #[cfg(feature = "ibig")]
                 assert_eq!(to_big(a) - to_big(b), to_big(c));
                 if b.denom == 1 {
                     let b = b.numer;
@@ -2260,7 +2258,7 @@ mod rational {
         fn test_mul() {
             fn test(a: Rational64, b: Rational64, c: Rational64) {
                 test_op!(a * b, c);
-                #[cfg(feature = "num-bigint")]
+                #[cfg(feature = "ibig")]
                 assert_eq!(to_big(a) * to_big(b), to_big(c));
                 if b.denom == 1 {
                     let b = b.numer;
@@ -2325,7 +2323,7 @@ mod rational {
         fn test_div() {
             fn test(a: Rational64, b: Rational64, c: Rational64) {
                 test_op!(a / b, c);
-                #[cfg(feature = "num-bigint")]
+                #[cfg(feature = "ibig")]
                 assert_eq!(to_big(a) / to_big(b), to_big(c));
                 if b.denom == 1 {
                     let b = b.numer;
@@ -2384,7 +2382,7 @@ mod rational {
         fn test_rem() {
             fn test(a: Rational64, b: Rational64, c: Rational64) {
                 test_op!(a % b, c);
-                #[cfg(feature = "num-bigint")]
+                #[cfg(feature = "ibig")]
                 assert_eq!(to_big(a) % to_big(b), to_big(c));
                 if b.denom == 1 {
                     let b = b.numer;
@@ -2417,7 +2415,7 @@ mod rational {
         fn test_neg() {
             fn test(a: Rational64, b: Rational64) {
                 assert_eq!(-a, b);
-                #[cfg(feature = "num-bigint")]
+                #[cfg(feature = "ibig")]
                 assert_eq!(-to_big(a), to_big(b))
             }
 
@@ -2501,10 +2499,10 @@ mod rational {
         }
 
         #[test]
-        #[cfg(feature = "num-bigint")]
+        #[cfg(feature = "ibig")]
         fn test_bigint_euclid() {
-            let a: BigInt = "81204799147741".parse().unwrap();
-            let b: BigInt = "137498793161553".parse().unwrap();
+            let a: IBig = "81204799147741".parse().unwrap();
+            let b: IBig = "137498793161553".parse().unwrap();
             let r_ref = "81204799147741".parse().unwrap();
             let r_ref2 = "56293994013812".parse().unwrap();
             let (q, r) = a.div_rem_euclid(&b);
@@ -2517,15 +2515,15 @@ mod rational {
             assert!(q.is_one());
             assert_eq!(r, r_ref2);
             let (q, r) = (-&a).div_rem_euclid(&b);
-            assert_eq!(q, -BigInt::one());
+            assert_eq!(q, -IBig::one());
             assert_eq!(r, r_ref2);
             assert!(a.is_valid_euclid());
             assert!(b.is_valid_euclid());
             assert!(!(-a).is_valid_euclid());
             assert!(!(-b).is_valid_euclid());
-            assert!(BigInt::zero().is_valid_euclid());
-            let a: BigUint = "81204799147741".parse().unwrap();
-            let b: BigUint = "137498793161553".parse().unwrap();
+            assert!(IBig::zero().is_valid_euclid());
+            let a: UBig = "81204799147741".parse().unwrap();
+            let b: UBig = "137498793161553".parse().unwrap();
             let r_ref = "81204799147741".parse().unwrap();
             let (q, r) = a.div_rem_euclid(&b);
             assert!(q.is_zero());
@@ -2633,11 +2631,11 @@ mod rational {
     fn test_pow() {
         fn test(r: Rational64, e: i64, expected: Rational64) {
             assert_eq!(r.powi(e), expected);
-            #[cfg(feature = "num-bigint")]
+            #[cfg(feature = "ibig")]
             test_big(r, e, expected);
         }
 
-        #[cfg(feature = "num-bigint")]
+        #[cfg(feature = "ibig")]
         fn test_big(r: Rational64, e: i64, expected: Rational64) {
             let r = BigRational::new_raw(r.numer.into(), r.denom.into());
             let expected = BigRational::new_raw(expected.numer.into(), expected.denom.into());
@@ -2898,7 +2896,7 @@ mod rational {
     }
 
     #[test]
-    #[cfg(feature = "num-bigint")]
+    #[cfg(feature = "ibig")]
     fn test_big_ratio_to_f64() {
         assert_eq!(
             4115226303292181e29f64,
@@ -2910,30 +2908,30 @@ mod rational {
             )
             .to_approx()
         );
-        assert_eq!(5e-324f64, Ratio::<BigInt>::from(5e-324).to_approx());
+        assert_eq!(5e-324f64, Ratio::<IBig>::from(5e-324).to_approx());
         assert_eq!(
             5e-324f64,
-            Ratio::<BigInt>::from_approx(5e-324, 0.0)
+            Ratio::<IBig>::from_approx(5e-324, 0.0)
                 .unwrap()
                 .to_approx()
         );
         assert_eq!(
             // subnormal
             2.0f64.powi(-50).powi(21),
-            BigRational::new(BigInt::one(), BigInt::one() << 1050).to_approx(),
+            BigRational::new(IBig::one(), IBig::one() << 1050).to_approx(),
         );
         assert_eq!(
             // definite underflow
             0.0,
-            BigRational::new(BigInt::one(), BigInt::one() << 1100).to_approx(),
+            BigRational::new(IBig::one(), IBig::one() << 1100).to_approx(),
         );
         assert_eq!(
             core::f64::INFINITY,
-            BigRational::from(BigInt::one() << 1050).to_approx(),
+            BigRational::from(IBig::one() << 1050).to_approx(),
         );
         assert_eq!(
             core::f64::NEG_INFINITY,
-            BigRational::from((-BigInt::one()) << 1050).to_approx(),
+            BigRational::from((-IBig::one()) << 1050).to_approx(),
         );
         assert_eq!(
             1.2499999893125f64,
@@ -2945,13 +2943,13 @@ mod rational {
         );
         assert_eq!(
             core::f64::INFINITY,
-            BigRational::new_raw(BigInt::one(), BigInt::zero()).to_approx(),
+            BigRational::new_raw(IBig::one(), IBig::zero()).to_approx(),
         );
         assert_eq!(
             core::f64::NEG_INFINITY,
-            BigRational::new_raw(-BigInt::one(), BigInt::zero()).to_approx(),
+            BigRational::new_raw(-IBig::one(), IBig::zero()).to_approx(),
         );
-        let f: f32 = BigRational::new_raw(BigInt::zero(), BigInt::zero()).to_approx();
+        let f: f32 = BigRational::new_raw(IBig::zero(), IBig::zero()).to_approx();
         assert!(f.is_nan());
     }
 
@@ -3212,9 +3210,9 @@ mod extension {
     }
 
     #[test]
-    #[cfg(feature = "num-bigint")]
+    #[cfg(feature = "ibig")]
     fn test_archimedes_cattle_problem() {
-        type I = num_bigint::BigInt;
+        type I = ibig::IBig;
         // originally the problem was to find the fundamental solution in √410286423278424
         // however the square free factorisation yields: 410286423278424 = 4729494 * 9314^2
         let unit = SqrtExt::<I, Sqrt<I, 4729494>>::unit();
