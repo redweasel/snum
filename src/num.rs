@@ -270,7 +270,7 @@ pub trait NumAlgebraic: Num {
     /// Note that it's possible that `x.abs_sqr().sqrt() != x.abs()`, but `x.abs() * x.abs() = x.abs_sqr()` should always hold.
     #[must_use]
     fn abs(&self) -> Self::Real;
-    /// the sign/phase of a number, defined as `x.sign() = x / x.abs()` or one if `x.abs() == 0`.
+    /// the sign/phase of a number, defined as `x.sign() = x / x.abs()` or ±1 (unitary) if `x.abs() == 0`.
     /// This is defined globally to allow for more efficient (e.g. division free) implementations.
     #[must_use]
     fn sign(&self) -> Self;

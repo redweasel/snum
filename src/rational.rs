@@ -13,7 +13,7 @@ use crate::{
     DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete, float::ApproxFloat,
     num::*,
 };
-use crate::{FromU64, complex::Complex};
+use crate::{FromU64, Complex};
 
 /// A fraction, or rational number `p/q`.
 /// For anything useful, it requires the [Zero], [One] and [Euclid] traits

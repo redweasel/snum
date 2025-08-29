@@ -241,7 +241,7 @@ where
     for<'a> &'a T: Mul<Output = T>,
 {
     const CHAR: u64 = T::CHAR;
-    type Real = T::Real;
+    type Real = T;
     fn abs_sqr(&self) -> Self::Real {
         self.im_i.abs_sqr() + self.im_j.abs_sqr() + self.im_k.abs_sqr() + self.re.abs_sqr()
     }

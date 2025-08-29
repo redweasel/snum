@@ -440,7 +440,7 @@ where
     }
 }
 
-impl<T: NumElementary<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
+impl<T: NumElementary + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> {
     /// Calculate the principal Arg of self.
     #[inline(always)]
     pub fn arg(&self) -> T {
@@ -457,6 +457,11 @@ impl<T: NumElementary<Real = T> + Zero + Neg<Output = T> + Mul<T, Output = T>> C
     /// Convert a polar representation  `r * exp(i * theta)` into a complex number.
     pub fn from_polar(r: T, theta: T) -> Self {
         Self::new(r.clone() * theta.cos(), r * theta.sin())
+    }
+    /// Compute `cis(phase) := exp(i * phase)`, which is the more efficient version of `from_polar(1, phase)`.
+    /// "cis" is an acronym for "*cos i sin".
+    pub fn cis(phase: T) -> Self {
+        Self::new(phase.cos(), phase.sin())
     }
 }
 
@@ -833,64 +838,64 @@ where
 #[macro_export]
 macro_rules! complex {
     ($x:literal + $y:literal i) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     ($x:literal - $y:literal i) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     ($x:literal + $y:literal j) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     ($x:literal - $y:literal j) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     (($x:expr) + ($y:expr) i) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     (($x:expr) - ($y:expr) i) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     (($x:expr) + ($y:expr) j) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     (($x:expr) - ($y:expr) j) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     ($x:literal + ($y:expr) i) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     ($x:literal - ($y:expr) i) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     ($x:literal + ($y:expr) j) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     ($x:literal - ($y:expr) j) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     (($x:expr) + $y:literal i) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     (($x:expr) - $y:literal i) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     (($x:expr) + $y:literal j) => {
-        $crate::complex::Complex::new($x, $y)
+        $crate::Complex::new($x, $y)
     };
     (($x:expr) - $y:literal j) => {
-        $crate::complex::Complex::new($x, -$y)
+        $crate::Complex::new($x, -$y)
     };
     ($x:literal i) => {
-        $crate::complex::Complex::new($crate::Zero::zero(), $x)
+        $crate::Complex::new($crate::Zero::zero(), $x)
     };
     ($x:literal j) => {
-        $crate::complex::Complex::new($crate::Zero::zero(), $x)
+        $crate::Complex::new($crate::Zero::zero(), $x)
     };
     (($x:expr) i) => {
-        $crate::complex::Complex::new($crate::Zero::zero(), $x)
+        $crate::Complex::new($crate::Zero::zero(), $x)
     };
     (($x:expr) j) => {
-        $crate::complex::Complex::new($crate::Zero::zero(), $x)
+        $crate::Complex::new($crate::Zero::zero(), $x)
     };
     ($x:expr) => {
         $x.into()

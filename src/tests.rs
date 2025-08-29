@@ -161,6 +161,113 @@ fn test_gcd() {
     assert!(bezout(core::f64::consts::PI, core::f64::consts::E).1.abs() <= f64::EPSILON * 2.);
 }
 
+#[cfg(all(feature = "rand", feature = "quaternion"))]
+#[test]
+fn test_rand() {
+    use crate::rand::*;
+    use ::rand::*;
+    use ::rand::distr::*;
+    let mut rng = ::rand::rngs::SmallRng::seed_from_u64(0xF8A39B07);
+
+    // do a statistical tests with low sample number.
+    let mut count = 0;
+    let mut sum = 0.0f32;
+    for _ in 0..100 {
+        let x: f32 = rng.sample(StandardUniform);
+        let c: Complex<f32> = rng.sample(StandardUniform);
+        let q: Quaternion<f32> = rng.sample(StandardUniform);
+        assert!(0. <= x && x < 1.);
+        assert!(0. <= c.re && c.re < 1.);
+        assert!(0. <= c.im && c.im < 1.);
+        assert!(0. <= q.re && q.re < 1.);
+        assert!(0. <= q.im_i && q.im_i < 1.);
+        assert!(0. <= q.im_j && q.im_j < 1.);
+        assert!(0. <= q.im_k && q.im_k < 1.);
+        count += (x <= 0.5) as i32;
+        count += (c.re <= 0.5) as i32;
+        count += (c.im <= 0.5) as i32;
+        count += (q.re <= 0.5) as i32;
+        count += (q.im_i <= 0.5) as i32;
+        count += (q.im_j <= 0.5) as i32;
+        count += (q.im_k <= 0.5) as i32;
+        sum += x;
+        sum += c.re;
+        sum += c.im;
+        sum += q.re;
+        sum += q.im_i;
+        sum += q.im_j;
+        sum += q.im_k;
+    }
+    // count should be ~100/2*7=350
+    // at the time of testing this with the fixed seed, this has been 357
+    assert!(count.abs_diff(350) < 15, "got {count}"); // allow a small error
+    assert!((sum - 350.).abs() < 15., "got {sum}");
+
+    // do the same test for normally distributed numbers
+    let mut count = 0;
+    let mut max = 0.0f32;
+    let mut sum = 0.0f32;
+    for _ in 0..100 {
+        let x: f32 = rng.sample(StandardNormal);
+        let c: Complex<f32> = rng.sample(StandardNormal);
+        let q: Quaternion<f32> = rng.sample(StandardNormal);
+        count += (x <= 0.0) as i32;
+        count += (c.re <= 0.0) as i32;
+        count += (c.im <= 0.0) as i32;
+        count += (c.im * c.re <= 0.0) as i32; // this is also chance 1/2 and good to test!
+        count += (q.re <= 0.0) as i32;
+        count += (q.im_i <= 0.0) as i32;
+        count += (q.im_j <= 0.0) as i32;
+        count += (q.im_k <= 0.0) as i32;
+        max = max.max(x);
+        max = max.max(c.re);
+        max = max.max(c.im);
+        max = max.max(q.re);
+        max = max.max(q.im_i);
+        max = max.max(q.im_j);
+        max = max.max(q.im_k);
+        sum += x;
+        sum += c.re;
+        sum += c.im;
+        sum += q.re;
+        sum += q.im_i;
+        sum += q.im_j;
+        sum += q.im_k;
+    }
+    // count should be ~100/2*8=400
+    assert!(count.abs_diff(400) < 15, "got {count}"); // allow a small error
+    assert!(max > 2.5);
+    assert!(max < 10.);
+    assert!(sum.abs() < 30., "got {sum}");
+
+    // now check if the unitary numbers are properly unitary
+    let mut count = 0;
+    let mut sum_c = Complex::<f32>::zero();
+    let mut sum_q = Quaternion::<f32>::zero();
+    for _ in 0..100 {
+        let x: f32 = rng.sample(StandardUnitary);
+        let c: Complex<f32> = rng.sample(StandardUnitary);
+        let q: Quaternion<f32> = rng.sample(StandardUnitary);
+        assert_eq!(x.abs() - 1.0, 0.0);
+        assert!((c.abs() - 1.0).abs() < 2e-7);
+        assert!((q.abs() - 1.0).abs() < 2e-7);
+        count += (x <= 0.0) as i32;
+        count += (c.re <= 0.0) as i32;
+        count += (c.im <= 0.0) as i32;
+        count += (c.im * c.re <= 0.0) as i32; // this is also chance 1/2 and good to test!
+        count += (q.re <= 0.0) as i32;
+        count += (q.im_i <= 0.0) as i32;
+        count += (q.im_j <= 0.0) as i32;
+        count += (q.im_k <= 0.0) as i32;
+        sum_c += c;
+        sum_q += q;
+    }
+    // count should be ~100/2*8=400
+    assert!(count.abs_diff(400) < 15, "got {count}"); // allow a small error
+    assert!(sum_c.abs() < 15., "got {sum_c}");
+    assert!(sum_q.abs() < 15., "got {sum_q}");
+}
+
 #[allow(non_upper_case_globals)]
 mod complex {
     use super::*;
@@ -3589,6 +3696,51 @@ mod extension {
         type T = SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>>;
         let x = T::new(One::one(), One::one());
         assert_eq!("1+0i+√(5+0i)", std::format!("{x}"));
-        // TODO add more
+        let x = T::new(One::one(), Zero::zero());
+        assert_eq!("1+0i", std::format!("{x}"));
+        let x = T::new(complex!(-7 - 1 i), complex!(2 - 3 i));
+        assert_eq!("-7-1i+(2-3i)√(5+0i)", std::format!("{x}"));
+        let x = T::new(complex!(-7 - 1 i), complex!(-2 - 3 i));
+        assert_eq!("-7-1i+(-2-3i)√(5+0i)", std::format!("{x}"));
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    use super::*;
+    
+    #[test]
+    fn test_serde_complex() {
+        let c = complex!(1.7 + 2.4 i);
+        let s = serde_yaml::to_string(&c).unwrap();
+        let c2: Complex<f64> = serde_yaml::from_str(&s).unwrap();
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    #[cfg(feature = "quaternion")]
+    fn test_serde_quaternion() {
+        let c = quaternion!(1.7 + i 2.4 + j -1.3 + k 7.1);
+        let s = serde_yaml::to_string(&c).unwrap();
+        let c2: Quaternion<f64> = serde_yaml::from_str(&s).unwrap();
+        assert_eq!(c, c2);
+    }
+
+    #[test]
+    #[cfg(feature = "rational")]
+    fn test_serde_rational() {
+        let r = Ratio::new_raw(12, 4);
+        let s = serde_yaml::to_string(&r).unwrap();
+        let r2: Ratio<i32> = serde_yaml::from_str(&s).unwrap();
+        assert_eq!(r, r2);
+    }
+
+    #[test]
+    #[cfg(feature = "rational")]
+    fn test_serde_extension() {
+        let r = SqrtExt::<_, Sqrt<_, 5>>::new(12, 4);
+        let s = serde_yaml::to_string(&r).unwrap();
+        let r2: SqrtExt::<_, Sqrt<_, 5>> = serde_yaml::from_str(&s).unwrap();
+        assert_eq!(r, r2);
     }
 }

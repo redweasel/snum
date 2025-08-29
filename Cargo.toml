@@ -8,9 +8,14 @@ take_mut = { version = "0.2.2", default-features = false }
 libm = { version = "*", default-features = false, optional = true }
 bytemuck = { version = "1.9", default-features = false, optional = true }
 serde = { version = "1.0", default-features = false, optional = true }
+ibig = { version = "0.3.6", default-features = false, optional = true }
+rand = { version = "0.9", default-features = false, optional = true }
 # the following crate version is almost compatible, just that it unnecessarily depends on std.
 #checked = { version = "0.4", default-features = false, optional = true }
-ibig = { version = "0.3.6", default-features = false, optional = true }
+
+[dev-dependencies]
+serde_yaml = { version = "*" }
+rand = { version = "0.9", default-features = false, features = ["small_rng"] }
 
 [features]
 default = ["std"]
@@ -20,6 +25,7 @@ rational = []
 quaternion = []
 bytemuck = ["dep:bytemuck"]
 ibig = ["dep:ibig"]
+rand = ["dep:rand"]
 serde = ["dep:serde"]
 
 [package.metadata.docs.rs]

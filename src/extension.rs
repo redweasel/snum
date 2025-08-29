@@ -7,7 +7,6 @@ use core::marker::PhantomData;
 use core::ops::*;
 use take_mut::take;
 
-use crate::complex::Complex;
 use crate::rational::Ratio;
 use crate::*;
 
