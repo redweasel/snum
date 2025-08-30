@@ -78,7 +78,7 @@ where
         }
     }
 }
-impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
+impl<T: Cancel + core::fmt::Debug + PartialOrd> IntoDiscrete for Ratio<T> {
     type Output = T;
     /// rounds to the next integer towards -oo, using [Euclid].
     ///
@@ -111,12 +111,18 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
         }
         let mut t1 = self.floor();
         let mut t2 = t1.clone() + T::one();
+        let mut denom_abs = self.denom.clone();
         if self.denom < T::zero() {
             (t1, t2) = (t2, t1);
+            denom_abs = T::zero() - denom_abs;
         }
-        // TODO avoid this multiplication using continued fractions
-        let d1 = self.numer.clone() - t1.clone() * self.denom.clone();
-        let d2 = t2.clone() * self.denom.clone() - self.numer.clone();
+        let (d1, d2) = if self.numer < T::zero() {
+            let d2 = self.denom.clone() * t2.clone() - self.numer.clone();
+            (denom_abs - d2.clone(), d2)
+        } else {
+            let d1 = self.numer.clone() - self.denom.clone() * t1.clone();
+            (d1.clone(), denom_abs - d1)
+        };
         let ord = d1.partial_cmp(&d2).unwrap();
         if t1 >= T::zero() {
             // round up

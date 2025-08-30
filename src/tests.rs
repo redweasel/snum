@@ -167,7 +167,7 @@ fn test_rand() {
     use crate::rand::*;
     use ::rand::*;
     use ::rand::distr::*;
-    let mut rng = ::rand::rngs::SmallRng::seed_from_u64(0xF8A39B07);
+    let mut rng = ::rand::rngs::SmallRng::seed_from_u64(0xF8A39B09);
 
     // do a statistical tests with low sample number.
     let mut count = 0;
@@ -2841,15 +2841,13 @@ mod rational {
         let _large_rat7 = Ratio::new(1, i32::MIN + 1);
         let _large_rat8 = Ratio::new(1, i32::MAX);
 
-        // a couple of these are too close to handle by the still general trait bounds
-        // TODO there is algorithms to make it work though!
-        //assert_eq!(_large_rat1.round(), __1);
+        assert_eq!(_large_rat1.round(), __1);
         assert_eq!(_large_rat2.round(), __1);
-        //assert_eq!(_large_rat3.round(), __1);
-        //assert_eq!(_large_rat4.round(), __1);
+        assert_eq!(_large_rat3.round(), __1);
+        assert_eq!(_large_rat4.round(), __1);
         assert_eq!(_large_rat5.round(), -__1);
-        //assert_eq!(_large_rat6.round(), -__1);
-        //assert_eq!(_large_rat7.round(), __0);
+        assert_eq!(_large_rat6.round(), -__1);
+        assert_eq!(_large_rat7.round(), __0);
         assert_eq!(_large_rat8.round(), __0);
     }
 
