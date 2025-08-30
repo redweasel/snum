@@ -468,13 +468,14 @@ impl<T: NumElementary + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> 
 impl<T: Clone + Neg<Output = T>> Conjugate for Complex<T> {
     #[inline(always)]
     fn conj(&self) -> Self {
+        // treat T as real valued and don't cascade complex conjugation
         Complex {
             re: self.re.clone(),
             im: -self.im.clone(),
         }
     }
 }
-impl<T: Num<Real = T> + Zero + Neg<Output = T>> Num for Complex<T>
+impl<T: Num + Zero + Neg<Output = T>> Num for Complex<T>
 where
     for<'a> &'a T: AddMul<Output = T>,
 {
@@ -910,43 +911,17 @@ macro_rules! complex {
 #[inline(never)]
 fn fmt_re_im(
     f: &mut fmt::Formatter<'_>,
-    re_neg: bool,
-    im_neg: bool,
     real: fmt::Arguments<'_>,
     imag: fmt::Arguments<'_>,
-    prefix: &str,
 ) -> fmt::Result {
-    let sign = if re_neg {
-        "-"
-    } else if f.sign_plus() {
-        "+"
-    } else {
-        ""
-    };
-
-    if im_neg {
-        fmt_complex(
-            f,
-            format_args!(
-                "{}{pre}{re}-{pre}{im}i",
-                sign,
-                re = real,
-                im = imag,
-                pre = prefix
-            ),
-        )
-    } else {
-        fmt_complex(
-            f,
-            format_args!(
-                "{}{pre}{re}+{pre}{im}i",
-                sign,
-                re = real,
-                im = imag,
-                pre = prefix
-            ),
-        )
-    }
+    fmt_complex(
+        f,
+        format_args!(
+            "{re}{im}i",
+            re = real,
+            im = imag
+        ),
+    )
 }
 
 #[cfg(feature = "std")]
@@ -973,43 +948,74 @@ pub(crate) fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_
 }
 
 // string conversions
+// PartialOrd is required for the pretty printing in std mode.
 macro_rules! impl_display {
     ($Display: ident, $s: literal, $pre: literal) => {
         impl<T> fmt::$Display for Complex<T>
         where
-            T: fmt::$Display + Clone + Zero + PartialOrd + Sub<T, Output = T>,
+            T: fmt::$Display + Clone + Zero + Sub<T, Output = T>,
         {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let abs_re = if self.re < Zero::zero() {
-                    T::zero() - self.re.clone()
-                } else {
-                    self.re.clone()
-                };
-                let abs_im = if self.im < Zero::zero() {
-                    T::zero() - self.im.clone()
-                } else {
-                    self.im.clone()
-                };
-
-                let prefix = if f.alternate() { $pre } else { "" }; // TODO this is not quite right... e.g. take Complex<Ratio<i32>>
-                return if let Some(prec) = f.precision() {
-                    fmt_re_im(
-                        f,
-                        self.re < T::zero(),
-                        self.im < T::zero(),
-                        format_args!(concat!("{:.1$", $s, "}"), abs_re, prec),
-                        format_args!(concat!("{:.1$", $s, "}"), abs_im, prec),
-                        prefix,
-                    )
-                } else {
-                    fmt_re_im(
-                        f,
-                        self.re < T::zero(),
-                        self.im < T::zero(),
-                        format_args!(concat!("{:", $s, "}"), abs_re),
-                        format_args!(concat!("{:", $s, "}"), abs_im),
-                        prefix,
-                    )
+                return if f.alternate() { if f.sign_plus() {
+                    if let Some(prec) = f.precision() {
+                        fmt_re_im(
+                            f,
+                            format_args!(concat!("{:+#.1$", $s, "}"), self.re, prec),
+                            format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
+                        )
+                    } else {
+                        fmt_re_im(
+                            f,
+                            format_args!(concat!("{:+#", $s, "}"), self.re),
+                            format_args!(concat!("{:+#", $s, "}"), self.im),
+                        )
+                    }
+                }
+                else {
+                    if let Some(prec) = f.precision() {
+                        fmt_re_im(
+                            f,
+                            format_args!(concat!("{:#.1$", $s, "}"), self.re, prec),
+                            format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
+                        )
+                    } else {
+                        fmt_re_im(
+                            f,
+                            format_args!(concat!("{:#", $s, "}"), self.re),
+                            format_args!(concat!("{:+#", $s, "}"), self.im),
+                        )
+                    }
+                } } else {
+                    if f.sign_plus() {
+                        if let Some(prec) = f.precision() {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:+.1$", $s, "}"), self.re, prec),
+                                format_args!(concat!("{:+.1$", $s, "}"), self.im, prec),
+                            )
+                        } else {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:+", $s, "}"), self.re),
+                                format_args!(concat!("{:+", $s, "}"), self.im),
+                            )
+                        }
+                    }
+                    else {
+                        if let Some(prec) = f.precision() {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:.1$", $s, "}"), self.re, prec),
+                                format_args!(concat!("{:+.1$", $s, "}"), self.im, prec),
+                            )
+                        } else {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:", $s, "}"), self.re),
+                                format_args!(concat!("{:+", $s, "}"), self.im),
+                            )
+                        }
+                    }
                 };
             }
         }

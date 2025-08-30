@@ -240,8 +240,7 @@ impl<T: Clone> Conjugate for Wrapping<T> {
 /// To differentiate between signed and unsigned use `Num::Real: Neg<Output = Num::Real>`.
 /// To differentiate between real and complex, use `T: Num<Real = T>` and/or `Num: PartialOrd`.
 pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
-    // TODO think about this constraint. It makes a lot of things simpler and is probably reasonable, but it's not essential.
-    type Real: Num<Real = Self::Real>;
+    type Real: Num;
     /// characteristic of a number ring. Limited to u64. If it is bigger, or not known at compile time, it's considered 0.
     const CHAR: u64;
     /// real part of the number

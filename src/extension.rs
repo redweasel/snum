@@ -37,7 +37,7 @@ pub trait SqrtConst<T: Num> {
 pub struct Sqrt<T: FromU64, const N: u64>(PhantomData<T>); // not constructible
 impl<T: FromU64 + Num, const N: u64> SqrtConst<T> for Sqrt<T, N>
 where
-    T::Real: FromU64,
+    T::Real: Num<Real = T::Real> + FromU64,
 {
     type Real = Sqrt<T::Real, N>;
     const _TEST_SQRT: () = {
@@ -128,7 +128,7 @@ macro_rules! dynamic_sqrt_const {
         struct $name<T: FromU64>(*mut T); // no Send or Sync
         impl<T: FromU64 + Num> SqrtConst<T> for $name<T>
         where
-            T::Real: FromU64,
+            T::Real: Num<Real = T::Real> + FromU64,
         {
             type Real = $name<T::Real>;
             #[inline(always)]
@@ -366,7 +366,8 @@ where
 impl<T: Num + Cancel + IntoDiscrete + Neg<Output = T> + PartialOrd, E: SqrtConst<T>> IntoDiscrete
     for SqrtExt<T, E>
 where
-    <T as IntoDiscrete>::Output: fmt::Debug + IntoDiscrete<Output = <T as IntoDiscrete>::Output>
+    <T as IntoDiscrete>::Output: fmt::Debug
+        + IntoDiscrete<Output = <T as IntoDiscrete>::Output>
         + Add<Output = <T as IntoDiscrete>::Output>
         + Div<Output = <T as IntoDiscrete>::Output>,
 {
@@ -853,7 +854,8 @@ impl<'a, T: Num + Zero + One + Add<Output = T>, E: SqrtConst<T>> Product<&'a Sqr
 impl<T: Num + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>, E: SqrtConst<T>> Num
     for SqrtExt<T, E>
 where
-    T::Real: Add<Output = T::Real>
+    T::Real: Num<Real = T::Real>
+        + Add<Output = T::Real>
         + Mul<Output = T::Real>
         + Sub<Output = T::Real>
         + Neg<Output = T::Real>,
@@ -1085,8 +1087,16 @@ macro_rules! impl_formatting {
                             f,
                             self.value.is_zero(),
                             self.ext.is_one(),
-                            format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.value, prec=prec),
-                            format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.ext, prec=prec),
+                            format_args!(
+                                concat!("{:#.prec$", $fmt_str, "}"),
+                                self.value,
+                                prec = prec
+                            ),
+                            format_args!(
+                                concat!("{:#.prec$", $fmt_str, "}"),
+                                self.ext,
+                                prec = prec
+                            ),
                             format_args!(concat!("{:#", $fmt_str, "}"), E::sqr()),
                             $prefix,
                         )
@@ -1095,14 +1105,17 @@ macro_rules! impl_formatting {
                             f,
                             self.value.is_zero(),
                             self.ext.is_one(),
-                            format_args!(concat!("{:.prec$", $fmt_str, "}"), self.value, prec=prec),
-                            format_args!(concat!("{:.prec$", $fmt_str, "}"), self.ext, prec=prec),
+                            format_args!(
+                                concat!("{:.prec$", $fmt_str, "}"),
+                                self.value,
+                                prec = prec
+                            ),
+                            format_args!(concat!("{:.prec$", $fmt_str, "}"), self.ext, prec = prec),
                             format_args!(concat!("{:", $fmt_str, "}"), E::sqr()),
                             $prefix,
                         )
                     }
-                }
-                else {
+                } else {
                     if f.alternate() {
                         fmt_sqrtext(
                             f,

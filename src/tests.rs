@@ -1248,6 +1248,17 @@ mod complex {
         assert_eq!(_neg1_1i % 2.0, _neg1_1i);
         assert_eq!(-_4_2i % 3.0, Complex::new(-1.0, -2.0));
     }
+
+    #[test]
+    fn test_complex_complex() {
+        let cc1 = Complex::new(complex!(1 + 2 i), complex!(3 + 4 i));
+        let cc2 = Complex::new(complex!(5 + 6 i), complex!(7 + 8 i));
+        assert_eq!(cc1 * cc2, Complex::new(complex!(4 - 36 i), complex!(-18 + 60 i)));
+        assert_eq!(cc2 * cc1, Complex::new(complex!(4 - 36 i), complex!(-18 + 60 i)));
+        assert_eq!(cc2 * cc1 / cc1, cc2);
+        assert_eq!(cc1 * cc2 / cc2, cc1, "{}", cc1 * cc2); // testing Display impl
+        assert_eq!(cc1.abs_sqr(), complex!(-10 + 28 i)); // testing Num implementation
+    }
 }
 
 #[allow(non_upper_case_globals)]
@@ -2280,6 +2291,13 @@ mod rational {
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(2, 0)), "2∞");
         assert_fmt_eq!(format_args!("{:^6}", Ratio::new_raw(2, 0)), "  2∞  "); // centering with non unicode character
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(-2, 0)), "-2∞");
+        // test type combinations
+        #[cfg(feature = "std")]
+        assert_fmt_eq!(format_args!("{}", Ratio::new_raw(complex!(1 + 2 i), complex!(1 - 2 i))), "(1+2i)/(1-2i)");
+        let c = complex!((_1_3) + (_1_8) i);
+        assert_fmt_eq!(format_args!("{}", c), "1/3+1/8i");
+        assert_fmt_eq!(format_args!("{:+}", c), "+1/3+1/8i"); // TODO this looks a bit like 1/(8i), would be better to have parenthesis (1/8)i like in SqrtExt
+        assert_fmt_eq!(format_args!("{}", complex!((c) + (c) i)), "1/3+1/8i+1/3+1/8ii"); // TODO fix this! There is no good 
     }
 
     mod arith {

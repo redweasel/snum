@@ -767,7 +767,7 @@ impl<'a, T: Cancel> Product<&'a Ratio<T>> for Ratio<T> {
 
 impl<T: Num + Cancel> Num for Ratio<T>
 where
-    T::Real: Num + Cancel,
+    T::Real: Num<Real = T::Real> + Cancel,
     Ratio<T>: From<Ratio<T::Real>>,
 {
     type Real = Ratio<T::Real>;
@@ -806,7 +806,7 @@ where
 }
 impl<T: NumAlgebraic + Cancel> NumAlgebraic for Ratio<T>
 where
-    T::Real: Num + Cancel,
+    T::Real: Num<Real = T::Real> + Cancel,
     Ratio<T>: From<Ratio<T::Real>>,
 {
     fn abs(&self) -> Self::Real {
