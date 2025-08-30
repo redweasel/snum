@@ -1179,6 +1179,7 @@ mod complex {
         assert_fmt_eq!(format_args!("{:+#16o}", b), "   +0o200+0o377i");
         assert_fmt_eq!(format_args!("{:<+#16o}", b), "+0o200+0o377i   ");
         assert_fmt_eq!(format_args!("{:^+#17o}", b), "  +0o200+0o377i  ");
+        assert_fmt_eq!(format_args!("{:-^+#17o}", b), "--+0o200+0o377i--");
 
         let c = Complex::new(-10, -10000);
         assert_fmt_eq!(format_args!("{}", c), "-10-10000i");
@@ -1952,7 +1953,6 @@ mod quaternion {
         assert_fmt_eq!(format_args!("{:.2}", a), "1.23+123.46i+12.00j+12.00k");
         assert_fmt_eq!(format_args!("{:.2e}", a), "1.23e0+1.23e2i+1.20e1j+1.20e1k");
         assert_fmt_eq!(format_args!("{:+.2E}", a), "+1.23E0+1.23E2i+1.20E1j+1.20E1k");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:+36.2E}", a), "     +1.23E0+1.23E2i+1.20E1j+1.20E1k");
 
         let b = Quaternion::new(0x80, 0xff, 0xf, 0xA);
@@ -1960,17 +1960,14 @@ mod quaternion {
         assert_fmt_eq!(format_args!("{:#x}", b), "0x80+0xffi+0xfj+0xak");
         assert_fmt_eq!(format_args!("{:+#b}", b), "+0b10000000+0b11111111i+0b1111j+0b1010k");
         assert_fmt_eq!(format_args!("{:+#o}", b), "+0o200+0o377i+0o17j+0o12k");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:+#28o}", b), "   +0o200+0o377i+0o17j+0o12k");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:<+#28o}", b), "+0o200+0o377i+0o17j+0o12k   ");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:^+#29o}", b), "  +0o200+0o377i+0o17j+0o12k  ");
 
         let c = Quaternion::new(-10, -10000, 0, 0);
         assert_fmt_eq!(format_args!("{}", c), "-10-10000i+0j+0k");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:22}", c), "      -10-10000i+0j+0k");
+        assert_fmt_eq!(format_args!("{:->22}", c), "-------10-10000i+0j+0k");
     }
 }
 
@@ -2370,6 +2367,7 @@ mod rational {
         assert_fmt_eq!(format_args!("{:b}", _0), "0");
         assert_fmt_eq!(format_args!("{:#b}", _1_2), "0b1/0b10");
         assert_fmt_eq!(format_args!("{:10b}", _1_2), "      1/10");
+        assert_fmt_eq!(format_args!("{:->10b}", _1_2), "------1/10");
         assert_fmt_eq!(format_args!("{:#10b}", _1_2), "  0b1/0b10");
         assert_fmt_eq!(format_args!("{:010b}", _1_2), "0000001/10");
         assert_fmt_eq!(format_args!("{:#010b}", _1_2), "0b001/0b10");
@@ -3343,6 +3341,7 @@ mod extension {
         assert_fmt_eq!(format_args!("{:>5}", SQRT5), "   √5");
         assert_fmt_eq!(format_args!("{:<05}", 1), "00001"); // this is not nonsense! (in contrast to 0<5)
         assert_fmt_eq!(format_args!("{:>05}", SQRT5), "   √5"); // so this is also not nonsense.
+        assert_fmt_eq!(format_args!("{:0>5}", SQRT5), "000√5"); // zero as fill character
         assert_fmt_eq!(format_args!("{}", PHI), "1+√5");
         assert_fmt_eq!(format_args!("{}", PHI2), "1+√5");
         assert_fmt_eq!(format_args!("{}", -PHI), "-1-1√5");
@@ -3352,14 +3351,9 @@ mod extension {
         assert_fmt_eq!(format_args!("{:#}", RF), "1.5-2.7√5");
         assert_fmt_eq!(format_args!("{:.3}", RF), "1.500-2.700√5");
         assert_fmt_eq!(format_args!("{:#.3}", RF), "1.500-2.700√5");
-        #[cfg(feature = "std")]
-        {
-            // no public API for fill characters
-            assert_fmt_eq!(format_args!("{:0>5}", SQRT5), "000√5"); // zero as fill character
-            assert_fmt_eq!(format_args!("{:-^8b}", SQRT5), "--√101--");
-            assert_fmt_eq!(format_args!("{:-^#10b}", SQRT5), "--√0b101--");
-            assert_fmt_eq!(format_args!("{:.>5}", SQRT5), "...√5");
-        }
+        assert_fmt_eq!(format_args!("{:-^8b}", SQRT5), "--√101--");
+        assert_fmt_eq!(format_args!("{:-^#10b}", SQRT5), "--√0b101--");
+        assert_fmt_eq!(format_args!("{:.>5}", SQRT5), "...√5");
     }
 
     #[test]

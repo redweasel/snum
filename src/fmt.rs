@@ -6,7 +6,6 @@ pub struct NumberDetector {
     prefix_counter: usize,
     is_alphanum: bool,
     is_number: bool,
-    is_signable: bool,
     no_number_chars: &'static str,
     prefix: [char; 2],
     first: Option<char>,
@@ -22,7 +21,6 @@ impl NumberDetector {
             prefix_counter: 0,
             is_alphanum: true,
             is_number: true,
-            is_signable: true,
             no_number_chars,
             prefix: core::array::from_fn(|i| prefix.chars().skip(i).next().unwrap_or('\0')),
             first: None,
@@ -72,10 +70,6 @@ impl NumberDetector {
     pub fn starts_alphanumeric(&self) -> bool {
         self.first.map_or(false, |c| c.is_alphanumeric())
     }
-
-    pub fn is_signable(&self) -> bool {
-        self.is_signable && self.first.map_or(false, |c| c.is_alphanumeric())
-    }
 }
 
 impl fmt::Write for NumberDetector {
@@ -92,7 +86,6 @@ impl fmt::Write for NumberDetector {
                     }
                 }
                 self.is_alphanum &= c.is_ascii_alphanumeric();
-                self.is_signable &= c != '-' && c != '+'; // theoretically one would need to cound parenthesis to make this completely correct.
                 self.is_number &= !self.no_number_chars.contains(c);
             }
             self.width += 1;
@@ -107,7 +100,6 @@ impl fmt::Write for NumberDetector {
     }
 }
 
-#[allow(dead_code)]
 struct SkipWriteN<'a, 'b>(&'b mut fmt::Formatter<'a>, usize);
 
 impl<'a, 'b> fmt::Write for SkipWriteN<'a, 'b> {
@@ -135,75 +127,6 @@ impl<T: fmt::Display> fmt::Display for Parenthesis<T> {
     }
 }
 
-#[cfg(feature = "std")]
-#[inline(never)]
-pub fn pad_expr(
-    f: &mut fmt::Formatter<'_>,
-    prefix: &str,
-    buf_args: fmt::Arguments<'_>,
-) -> fmt::Result {
-    let buf = &std::format!("{buf_args}");
-    let mut width = buf.chars().count(); // this is why pad_integral doesn't work for me, as it just uses len()
-
-    let buf2 = buf.strip_prefix("-");
-    let minus = buf2.is_some();
-    let sign = if minus {
-        "-"
-    } else if f.sign_plus() {
-        width += 1;
-        "+"
-    } else {
-        ""
-    };
-    let buf_no_sign = buf2.unwrap_or(buf);
-
-    let buf2 = buf_no_sign.strip_prefix(prefix);
-    let prefix = if buf2.is_some() { prefix } else { "" };
-    let buf_no_prefix = buf2.unwrap_or(buf_no_sign);
-
-    // The `width` field is more of a `min-width` parameter at this point.
-    let min = f.width();
-    // check if it is a number
-    let number = buf_no_prefix
-        .chars()
-        .next()
-        .unwrap_or('0')
-        .is_ascii_alphanumeric();
-    let ascii = buf_no_prefix.chars().all(|c| c.is_ascii());
-    //std::println!("{width} vs {min:?}, {} {}", f.sign_aware_zero_pad(), number);
-    if width >= min.unwrap_or(0) {
-        // We're over the minimum width, so then we can just write the bytes.
-        f.write_str(sign)?;
-        f.write_str(buf_no_sign)
-    } else if f.sign_aware_zero_pad() && number && ascii {
-        // The sign and prefix goes before the padding if the fill character is zero
-        f.pad_integral(!minus, prefix, buf_no_prefix)
-    } else {
-        // Otherwise, the sign and prefix goes after the padding
-        //f.pad_integral(!minus, prefix, buf_no_prefix) // considers the string as ascii when computing the length :(
-        //f.pad(buf_sign) // precision is used for string cutoff :(
-        let buf_sign = if f.sign_plus() {
-            &std::format!("{sign}{buf_no_sign}")
-        } else {
-            buf // save allocation
-        };
-        // default to right alignment, pad defaults to left alignment
-        if f.precision().map_or(false, |p| p < width) || f.align().is_none() {
-            // drop the fill character to work around precision and wrong default alignment
-            let min = min.unwrap_or(1);
-            let align = f.align().unwrap_or(fmt::Alignment::Right);
-            match align {
-                fmt::Alignment::Right => write!(f, "{:>min$}", buf_sign),
-                fmt::Alignment::Center => write!(f, "{:^min$}", buf_sign),
-                fmt::Alignment::Left => write!(f, "{:<min$}", buf_sign),
-            }
-        } else {
-            f.pad(buf_sign)
-        }
-    }
-}
-
-#[cfg(not(feature = "std"))]
 #[inline(never)]
 pub fn pad_expr(
     f: &mut fmt::Formatter<'_>,
@@ -251,7 +174,7 @@ pub fn pad_expr(
         // Otherwise, the sign and prefix goes after the padding
         // drop the fill character to work around precision and wrong default alignment
         // (can't access the fill character from the public API)
-        let fill = ' ';
+        let fill = f.fill();
         let l = (min - width) / 2;
         let r = (min - width + 1) / 2;
         match align {
