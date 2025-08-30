@@ -2417,7 +2417,7 @@ mod rational {
         let c = complex!((_1_3) + (_1_8) i);
         assert_fmt_eq!(format_args!("{}", c), "1/3+1/8i");
         assert_fmt_eq!(format_args!("{:+}", c), "+1/3+1/8i"); // TODO this looks a bit like 1/(8i), would be better to have parenthesis (1/8)i like in SqrtExt
-        assert_fmt_eq!(format_args!("{}", complex!((c) + (c) i)), "1/3+1/8i+1/3+1/8ii"); // TODO fix this! There is no good 
+        assert_fmt_eq!(format_args!("{}", complex!((c) + (c) i)), "1/3+1/8i+1/3+1/8ii"); // TODO fix this! There is no clear way to fix it, but find something ok.
     }
 
     mod arith {

@@ -605,7 +605,7 @@ where
         let div = x + &(x * x + self * self).sqrt();
         let res = if div.is_zero() {
             // directly at the branchcut, decide for one side.
-            // TODO what happens here for complex values???
+            let div = (self * self).sqrt();
             T::zero().acos().copysign(&(self * &div.conj()).re()).into()
         } else {
             (self / &div).atan()

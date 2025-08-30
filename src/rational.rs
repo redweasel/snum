@@ -117,12 +117,13 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
         // TODO avoid this multiplication using continued fractions
         let d1 = self.numer.clone() - t1.clone() * self.denom.clone();
         let d2 = t2.clone() * self.denom.clone() - self.numer.clone();
+        let ord = d1.partial_cmp(&d2).unwrap();
         if t1 >= T::zero() {
             // round up
-            if d1 < d2 { t1 } else { t2 }
+            if ord == Ordering::Less { t1 } else { t2 }
         } else {
             // round down
-            if d1 <= d2 { t1 } else { t2 }
+            if ord != Ordering::Greater { t1 } else { t2 }
         }
     }
 }
