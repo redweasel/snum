@@ -120,6 +120,7 @@ where
     }
 }
 
+/// trait to shorten implementations on references. Don't use this for non reference types.
 pub trait AddMul:
     Sized + Add<Output = <Self as AddMul>::Output> + Mul<Output = <Self as AddMul>::Output>
 {
@@ -132,6 +133,7 @@ where
     type Output = T;
 }
 
+/// trait to shorten implementations on references. Don't use this for non reference types.
 pub trait AddMulSub:
     AddMul<Output = <Self as AddMulSub>::Output> + Sub<Output = <Self as AddMulSub>::Output>
 {
@@ -143,7 +145,7 @@ where
 {
     type Output = T;
 }
-
+/// trait to shorten implementations on references. Don't use this for non reference types.
 pub trait AddMulSubDiv:
     AddMulSub<Output = <Self as AddMulSubDiv>::Output> + Div<Output = <Self as AddMulSubDiv>::Output>
 {

@@ -161,29 +161,30 @@ impl_add!(Sub, sub);
 
 macro_rules! impl_mul_real {
     ($Mul: ident, $mul: ident) => {
-        impl<T> $Mul<T> for Quaternion<T>
-        where
-            for<'a> &'a T: $Mul<Output = T>,
+        impl<T: Clone + $Mul<Output = T>> $Mul<T> for Quaternion<T>
         {
             type Output = Quaternion<T>;
             fn $mul(self, rhs: T) -> Self::Output {
                 Self {
-                    im_i: self.im_i.$mul(&rhs),
-                    im_j: self.im_j.$mul(&rhs),
-                    im_k: self.im_k.$mul(&rhs),
-                    re: self.re.$mul(&rhs),
+                    im_i: self.im_i.$mul(rhs.clone()),
+                    im_j: self.im_j.$mul(rhs.clone()),
+                    im_k: self.im_k.$mul(rhs.clone()),
+                    re: self.re.$mul(rhs),
                 }
             }
         }
 
-        impl<'a, T: Clone + $Mul<Output = T>> $Mul<&'a T> for &'a Quaternion<T> {
+        impl<'a, T> $Mul<&'a T> for &'a Quaternion<T>
+        where
+            for<'b> &'b T: $Mul<Output = T>
+        {
             type Output = Quaternion<T>;
             fn $mul(self, rhs: &'a T) -> Self::Output {
                 Quaternion {
-                    im_i: self.im_i.clone().$mul(rhs.clone()),
-                    im_j: self.im_j.clone().$mul(rhs.clone()),
-                    im_k: self.im_k.clone().$mul(rhs.clone()),
-                    re: self.re.clone().$mul(rhs.clone()),
+                    im_i: self.im_i.$mul(rhs),
+                    im_j: self.im_j.$mul(rhs),
+                    im_k: self.im_k.$mul(rhs),
+                    re: self.re.$mul(rhs),
                 }
             }
         }
@@ -269,13 +270,11 @@ where
             + &rhs.im_j * &rhs.im_j
             + &rhs.im_k * &rhs.im_k
             + &rhs.re * &rhs.re;
-        self * rhs.conj() / abs_sqr
+        &(self * rhs.conj()) / &abs_sqr
     }
 }
-impl<
-    'a,
-    T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>,
-> Div for &'a Quaternion<T>
+impl<'a, T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>> Div
+    for &'a Quaternion<T>
 where
     for<'b> &'b T: Mul<Output = T>,
 {
@@ -285,7 +284,7 @@ where
             + &rhs.im_j * &rhs.im_j
             + &rhs.im_k * &rhs.im_k
             + &rhs.re * &rhs.re;
-        &(self.clone() * rhs.conj()) / &abs_sqr
+        self.clone() * rhs.conj() / abs_sqr
     }
 }
 impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T>> Quaternion<T>
@@ -297,57 +296,17 @@ where
             + &self.im_j * &self.im_j
             + &self.im_k * &self.im_k
             + &self.re * &self.re;
-        self.conj() / abs_sqr
+        &self.conj() / &abs_sqr
     }
 }
 
-// TODO reduce trait bounds!
-macro_rules! forward_assign_impl {
-    ($($AddAssign:ident, ($($Add:ident),*), $(($One:ident),)? $add_assign:ident, $add:ident),+) => {
-        $(impl<T: Clone $(+$One)? $(+ $Add<Output = T>)+> $AddAssign for Quaternion<T>
-        where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
-            fn $add_assign(&mut self, rhs: Quaternion<T>) {
-                take(self, |x| x.$add(rhs));
-            }
-        }
-        impl<T: Clone $(+$One)? $(+ $Add<Output = T>)+> $AddAssign<T> for Quaternion<T>
-        where for<'b> &'b T: Add<Output = T> $(+ $Add<Output = T>)+ {
-            fn $add_assign(&mut self, rhs: T) {
-                take(self, |x| x.$add(rhs));
-            }
-        }
-        impl<'a, T: Clone $(+$One)? $(+ $Add<Output = T>)+> $AddAssign<&'a Quaternion<T>> for Quaternion<T>
-        where for<'b> &'b T: Add<Output = T> $(+ $Add<Output = T>)+ {
-            fn $add_assign(&mut self, rhs: &'a Quaternion<T>) {
-                take(self, |x| (&x).$add(rhs));
-            }
-        }
-        impl<'a, T: Clone $(+$One)? $(+ $Add<Output = T>)+> $AddAssign<&'a T> for Quaternion<T>
-        where for<'b> &'b T: Add<Output = T> $(+ $Add<Output = T>)+ {
-            fn $add_assign(&mut self, rhs: &'a T) {
-                take(self, |x| (&x).$add(rhs));
-            }
-        })+
-    };
-}
+use crate::forward_assign_impl;
 forward_assign_impl!(
-    AddAssign,
-    (Add),
-    add_assign,
-    add,
-    SubAssign,
-    (Sub),
-    sub_assign,
-    sub,
-    MulAssign,
-    (Add, Mul, Sub),
-    mul_assign,
-    mul,
-    DivAssign,
-    (Neg, Add, Mul, Sub, Div),
-    (Conjugate),
-    div_assign,
-    div
+    Quaternion;
+    AddAssign, (Add), (), add_assign, add;
+    SubAssign, (Sub), (), sub_assign, sub;
+    MulAssign, (Mul), (Add, Sub), mul_assign, mul;
+    DivAssign, (Div), (Neg, Add, Sub), [Mul], div_assign, div;
 );
 
 impl<T: Zero> Sum for Quaternion<T> {
@@ -598,7 +557,7 @@ macro_rules! forward_function {
                 re: c.re,
             }
         }
-    }
+    };
 }
 
 // The following elementary functions can also be derived from SU(2) matrices.

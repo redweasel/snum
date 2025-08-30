@@ -63,11 +63,11 @@ where
         let two = one.clone() + one.clone();
         let one_c = Complex::new(one.clone(), one.clone());
         loop {
-            let a: Complex<T> = &(&rng.sample::<Complex<T>, _>(StandardUniform) * &two) - &one_c;
+            let a: Complex<T> = &(rng.sample::<Complex<T>, _>(StandardUniform) * two.clone()) - &one_c;
             let n = a.re.abs_sqr() + a.im.abs_sqr();
             // true with a chance of 79% (99% after 3 tries)
             if !n.is_zero() && n < one {
-                return &a / &n.sqrt();
+                return a / n.sqrt();
             }
         }
     }
@@ -83,8 +83,8 @@ where
         // There exist multiple algorithms, however random sampling a cube like for complex numbers
         // is not an option, due to its low success probability. However it can build upon the complex sampling.
         let u = rng.sample::<T, _>(StandardUniform);
-        let b = &rng.sample::<Complex<T>, _>(StandardUnitary) * &u.sqrt();
-        let a = &rng.sample::<Complex<T>, _>(StandardUnitary) * &(T::one() - u).sqrt(); // Note, this is never 0
+        let b = rng.sample::<Complex<T>, _>(StandardUnitary) * u.sqrt();
+        let a = rng.sample::<Complex<T>, _>(StandardUnitary) * (T::one() - u).sqrt(); // Note, this is never 0
         Quaternion::new(a.re, a.im, b.re, b.im)
     }
 }

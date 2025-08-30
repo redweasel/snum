@@ -50,9 +50,9 @@ where
     }
 }
 
-impl<T: Zero + One> One for Complex<T>
+impl<T: Zero + One + Sub<Output = T>> One for Complex<T>
 where
-    for<'a> &'a T: AddMulSub<Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     fn is_one(&self) -> bool {
         self.re.is_one() && self.im.is_zero()
@@ -126,7 +126,7 @@ macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
         impl<T> $Add<Complex<T>> for Complex<T>
         where
-            for<'a> &'a T: $Add<&'a T, Output = T>,
+            for<'a> &'a T: $Add<Output = T>,
         {
             type Output = Complex<T>;
             fn $add(self, rhs: Complex<T>) -> Self::Output {
@@ -150,15 +150,15 @@ macro_rules! impl_add {
 impl_add!(Add, add);
 impl_add!(Sub, sub);
 
-impl<T> Mul<Complex<T>> for Complex<T>
+impl<T: Add<Output = T> + Sub<Output = T>> Mul<Complex<T>> for Complex<T>
 where
-    for<'a> &'a T: AddMulSub<Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     type Output = Complex<T>;
     fn mul(self, rhs: Complex<T>) -> Self::Output {
         Self {
-            re: &(&self.re * &rhs.re) - &(&self.im * &rhs.im),
-            im: &(&self.im * &rhs.re) + &(&self.re * &rhs.im),
+            re: &self.re * &rhs.re - &self.im * &rhs.im,
+            im: &self.im * &rhs.re + &self.re * &rhs.im,
         }
     }
 }
@@ -176,23 +176,23 @@ impl<'a, T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>
 
 macro_rules! impl_add_real {
     ($Add: ident, $add: ident) => {
-        impl<T> $Add<T> for Complex<T>
-        where
-            for<'a> &'a T: $Add<&'a T, Output = T>,
-        {
+        impl<T: $Add<Output = T>> $Add<T> for Complex<T> {
             type Output = Complex<T>;
             fn $add(self, rhs: T) -> Self::Output {
                 Self {
-                    re: self.re.$add(&rhs),
+                    re: self.re.$add(rhs),
                     im: self.im,
                 }
             }
         }
-        impl<'a, T: Clone + $Add<T, Output = T>> $Add<&'a T> for &'a Complex<T> {
+        impl<'a, T: Clone> $Add<&'a T> for &'a Complex<T>
+        where
+            for<'b> &'b T: $Add<Output = T>
+        {
             type Output = Complex<T>;
             fn $add(self, rhs: &'a T) -> Self::Output {
                 Complex {
-                    re: self.re.clone().$add(rhs.clone()),
+                    re: self.re.$add(rhs),
                     im: self.im.clone(),
                 }
             }
@@ -205,24 +205,24 @@ impl_add_real!(Sub, sub);
 
 macro_rules! impl_mul_real {
     ($Mul: ident, $mul: ident) => {
-        impl<T> $Mul<T> for Complex<T>
-        where
-            for<'a> &'a T: $Mul<&'a T, Output = T>,
-        {
+        impl<T: Clone + $Mul<Output = T>> $Mul<T> for Complex<T> {
             type Output = Complex<T>;
             fn $mul(self, rhs: T) -> Self::Output {
                 Self {
-                    re: self.re.$mul(&rhs),
-                    im: self.im.$mul(&rhs),
+                    re: self.re.$mul(rhs.clone()),
+                    im: self.im.$mul(rhs),
                 }
             }
         }
-        impl<'a, T: Clone + $Mul<T, Output = T>> $Mul<&'a T> for &'a Complex<T> {
+        impl<'a, T> $Mul<&'a T> for &'a Complex<T>
+        where
+            for<'b> &'b T: $Mul<Output = T>,
+        {
             type Output = Complex<T>;
             fn $mul(self, rhs: &'a T) -> Self::Output {
                 Complex {
-                    re: self.re.clone().$mul(rhs.clone()),
-                    im: self.im.clone().$mul(rhs.clone()),
+                    re: self.re.$mul(rhs),
+                    im: self.im.$mul(rhs),
                 }
             }
         }
@@ -269,15 +269,17 @@ impl<T: Clone + Neg<Output = T> + Add<Output = T> + Mul<Output = T> + Div<Output
     }
 }
 
-impl<T: Clone + One> Rem for Complex<T>
+impl<T: Clone + One + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T>> Rem
+    for Complex<T>
 where
-    for<'a> &'a T: AddMulSubDiv<Output = T> + Rem<&'a T, Output = T>,
+    for<'a> &'a T: Rem<Output = T>,
 {
     type Output = Complex<T>;
     fn rem(self, rhs: Self) -> Self::Output {
-        let Complex { re, im } = self.clone() / rhs.clone();
-        let gaussian = Complex::new(&re - &(&re % &T::one()), &im - &(&im % &T::one()));
-        self - rhs * gaussian
+        let Complex { re, im } = &self / &rhs;
+        let (rre, rim) = (&re % &T::one(), &im % &T::one());
+        let gaussian = Complex::new(re - rre, im - rim);
+        &self - &(&rhs * &gaussian)
     }
 }
 
@@ -314,7 +316,7 @@ impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T
         // NOTE: this is very performance critical code, yet it needs precise function
         let b_sqr = b.re.clone() * b.re.clone() + b.im.clone() * b.im.clone(); // avoid some trait bounds
         if b_sqr.is_unit() {
-            return (&(a * &b.conj()) / &b_sqr, T::zero().into());
+            return ((a * &b.conj()) / b_sqr, T::zero().into());
         }
         let two = T::one() + T::one();
         // https://stackoverflow.com/a/18067292
@@ -342,54 +344,13 @@ impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T
     }
 }
 
-macro_rules! forward_assign_impl {
-    ($($AddAssign:ident, ($($Add:ident),*), $(($One:ident),)? $add_assign:ident, $add:ident),+) => {
-        $(impl<T: Clone $(+ $One)?> $AddAssign for Complex<T>
-            where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
-            fn $add_assign(&mut self, rhs: Complex<T>) {
-                take(self, |x| x.$add(rhs));
-            }
-        }
-        impl<T: Clone $(+ $One)?> $AddAssign<T> for Complex<T>
-            where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
-            fn $add_assign(&mut self, rhs: T) {
-                take(self, |x| x.$add(rhs));
-            }
-        }
-        impl<'a, T: Clone $(+ $One)? $(+ $Add<Output = T>)+> $AddAssign<&'a Complex<T>> for Complex<T> {
-            fn $add_assign(&mut self, rhs: &'a Complex<T>) {
-                take(self, |x| (&x).$add(rhs));
-            }
-        }
-        impl<'a, T: Clone $(+ $One)? $(+ $Add<Output = T>)+> $AddAssign<&'a T> for Complex<T> {
-            fn $add_assign(&mut self, rhs: &'a T) {
-                take(self, |x| (&x).$add(rhs));
-            }
-        })+
-    };
-}
 forward_assign_impl!(
-    AddAssign,
-    (Add),
-    add_assign,
-    add,
-    SubAssign,
-    (Sub),
-    sub_assign,
-    sub,
-    MulAssign,
-    (Add, Mul, Sub),
-    mul_assign,
-    mul,
-    DivAssign,
-    (Add, Mul, Sub, Div),
-    div_assign,
-    div,
-    RemAssign,
-    (Add, Mul, Sub, Div, Rem),
-    (One),
-    rem_assign,
-    rem
+    Complex;
+    AddAssign, (Add), (), add_assign, add;
+    SubAssign, (Sub), (), sub_assign, sub;
+    MulAssign, (Mul), (Add, Sub), mul_assign, mul;
+    DivAssign, (Div, Add, Mul, Sub), (), div_assign, div;
+    RemAssign, (Rem), (Add, Mul, Sub, Div), (One), rem_assign, rem;
 );
 
 impl<T: Zero + Add<Output = T>> Sum for Complex<T> {
@@ -418,9 +379,9 @@ where
     }
 }
 
-impl<T: Zero + One> Product for Complex<T>
+impl<T: Zero + One + Sub<Output = T>> Product for Complex<T>
 where
-    for<'a> &'a T: AddMulSub<Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     fn product<I>(iter: I) -> Self
     where
@@ -429,9 +390,9 @@ where
         iter.fold(Self::new(T::one(), T::zero()), |acc, c| acc * c)
     }
 }
-impl<'a, T: Clone + Zero + One> Product<&'a Complex<T>> for Complex<T>
+impl<'a, T: Clone + Zero + One + Sub<Output = T>> Product<&'a Complex<T>> for Complex<T>
 where
-    for<'b> &'b T: AddMulSub<Output = T>,
+    for<'b> &'b T: Mul<Output = T>,
 {
     fn product<I>(iter: I) -> Self
     where
@@ -678,7 +639,10 @@ where
         let one = &T::one();
         let two = (one + one).copysign(&self.im);
         let s = (self.clone().mul_i() - self.im.sign()).abs_sqr();
-        (Complex::new(one - &self.abs_sqr(), &self.re * &two) / s).ln().mul_i() / -two
+        (Complex::new(one - &self.abs_sqr(), &self.re * &two) / s)
+            .ln()
+            .mul_i()
+            / -two
     }
 
     /// Compute the principal value of the extended inverse tangent.
@@ -696,7 +660,7 @@ where
         let res = if div.is_zero() {
             // div = x * (1 - (1 + (self/x)^2).sqrt()) with real x < 0
             // use 1. order Taylor series for sqrt to get div ~ (self*self).sqrt()/2
-            let div = (self*self).sqrt();
+            let div = (self * self).sqrt();
             // directly at the branchcut, decide for one side.
             T::zero().acos().copysign(&(self * &div.conj()).re()).into()
         } else {

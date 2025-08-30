@@ -117,6 +117,35 @@ use self::{extension::*, rational::*};
 #[cfg(test)]
 mod tests;
 
+macro_rules! forward_assign_impl {
+    ($type:ident;$($AddAssign:ident, ($Add:ident$(,$Add3:ident)*), ($($Add2:ident),*), $(($One:ident),)? $({$Cancel:ident},)? $([$Mul:ident],)? $add_assign:ident, $add:ident;)+) => {
+        $(impl<T: Clone $(+ $Cancel)? $(+ $One)? $(+ $Add2<Output = T>)*> $AddAssign for $type<T>
+            where for<'a> &'a T: $Add<Output = T> $(+ $Add3<Output = T>)* $(+ $Mul<Output = T>)? {
+            fn $add_assign(&mut self, rhs: $type<T>) {
+                take(self, |x| x.$add(rhs));
+            }
+        }
+        impl<T: Clone $(+ $Cancel)? + $Add<Output = T> $(+ $Add3<Output = T>)* $(+ $Add2<Output = T>)*> $AddAssign<T> for $type<T> {
+            fn $add_assign(&mut self, rhs: T) {
+                take(self, |x| x.$add(rhs));
+            }
+        }
+        impl<'a, T: Clone $(+ $Cancel)? $(+ $One)? + $Add<Output = T> $(+ $Add3<Output = T>)* $(+ $Add2<Output = T>)*> $AddAssign<&'a $type<T>> for $type<T>
+        $(where for<'b> &'b T: $Mul<Output = T>)? {
+            fn $add_assign(&mut self, rhs: &'a $type<T>) {
+                take(self, |x| (&x).$add(rhs));
+            }
+        }
+        impl<'a, T: Clone $(+ $Cancel)? $(+ $Add2<Output = T>)*> $AddAssign<&'a T> for $type<T>
+        where for<'b> &'b T: $Add<Output = T> $(+ $Add3<Output = T>)* {
+            fn $add_assign(&mut self, rhs: &'a T) {
+                take(self, |x| (&x).$add(rhs));
+            }
+        })+
+    };
+}
+pub(crate) use forward_assign_impl;
+
 // More ideas for useful things:
 /*
 /// trait for numbers, where the N-th power can be represented using terms of order N-1 and less.

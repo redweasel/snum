@@ -807,6 +807,7 @@ where
     }
 }
 
+// can't use the global forward_assign_impl, as there is additional generic parameters here.
 macro_rules! forward_assign_impl {
     ($($AddAssign:ident, ($($Owned:ident),*), ($($Add:ident),+), $add_assign:ident, $add:ident;)+) => {
         $(impl<T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
