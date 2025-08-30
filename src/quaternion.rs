@@ -4,7 +4,6 @@
 
 use crate::complex::*;
 use crate::num::*;
-use core::fmt;
 use core::iter::{Product, Sum};
 use core::ops::*;
 use take_mut::take;
@@ -734,103 +733,6 @@ macro_rules! quaternion {
         $x.into()
     };
 }
-
-#[inline(never)]
-fn fmt_quat(
-    f: &mut fmt::Formatter<'_>,
-    re_neg: bool,
-    real: fmt::Arguments<'_>,
-    imag_i: fmt::Arguments<'_>,
-    imag_j: fmt::Arguments<'_>,
-    imag_k: fmt::Arguments<'_>,
-    _prefix: &str,
-) -> fmt::Result {
-    let sign = if re_neg {
-        ""
-    } else if f.sign_plus() {
-        "+"
-    } else {
-        ""
-    };
-
-    fmt_complex(
-        f,
-        format_args!(
-            "{}{re}{i}i{j}j{k}k",
-            sign,
-            re = real,
-            i = imag_i,
-            j = imag_j,
-            k = imag_k
-        ),
-    )
-}
-
-// string conversions
-macro_rules! impl_display {
-    ($Display: ident, $s: literal, $pre: literal) => {
-        impl<T> fmt::$Display for Quaternion<T>
-        where
-            T: fmt::$Display + Clone + Zero + PartialOrd + Sub<T, Output = T>,
-        {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let prefix = $pre;
-                return if let Some(prec) = f.precision() {
-                    if f.alternate() {
-                        fmt_quat(
-                            f,
-                            self.re < T::zero(),
-                            format_args!(concat!("{:#.1$", $s, "}"), self.re, prec),
-                            format_args!(concat!("{:+#.1$", $s, "}"), self.im_i, prec),
-                            format_args!(concat!("{:+#.1$", $s, "}"), self.im_j, prec),
-                            format_args!(concat!("{:+#.1$", $s, "}"), self.im_k, prec),
-                            prefix,
-                        )
-                    } else {
-                        fmt_quat(
-                            f,
-                            self.re < T::zero(),
-                            format_args!(concat!("{:.1$", $s, "}"), self.re, prec),
-                            format_args!(concat!("{:+.1$", $s, "}"), self.im_i, prec),
-                            format_args!(concat!("{:+.1$", $s, "}"), self.im_j, prec),
-                            format_args!(concat!("{:+.1$", $s, "}"), self.im_k, prec),
-                            prefix,
-                        )
-                    }
-                } else {
-                    if f.alternate() {
-                        fmt_quat(
-                            f,
-                            self.re < T::zero(),
-                            format_args!(concat!("{:#", $s, "}"), self.re),
-                            format_args!(concat!("{:+#", $s, "}"), self.im_i),
-                            format_args!(concat!("{:+#", $s, "}"), self.im_j),
-                            format_args!(concat!("{:+#", $s, "}"), self.im_k),
-                            prefix,
-                        )
-                    } else {
-                        fmt_quat(
-                            f,
-                            self.re < T::zero(),
-                            format_args!(concat!("{:", $s, "}"), self.re),
-                            format_args!(concat!("{:+", $s, "}"), self.im_i),
-                            format_args!(concat!("{:+", $s, "}"), self.im_j),
-                            format_args!(concat!("{:+", $s, "}"), self.im_k),
-                            prefix,
-                        )
-                    }
-                };
-            }
-        }
-    };
-}
-impl_display!(Display, "", "");
-impl_display!(LowerExp, "e", "");
-impl_display!(UpperExp, "E", "");
-impl_display!(LowerHex, "x", "0x");
-impl_display!(UpperHex, "X", "0x");
-impl_display!(Octal, "o", "0o");
-impl_display!(Binary, "b", "0b");
 
 #[cfg(feature = "serde")]
 impl<T: serde::Serialize> serde::Serialize for Quaternion<T> {

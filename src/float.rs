@@ -18,7 +18,9 @@ pub trait FloatType: Clone
 + Div<Output = Self>
 + Neg<Output = Self>
 + NumElementary {
+    /// check if the number is finite. This can often also be done by checking `self == self`.
     fn is_finite(&self) -> bool;
+    /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
 #[cfg(not(any(feature = "std", feature = "libm")))]
@@ -32,7 +34,9 @@ pub trait FloatType: Clone
 + IntoDiscrete<Output = Self>
 + Div<Output = Self>
 + Neg<Output = Self> {
+    /// check if the number is finite. This can often also be done by checking `self == self`.
     fn is_finite(&self) -> bool;
+    /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
 

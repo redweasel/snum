@@ -1155,12 +1155,20 @@ mod complex {
         assert_fmt_eq!(format_args!("{}", _neg1_1i), "-1+1i");
         assert_fmt_eq!(format_args!("{}", -_neg1_1i), "1-1i");
         assert_fmt_eq!(format_args!("{}", _05_05i), "0.5+0.5i");
+        // pretty printing
+        assert_fmt_eq!(format_args!("{:#}", _0_0i), "0");
+        assert_fmt_eq!(format_args!("{:#}", _1_0i), "1");
+        assert_fmt_eq!(format_args!("{:#}", _0_1i), "i");
+        assert_fmt_eq!(format_args!("{:#}", _1_1i), "1+i");
+        assert_fmt_eq!(format_args!("{:#}", _neg1_1i), "-1+i");
+        assert_fmt_eq!(format_args!("{:#}", -_neg1_1i), "1-i");
+        assert_fmt_eq!(format_args!("{:#}", _05_05i), "0.5+0.5i");
+
         let a = Complex::new(1.23456, 123.456);
         assert_fmt_eq!(format_args!("{}", a), "1.23456+123.456i");
         assert_fmt_eq!(format_args!("{:.2}", a), "1.23+123.46i");
         assert_fmt_eq!(format_args!("{:.2e}", a), "1.23e0+1.23e2i");
         assert_fmt_eq!(format_args!("{:+.2E}", a), "+1.23E0+1.23E2i");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:+20.2E}", a), "     +1.23E0+1.23E2i");
 
         let b = Complex::new(0x80, 0xff);
@@ -1168,16 +1176,12 @@ mod complex {
         assert_fmt_eq!(format_args!("{:#x}", b), "0x80+0xffi");
         assert_fmt_eq!(format_args!("{:+#b}", b), "+0b10000000+0b11111111i");
         assert_fmt_eq!(format_args!("{:+#o}", b), "+0o200+0o377i");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:+#16o}", b), "   +0o200+0o377i");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:<+#16o}", b), "+0o200+0o377i   ");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:^+#17o}", b), "  +0o200+0o377i  ");
 
         let c = Complex::new(-10, -10000);
         assert_fmt_eq!(format_args!("{}", c), "-10-10000i");
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{:16}", c), "      -10-10000i");
     }
 
@@ -1912,6 +1916,13 @@ mod quaternion {
         assert_eq!(a.abs_sqr().abs_sqr().abs_sqr(), 0.0);
         assert_eq!(b.abs_sqr().abs_sqr(), 4.0.into()); // this ends up being the determinant
         assert_eq!(c.abs_sqr().abs_sqr(), 1.0.into());
+
+        // unreadable, but still pretty
+        assert_fmt_eq!(format_args!("{:#}", g0), "ik");
+        assert_fmt_eq!(format_args!("{:#}", g1), "-iij");
+        assert_fmt_eq!(format_args!("{:#}", g2), "-ijj");
+        assert_fmt_eq!(format_args!("{:#}", g3), "-ikj");
+        assert_fmt_eq!(format_args!("{:#}", g5), "ii");
     }
 
     #[test]
@@ -1925,6 +1936,17 @@ mod quaternion {
         assert_fmt_eq!(format_args!("{}", -_j), "-0-0i-1j-0k");
         assert_fmt_eq!(format_args!("{}", -_jk), "-0-0i-1j-1k");
         assert_fmt_eq!(format_args!("{}", _ik/2.0), "0+0.5i+0j+0.5k");
+        // pretty printing
+        assert_fmt_eq!(format_args!("{:#}", _0), "0");
+        assert_fmt_eq!(format_args!("{:#}", _1), "1");
+        assert_fmt_eq!(format_args!("{:#}", _i), "i");
+        assert_fmt_eq!(format_args!("{:#}", _1i), "1+i");
+        assert_fmt_eq!(format_args!("{:#}", _neg1), "-1");
+        assert_fmt_eq!(format_args!("{:#}", -_i), "-i");
+        assert_fmt_eq!(format_args!("{:#}", -_j), "-j");
+        assert_fmt_eq!(format_args!("{:#}", -_jk), "-j-k");
+        assert_fmt_eq!(format_args!("{:#}", _ik/2.0), "0.5i+0.5k");
+
         let a = Quaternion::new(1.23456, 123.456, 12., 12.);
         assert_fmt_eq!(format_args!("{}", a), "1.23456+123.456i+12j+12k");
         assert_fmt_eq!(format_args!("{:.2}", a), "1.23+123.46i+12.00j+12.00k");
@@ -2320,13 +2342,18 @@ mod rational {
     }
 
     #[test]
-    #[cfg(feature = "std")] // TODO finally decide on the format in no_std
     fn test_show() {
         // Test:
         // :b :o :x, :X, :?
         // alternate or not (#)
         // positive and negative
-        // padding
+        // padding, alignment, precision
+
+        // Note, that no_std only supports the normal form a/b and
+        // will not (isn't able to) detect, when to add parenthesis.
+        // However especially in a no_std environment, the simple form
+        // is all, that is usually needed. If that isn't clear enough,
+        // one can still use the debug output.
         assert_fmt_eq!(format_args!("{}", _2), "2");
         assert_fmt_eq!(format_args!("{:+}", _2), "+2");
         assert_fmt_eq!(format_args!("{:-}", _2), "2");
@@ -2342,25 +2369,26 @@ mod rational {
         assert_fmt_eq!(format_args!("{:-b}", _1_2), "1/10");
         assert_fmt_eq!(format_args!("{:b}", _0), "0");
         assert_fmt_eq!(format_args!("{:#b}", _1_2), "0b1/0b10");
-        // no std does not support padding
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:010b}", _1_2), "0000001/10");
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:#010b}", _1_2), "0b001/0b10");
+        assert_fmt_eq!(format_args!("{:10b}", _1_2), "      1/10");
+        assert_fmt_eq!(format_args!("{:#10b}", _1_2), "  0b1/0b10");
+        assert_fmt_eq!(format_args!("{:010b}", _1_2), "0000001/10");
+        assert_fmt_eq!(format_args!("{:#010b}", _1_2), "0b001/0b10");
         let half_i8: Ratio<i8> = Ratio::new(1_i8, 2_i8);
         assert_fmt_eq!(format_args!("{:b}", -half_i8), "11111111/10");
         assert_fmt_eq!(format_args!("{:#b}", -half_i8), "0b11111111/0b10");
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:05}", Ratio::new(-1_i8, 1_i8)), "-0001");
+        assert_fmt_eq!(format_args!("{:05}", Ratio::new(-1_i8, 1_i8)), "-0001");
+        assert_fmt_eq!(format_args!("{:5}", Ratio::new(-1_i8, 1_i8)), "   -1");
+        assert_fmt_eq!(format_args!("{:<5}", Ratio::new(-1_i8, 1_i8)), "-1   ");
+        assert_fmt_eq!(format_args!("{:^5}", Ratio::new(-1_i8, 1_i8)), " -1  ");
 
         assert_fmt_eq!(format_args!("{:o}", _8), "10");
         assert_fmt_eq!(format_args!("{:o}", _1_8), "1/10");
         assert_fmt_eq!(format_args!("{:o}", _0), "0");
         assert_fmt_eq!(format_args!("{:#o}", _1_8), "0o1/0o10");
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:010o}", _1_8), "0000001/10");
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:#010o}", _1_8), "0o001/0o10");
+        assert_fmt_eq!(format_args!("{:10o}", _1_8), "      1/10");
+        assert_fmt_eq!(format_args!("{:#10o}", _1_8), "  0o1/0o10");
+        assert_fmt_eq!(format_args!("{:010o}", _1_8), "0000001/10");
+        assert_fmt_eq!(format_args!("{:#010o}", _1_8), "0o001/0o10");
         assert_fmt_eq!(format_args!("{:o}", -half_i8), "377/2");
         assert_fmt_eq!(format_args!("{:#o}", -half_i8), "0o377/0o2");
 
@@ -2370,10 +2398,8 @@ mod rational {
         assert_fmt_eq!(format_args!("{:x}", _1_15), "1/f");
         assert_fmt_eq!(format_args!("{:x}", _0), "0");
         assert_fmt_eq!(format_args!("{:#x}", _1_16), "0x1/0x10");
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:010x}", _1_16), "0000001/10");
-        #[cfg(feature = "std")]
-        assert_eq!(&std::format!("{:#010x}", _1_16), "0x001/0x10");
+        assert_fmt_eq!(format_args!("{:010x}", _1_16), "0000001/10");
+        assert_fmt_eq!(format_args!("{:#010x}", _1_16), "0x001/0x10");
         assert_fmt_eq!(format_args!("{:x}", -half_i8), "ff/2");
         assert_fmt_eq!(format_args!("{:#x}", -half_i8), "0xff/0x2");
 
@@ -2383,10 +2409,8 @@ mod rational {
         assert_fmt_eq!(format_args!("{:X}", _1_15), "1/F");
         assert_fmt_eq!(format_args!("{:X}", _0), "0");
         assert_fmt_eq!(format_args!("{:#X}", _1_16), "0x1/0x10");
-        #[cfg(feature = "std")]
-        assert_eq!(std::format!("{:010X}", _1_16), "0000001/10");
-        #[cfg(feature = "std")]
-        assert_eq!(std::format!("{:#010X}", _1_16), "0x001/0x10");
+        assert_fmt_eq!(format_args!("{:010X}", _1_16), "0000001/10");
+        assert_fmt_eq!(format_args!("{:#010X}", _1_16), "0x001/0x10");
         assert_fmt_eq!(format_args!("{:X}", -half_i8), "FF/2");
         assert_fmt_eq!(format_args!("{:#X}", -half_i8), "0xFF/0x2");
 
@@ -2409,15 +2433,20 @@ mod rational {
         assert_fmt_eq!(format_args!("{}", _INF), "∞");
         assert_fmt_eq!(format_args!("{}", _NEG_INF), "-∞");
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(2, 0)), "2∞");
-        assert_fmt_eq!(format_args!("{:^6}", Ratio::new_raw(2, 0)), "  2∞  "); // centering with non unicode character
+        assert_fmt_eq!(format_args!("{:^7}", Ratio::new_raw(2, 0)), "  2∞   "); // centering with non unicode character
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(-2, 0)), "-2∞");
         // test type combinations
-        #[cfg(feature = "std")]
         assert_fmt_eq!(format_args!("{}", Ratio::new_raw(complex!(1 + 2 i), complex!(1 - 2 i))), "(1+2i)/(1-2i)");
         let c = complex!((_1_3) + (_1_8) i);
-        assert_fmt_eq!(format_args!("{}", c), "1/3+1/8i");
-        assert_fmt_eq!(format_args!("{:+}", c), "+1/3+1/8i"); // TODO this looks a bit like 1/(8i), would be better to have parenthesis (1/8)i like in SqrtExt
-        assert_fmt_eq!(format_args!("{}", complex!((c) + (c) i)), "1/3+1/8i+1/3+1/8ii"); // TODO fix this! There is no clear way to fix it, but find something ok.
+        assert_fmt_eq!(format_args!("{}", c), "1/3+(1/8)i");
+        assert_fmt_eq!(format_args!("{:+}", c), "+1/3+(1/8)i");
+        assert_fmt_eq!(format_args!("{}", complex!((c) + (c) i)), "1/3+(1/8)i+(1/3+(1/8)i)i");
+        let c = complex!((_1) + (_1) i);
+        assert_fmt_eq!(format_args!("{:}", c), "1+1i");
+        assert_fmt_eq!(format_args!("{:#5}", c), "  1+i");
+        assert_fmt_eq!(format_args!("{:<#5}", c), "1+i  ");
+        assert_fmt_eq!(format_args!("{:^#5}", c), " 1+i ");
+        assert_fmt_eq!(format_args!("{:#010x}", c), "0x001+0x1i");
     }
 
     mod arith {
@@ -3306,32 +3335,30 @@ mod extension {
         assert_fmt_eq!(format_args!("{:#o}", SQRT5), "√0o5");
         assert_fmt_eq!(format_args!("{:b}", SQRT5), "√101");
 
+        assert_fmt_eq!(format_args!("{:#5x}", SQRT5), " √0x5");
+        assert_fmt_eq!(format_args!("{:#05x}", SQRT5), " √0x5");
+        assert_fmt_eq!(format_args!("{:5}", -SQRT5), " -1√5");
+        assert_fmt_eq!(format_args!("{:+5}", SQRT5), "  +√5");
+        assert_fmt_eq!(format_args!("{:+5}", -SQRT5), " -1√5");
+        assert_fmt_eq!(format_args!("{:>5}", SQRT5), "   √5");
+        assert_fmt_eq!(format_args!("{:<05}", 1), "00001"); // this is not nonsense! (in contrast to 0<5)
+        assert_fmt_eq!(format_args!("{:>05}", SQRT5), "   √5"); // so this is also not nonsense.
+        assert_fmt_eq!(format_args!("{}", PHI), "1+√5");
+        assert_fmt_eq!(format_args!("{}", PHI2), "1+√5");
+        assert_fmt_eq!(format_args!("{}", -PHI), "-1-1√5");
+        assert_fmt_eq!(format_args!("{}", R), "1/2+(1/3)√5");
+        assert_fmt_eq!(format_args!("{:#}", R), "1/2+(1/3)√5");
+        assert_fmt_eq!(format_args!("{}", RF), "1.5-2.7√5");
+        assert_fmt_eq!(format_args!("{:#}", RF), "1.5-2.7√5");
+        assert_fmt_eq!(format_args!("{:.3}", RF), "1.500-2.700√5");
+        assert_fmt_eq!(format_args!("{:#.3}", RF), "1.500-2.700√5");
         #[cfg(feature = "std")]
         {
-            // std is required for padding
-            assert_fmt_eq!(format_args!("{:#5x}", SQRT5), " √0x5");
-            assert_fmt_eq!(format_args!("{:#05x}", SQRT5), " √0x5");
+            // no public API for fill characters
+            assert_fmt_eq!(format_args!("{:0>5}", SQRT5), "000√5"); // zero as fill character
             assert_fmt_eq!(format_args!("{:-^8b}", SQRT5), "--√101--");
             assert_fmt_eq!(format_args!("{:-^#10b}", SQRT5), "--√0b101--");
-            assert_fmt_eq!(format_args!("{:5}", -SQRT5), " -1√5");
-            assert_fmt_eq!(format_args!("{:+5}", SQRT5), "  +√5");
-            assert_fmt_eq!(format_args!("{:+5}", -SQRT5), " -1√5");
-            assert_fmt_eq!(format_args!("{:>5}", SQRT5), "   √5");
             assert_fmt_eq!(format_args!("{:.>5}", SQRT5), "...√5");
-            assert_fmt_eq!(format_args!("{:<05}", 1), "00001"); // this is not nonsense! (in contrast to 0<5)
-            assert_fmt_eq!(format_args!("{:>05}", SQRT5), "   √5"); // so this is also not nonsense.
-            assert_fmt_eq!(format_args!("{:0>5}", SQRT5), "000√5");
-            // std has special features to make the printing prettier
-            assert_fmt_eq!(format_args!("{}", PHI), "1+√5");
-            assert_fmt_eq!(format_args!("{}", PHI2), "1+√5");
-            assert_fmt_eq!(format_args!("{}", -PHI), "-1-1√5");
-            // ratio is also printed differently in no_std environments
-            assert_fmt_eq!(format_args!("{}", R), "1/2+(1/3)√5");
-            assert_fmt_eq!(format_args!("{:#}", R), "1/2+(1/3)√5");
-            assert_fmt_eq!(format_args!("{}", RF), "1.5-2.7√5");
-            assert_fmt_eq!(format_args!("{:#}", RF), "1.5-2.7√5");
-            assert_fmt_eq!(format_args!("{:.3}", RF), "1.500-2.700√5");
-            assert_fmt_eq!(format_args!("{:#.3}", RF), "1.500-2.700√5");
         }
     }
 

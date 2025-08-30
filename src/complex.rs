@@ -1,8 +1,6 @@
-//! implements a `Complex<T>` type, that in large parts matches (is a copy of) the complex type of `num_complex`.
-//! However a lot more functionallity is available with weak trait bounds.
+//! implements a `Complex<T>` type, that in large parts matches (is a copy of) the complex type of `num_complex`, but with weaker trait bounds.
 
 use crate::*;
-use core::fmt;
 use core::iter::{Product, Sum};
 use core::ops::*;
 use take_mut::take;
@@ -880,120 +878,6 @@ macro_rules! complex {
         $x.into()
     };
 }
-
-#[inline(never)]
-fn fmt_re_im(
-    f: &mut fmt::Formatter<'_>,
-    real: fmt::Arguments<'_>,
-    imag: fmt::Arguments<'_>,
-) -> fmt::Result {
-    fmt_complex(f, format_args!("{re}{im}i", re = real, im = imag))
-}
-
-#[cfg(feature = "std")]
-#[inline(always)]
-// Currently, we can only apply width using an intermediate `String` (and thus `std`)
-pub(crate) fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
-    use std::string::ToString;
-    if let Some(width) = f.width() {
-        let s = complex.to_string();
-        match f.align() {
-            None | Some(fmt::Alignment::Right) => write!(f, "{s:>0$}", width),
-            Some(fmt::Alignment::Center) => write!(f, "{s:^0$}", width),
-            Some(fmt::Alignment::Left) => write!(f, "{s:<0$}", width),
-        }
-    } else {
-        write!(f, "{}", complex)
-    }
-}
-
-#[cfg(not(feature = "std"))]
-#[inline(always)]
-pub(crate) fn fmt_complex(f: &mut fmt::Formatter<'_>, complex: fmt::Arguments<'_>) -> fmt::Result {
-    write!(f, "{}", complex)
-}
-
-// string conversions
-// PartialOrd is required for the pretty printing in std mode.
-macro_rules! impl_display {
-    ($Display: ident, $s: literal, $pre: literal) => {
-        impl<T> fmt::$Display for Complex<T>
-        where
-            T: fmt::$Display + Clone + Zero + Sub<T, Output = T>,
-        {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                return if f.alternate() {
-                    if f.sign_plus() {
-                        if let Some(prec) = f.precision() {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:+#.1$", $s, "}"), self.re, prec),
-                                format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
-                            )
-                        } else {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:+#", $s, "}"), self.re),
-                                format_args!(concat!("{:+#", $s, "}"), self.im),
-                            )
-                        }
-                    } else {
-                        if let Some(prec) = f.precision() {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:#.1$", $s, "}"), self.re, prec),
-                                format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
-                            )
-                        } else {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:#", $s, "}"), self.re),
-                                format_args!(concat!("{:+#", $s, "}"), self.im),
-                            )
-                        }
-                    }
-                } else {
-                    if f.sign_plus() {
-                        if let Some(prec) = f.precision() {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:+.1$", $s, "}"), self.re, prec),
-                                format_args!(concat!("{:+.1$", $s, "}"), self.im, prec),
-                            )
-                        } else {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:+", $s, "}"), self.re),
-                                format_args!(concat!("{:+", $s, "}"), self.im),
-                            )
-                        }
-                    } else {
-                        if let Some(prec) = f.precision() {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:.1$", $s, "}"), self.re, prec),
-                                format_args!(concat!("{:+.1$", $s, "}"), self.im, prec),
-                            )
-                        } else {
-                            fmt_re_im(
-                                f,
-                                format_args!(concat!("{:", $s, "}"), self.re),
-                                format_args!(concat!("{:+", $s, "}"), self.im),
-                            )
-                        }
-                    }
-                };
-            }
-        }
-    };
-}
-impl_display!(Display, "", "");
-impl_display!(LowerExp, "e", "");
-impl_display!(UpperExp, "E", "");
-impl_display!(LowerHex, "x", "0x");
-impl_display!(UpperHex, "X", "0x");
-impl_display!(Octal, "o", "0o");
-impl_display!(Binary, "b", "0b");
 
 #[cfg(feature = "serde")]
 impl<T: serde::Serialize> serde::Serialize for Complex<T> {

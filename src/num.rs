@@ -334,10 +334,10 @@ pub trait Euclid: Sized {
     ///   and such that the elements in |r| are finite and computable without panics. This makes the gcd converge.
     /// - Division by zero returns the (potentially) invalid value `(q=0, r=self)`.
     /// - `is_valid_euclid` must be true for all resulting remainders.
+    /// - If the number implements [PartialOrd], the positive sign solution for the remainder is returned.
     ///
     /// Most implementations should follow the additional rules:
     /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `d` with `|r| < |d|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
-    /// - If the number implements [PartialOrd], the positive sign solution is returned.
     ///
     /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as the chosen norm `|r|` might be larger than `|div|`.
     /// For fields on the other hand, the implementation `(q=self/div, r=0)` IS valid, however fields may also implement a

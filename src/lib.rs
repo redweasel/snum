@@ -82,6 +82,7 @@ extern crate std;
 
 mod complex;
 mod float;
+mod fmt;
 mod from;
 mod num;
 mod power;
