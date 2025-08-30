@@ -816,10 +816,15 @@ where
     /// The branch satisfies `-π/2 ≤ Im(atanh(z)) ≤ π/2`.
     fn atanh(&self) -> Self {
         // formula: artanh(z) = (ln(1+z) - ln(1-z))/2
-        // TODO can these ln be combined into one?
+        // This can not simply be implemented as ln((1+z)/(1-z))/2, as that would break at the branch cuts.
+        // To fix that, use ln((1+z)/(1-z))/2 on z.re < 0 and otherwise -ln((1-z)/(1+z))/2.
+        // The division will erase zero signs, so instead implement the division more carefully
+        // using (1+z)(1-z*) = 1+2i*Im(z)-|z|^2 and (1-z)(1+z*) = 1-2i*Im(z)-|z|^2.
+        // Then combine the two branches using copysign and sign functions.
         let one = &T::one();
-        let two = one + one;
-        ((self + one).ln() - Complex::new(one - &self.re, -self.im.clone()).ln()) / two
+        let two = -(one + one).copysign(&self.re);
+        let s = (self + &self.re.sign()).abs_sqr();
+        (Complex::new(one - &self.abs_sqr(), &self.im * &two) / s).ln() / two
     }
 
     /// Raises `self` to a complex power.

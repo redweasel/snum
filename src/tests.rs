@@ -1011,6 +1011,9 @@ mod complex {
             assert!(close(_0_0i.atanh(), _0_0i));
             assert!(close(_0_1i.atanh(), _0_1i * (f64::consts::PI / 4.0)));
             assert!(close(_1_0i.atanh(), Complex::new(f64::INFINITY, 0.0)));
+            assert!(close(Complex::new(1.0, -0.0).atanh(), Complex::new(f64::INFINITY, 0.0)));
+            assert!(close(Complex::new(-1.0, 0.0).atanh(), Complex::new(-f64::INFINITY, 0.0)));
+            assert!(close(Complex::new(-1.0, -0.0).atanh(), Complex::new(-f64::INFINITY, 0.0)));
             for &c in all_consts.iter() {
                 // atanh(conj(z)) = conj(atanh(z))
                 assert!(close(c.conj().atanh(), c.atanh().conj()));
