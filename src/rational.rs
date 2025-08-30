@@ -356,15 +356,6 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
         }
     }
 }
-impl<T: Cancel + Ord> Ord for Ratio<T>
-where
-    for<'a> &'a T: Mul<&'a T, Output = T>,
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        // TODO should this implement Ord? Where is it useful? Keep in mind, that integers also panic on divide by zero.
-        self.partial_cmp(other).unwrap() // panic for NaN < NaN!
-    }
-}
 
 impl<T: One> From<T> for Ratio<T> {
     fn from(value: T) -> Self {

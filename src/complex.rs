@@ -75,6 +75,7 @@ impl<T: Zero + One> Complex<T> {
 }
 
 impl<T: Neg<Output = T>> Complex<T> {
+    /// Multiply with i with correct handling of infinities.
     pub fn mul_i(self) -> Self {
         Self {
             re: -self.im,
@@ -508,9 +509,7 @@ where
                 im: self.im.clone(),
             }; // copy imaginary zero sign
         }
-        if !self.re.is_zero()
-            && (&(&(&(&self.im * &self.im) / &self.re) + &self.re) - &self.re).is_zero()
-        {
+        if !self.re.is_zero() && &(&(&self.im * &self.im) / &self.re) + &self.re == self.re {
             let sqrt = self.re.abs().sqrt();
             let im = &self.im / &(&(T::one() + T::one()) * &sqrt);
             if self.re >= T::zero() {
@@ -671,10 +670,15 @@ where
     /// The branch satisfies `-π/2 ≤ Re(atan(z)) ≤ π/2`.
     fn atan(&self) -> Self {
         // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
-        let one = T::one();
-        let two = &one + &one;
-        let si = self.clone().mul_i();
-        ((-(&si - &one)).ln() - (&si + &one).ln()).mul_i() / two
+        // This can not simply be implemented as ln((1+iz)/(1-iz))/(2i), as that would break at the branch cuts.
+        // see atanh for the explanation of the fix.
+        if self.im.is_zero() {
+            return self.re.atan().into();
+        }
+        let one = &T::one();
+        let two = (one + one).copysign(&self.im);
+        let s = (self.clone().mul_i() - self.im.sign()).abs_sqr();
+        (Complex::new(one - &self.abs_sqr(), &self.re * &two) / s).ln().mul_i() / -two
     }
 
     /// Compute the principal value of the extended inverse tangent.
@@ -690,8 +694,10 @@ where
         // formula: 2*arctan(y / (x + (x*x + y*y).sqrt()))
         let div = x + &(x * x + self * self).sqrt();
         let res = if div.is_zero() {
+            // div = x * (1 - (1 + (self/x)^2).sqrt()) with real x < 0
+            // use 1. order Taylor series for sqrt to get div ~ (self*self).sqrt()/2
+            let div = (self*self).sqrt();
             // directly at the branchcut, decide for one side.
-            // TODO what happens here for complex values???
             T::zero().acos().copysign(&(self * &div.conj()).re()).into()
         } else {
             (self / &div).atan()
@@ -822,6 +828,9 @@ where
         // The division will erase zero signs, so instead implement the division more carefully
         // using (1+z)(1-z*) = 1+2i*Im(z)-|z|^2 and (1-z)(1+z*) = 1-2i*Im(z)-|z|^2.
         // Then combine the two branches using copysign and sign functions.
+        if self.re.is_zero() {
+            return Complex::imag(self.im.atan());
+        }
         let one = &T::one();
         let two = -(one + one).copysign(&self.re);
         let s = (self + &self.re.sign()).abs_sqr();
@@ -914,14 +923,7 @@ fn fmt_re_im(
     real: fmt::Arguments<'_>,
     imag: fmt::Arguments<'_>,
 ) -> fmt::Result {
-    fmt_complex(
-        f,
-        format_args!(
-            "{re}{im}i",
-            re = real,
-            im = imag
-        ),
-    )
+    fmt_complex(f, format_args!("{re}{im}i", re = real, im = imag))
 }
 
 #[cfg(feature = "std")]
@@ -956,36 +958,37 @@ macro_rules! impl_display {
             T: fmt::$Display + Clone + Zero + Sub<T, Output = T>,
         {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                return if f.alternate() { if f.sign_plus() {
-                    if let Some(prec) = f.precision() {
-                        fmt_re_im(
-                            f,
-                            format_args!(concat!("{:+#.1$", $s, "}"), self.re, prec),
-                            format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
-                        )
+                return if f.alternate() {
+                    if f.sign_plus() {
+                        if let Some(prec) = f.precision() {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:+#.1$", $s, "}"), self.re, prec),
+                                format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
+                            )
+                        } else {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:+#", $s, "}"), self.re),
+                                format_args!(concat!("{:+#", $s, "}"), self.im),
+                            )
+                        }
                     } else {
-                        fmt_re_im(
-                            f,
-                            format_args!(concat!("{:+#", $s, "}"), self.re),
-                            format_args!(concat!("{:+#", $s, "}"), self.im),
-                        )
+                        if let Some(prec) = f.precision() {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:#.1$", $s, "}"), self.re, prec),
+                                format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
+                            )
+                        } else {
+                            fmt_re_im(
+                                f,
+                                format_args!(concat!("{:#", $s, "}"), self.re),
+                                format_args!(concat!("{:+#", $s, "}"), self.im),
+                            )
+                        }
                     }
-                }
-                else {
-                    if let Some(prec) = f.precision() {
-                        fmt_re_im(
-                            f,
-                            format_args!(concat!("{:#.1$", $s, "}"), self.re, prec),
-                            format_args!(concat!("{:+#.1$", $s, "}"), self.im, prec),
-                        )
-                    } else {
-                        fmt_re_im(
-                            f,
-                            format_args!(concat!("{:#", $s, "}"), self.re),
-                            format_args!(concat!("{:+#", $s, "}"), self.im),
-                        )
-                    }
-                } } else {
+                } else {
                     if f.sign_plus() {
                         if let Some(prec) = f.precision() {
                             fmt_re_im(
@@ -1000,8 +1003,7 @@ macro_rules! impl_display {
                                 format_args!(concat!("{:+", $s, "}"), self.im),
                             )
                         }
-                    }
-                    else {
+                    } else {
                         if let Some(prec) = f.precision() {
                             fmt_re_im(
                                 f,

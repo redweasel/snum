@@ -284,7 +284,11 @@ mod complex {
     pub const _neg1_1i: Complex64 = Complex::new(-1.0, 1.0);
     pub const _05_05i: Complex64 = Complex::new(0.5, 0.5);
     pub const _4_2i: Complex64 = Complex::new(4.0, 2.0);
-    pub const all_consts: [Complex64; 8] = [_0_0i, _1_0i, _1_1i, _neg1_1i, _05_05i, _2_0i, neg_2_0i, _4_2i];
+    pub const _small1: Complex64 = Complex::new(1e-8, 0.0);
+    pub const _small2: Complex64 = Complex::new(-1e-8, 0.0);
+    pub const _small3: Complex64 = Complex::new(0.0, 1e-8);
+    pub const _small4: Complex64 = Complex::new(0.0, -1e-8);
+    pub const all_consts: [Complex64; 12] = [_0_0i, _1_0i, _1_1i, _neg1_1i, _05_05i, _2_0i, neg_2_0i, _4_2i, _small1, _small2, _small3, _small4];
     pub const _1_infi: Complex64 = Complex::new(1.0, f64::INFINITY);
     pub const _neg1_infi: Complex64 = Complex::new(-1.0, f64::INFINITY);
     pub const _1_nani: Complex64 = Complex::new(1.0, f64::NAN);
@@ -526,17 +530,22 @@ mod complex {
             // im: 0.0
             let a = Complex::new(-4.0, 0.0f64);
             assert!(
-                (Complex::new(0.0, 2.0) - sqrt(a)).abs() < 1e-15,
+                (Complex::new(0.0, 2.0) - a.sqrt()).abs() < 1e-15,
                 "error, this is wrong: {}",
-                sqrt(a)
+                a.sqrt()
             );
             // im: -0.0
             let a = Complex::new(-4.0, -0.0f64);
             assert!(
-                (Complex::new(0.0, -2.0) - sqrt(a)).abs() < 1e-15,
+                (Complex::new(0.0, -2.0) - a.sqrt()).abs() < 1e-15,
                 "error, this is wrong: {}",
-                sqrt(a)
+                a.sqrt()
             );
+            // small negative real values
+            let a = Complex::real(-1e-18);
+            assert!((a.sqrt() - Complex::new(0.0, 1e-9)).abs() < 1e-16, "{a}");
+            let a = Complex::new(-1e-18, -0.0);
+            assert!((a.sqrt() - Complex::new(0.0, -1e-9)).abs() < 1e-16, "{a}");
         }
 
         #[test]
@@ -641,6 +650,11 @@ mod complex {
             assert!(close(_1_0i.ln(), _0_0i));
             assert!(close(_0_1i.ln(), _0_1i * (f64::consts::PI / 2.0)));
             assert!(close(_0_0i.ln(), Complex::new(f64::NEG_INFINITY, 0.0)));
+            assert!(close(Complex::new(f64::INFINITY, 0.0).ln(), Complex::new(f64::INFINITY, 0.0)));
+            assert!(close(Complex::new(-f64::INFINITY, 0.0).ln(), Complex::new(f64::INFINITY, f64::consts::PI)));
+            assert!(close(Complex::new(-f64::INFINITY, -0.0).ln(), Complex::new(f64::INFINITY, -f64::consts::PI)));
+            assert!(close(Complex::new(0.0, f64::INFINITY).ln(), Complex::new(f64::INFINITY, f64::consts::FRAC_PI_2)));
+            assert!(close(Complex::new(0.0, -f64::INFINITY).ln(), Complex::new(f64::INFINITY, -f64::consts::FRAC_PI_2)));
             assert!(close(
                 (_neg1_1i * _05_05i).ln(),
                 _neg1_1i.ln() + _05_05i.ln()
@@ -730,8 +744,6 @@ mod complex {
                 ));
             }
         }
-
-        // TODO test more Complex<> NumAlgebraic implementation
 
         #[test]
         fn test_cbrt() {
@@ -849,9 +861,9 @@ mod complex {
             assert!(close(_0_1i.asin(), _0_1i * ((1.0 + 2.0.sqrt()).ln())));
             for &c in all_consts.iter() {
                 // asin(conj(z)) = conj(asin(z))
-                assert!(close(c.conj().asin(), c.asin().conj()));
+                assert!(close_abs(c.conj().asin(), c.asin().conj()), "{c}");
                 // asin(-z) = -asin(z)
-                assert!(close((c * -1.0).asin(), c.asin() * -1.0));
+                assert!(close_abs((c * -1.0).asin(), c.asin() * -1.0));
                 // for this branch, -pi/2 <= asin(z).re <= pi/2
                 assert!(
                     -f64::consts::PI / 2.0 <= c.asin().re && c.asin().re <= f64::consts::PI / 2.0
@@ -880,6 +892,8 @@ mod complex {
         fn test_atan() {
             assert!(close(_0_0i.atan(), _0_0i));
             assert!(close(_1_0i.atan(), _1_0i * (f64::consts::PI / 4.0)));
+            assert!(close(Complex::real(f64::INFINITY).atan(), _1_0i * (f64::consts::PI / 2.0)));
+            assert!(close(Complex::real(-f64::INFINITY).atan(), _1_0i * (-f64::consts::PI / 2.0)));
             assert!(close(
                 (_1_0i * -1.0).atan(),
                 _1_0i * (-f64::consts::PI / 4.0)
@@ -904,6 +918,7 @@ mod complex {
             assert!(close(_1_1i.atan2(&_1_1i), _1_0i * (f64::consts::PI / 4.0)));
             assert!(close(_1_0i.atan2(&_0_0i), _1_0i * (f64::consts::PI / 2.0)));
             assert!(close((-_1_0i).atan2(&_0_0i), _1_0i * (-f64::consts::PI / 2.0)));
+            assert!(close((-_1_0i).atan2(&-_0_0i), _1_0i * (-f64::consts::PI / 2.0)));
             assert!(close(_0_0i.atan2(&-_1_0i), _1_0i * f64::consts::PI));
             assert!(close((-_0_0i).atan2(&-_1_0i), _1_0i * -f64::consts::PI));
             assert!(close(_0_0i.atan2(&_0_0i), _0_0i)); // center, default to 0 instead of NaN
@@ -911,9 +926,25 @@ mod complex {
                 (_1_0i * -1.0).atan2(&_1_0i),
                 _1_0i * (-f64::consts::PI / 4.0)
             ));
+
             assert!(close(_0_1i.atan2(&_1_0i), Complex::new(0.0, f64::INFINITY)));
+            assert!(close(_1_0i.atan2(&_0_1i), Complex::new(0.0, -f64::INFINITY)));
             assert!(close(_1_1i.atan2(&_neg1_1i), Complex::new(0.0, f64::INFINITY)));
             assert!(close(_1_1i.atan2(&_1_0i), _1_1i.atan()));
+            // test approaching the branch cut from different directions
+            assert!(close(Complex::real(2e-8).atan2(&-_1_0i), _1_0i * 3.1415926313853326));
+            assert!(close(Complex::real(-2e-8).atan2(&-_1_0i), _1_0i * -3.1415926313853326));
+            // zero signs are not properly handled here and I believe they can't be, because they don't hold enough information
+            assert!(close(Complex::new(1e-16, 2e-7).atan2(&-_1_0i), Complex::new(3.141592653589793, -1.9984014441655406e-7)));
+            assert!(close(Complex::new(1e-16, -2e-7).atan2(&-_1_0i), Complex::new(3.141592653589793, 1.9984014441655406e-7)));
+            assert!(close(Complex::new(-1e-16, 2e-7).atan2(&-_1_0i), Complex::new(-3.141592653589793, -1.9984014441655406e-7)));
+            assert!(close(Complex::new(-1e-16, -2e-7).atan2(&-_1_0i), Complex::new(-3.141592653589793, 1.9984014441655406e-7)));
+            assert!(close(Complex::real(0.5e-8).atan2(&-_1_0i), _1_0i * f64::consts::PI));
+            assert!(close(Complex::real(-0.5e-8).atan2(&-_1_0i), _1_0i * -f64::consts::PI));
+            assert!(close(Complex::imag(0.5e-8).atan2(&-_1_0i), Complex::new(f64::consts::PI, 0.0)));
+            assert!(close(Complex::imag(-0.5e-8).atan2(&-_1_0i), Complex::new(f64::consts::PI, 0.0)));
+            assert!(close(Complex::new(-0.0, 0.5e-8).atan2(&-_1_0i), Complex::new(-f64::consts::PI, 0.0)));
+            assert!(close(Complex::new(-0.0, -0.5e-8).atan2(&-_1_0i), Complex::new(-f64::consts::PI, 0.0)));
         }
 
         #[test]
@@ -975,9 +1006,9 @@ mod complex {
             ));
             for &c in all_consts.iter() {
                 // asinh(conj(z)) = conj(asinh(z))
-                assert!(close(c.conj().asinh(), c.asinh().conj()));
+                assert!(close_abs(c.conj().asinh(), c.asinh().conj()));
                 // asinh(-z) = -asinh(z)
-                assert!(close((c * -1.0).asinh(), c.asinh() * -1.0));
+                assert!(close_abs((c * -1.0).asinh(), c.asinh() * -1.0));
                 // for this branch, -pi/2 <= asinh(z).im <= pi/2
                 assert!(
                     -f64::consts::PI / 2.0 <= c.asinh().im && c.asinh().im <= f64::consts::PI / 2.0
@@ -1057,17 +1088,17 @@ mod complex {
                 assert!(close(c.sin() * c.sin() + c.cos() * c.cos(), _1_0i));
 
                 // sin(asin(z)) = z
-                assert!(close(c.asin().sin(), c));
+                assert!(close_abs(c.asin().sin(), c));
                 // cos(acos(z)) = z
                 assert!(close_abs(c.acos().cos(), c));
                 // tan(atan(z)) = z
                 // i and -i are branch points
                 if c != _0_1i && c != _0_1i * (-1.0) {
-                    assert!(close(c.atan().tan(), c));
+                    assert!(close_abs(c.atan().tan(), c));
                 }
 
                 // sin(z) = (e^(iz) - e^(-iz))/(2i)
-                assert!(close(
+                assert!(close_abs(
                     ((_0_1i * c).exp() - (_0_1i * c).exp().recip()) / (_0_1i * 2.0),
                     c.sin()
                 ));
@@ -1077,7 +1108,7 @@ mod complex {
                     c.cos()
                 ));
                 // tan(z) = i (1 - e^(2iz))/(1 + e^(2iz))
-                assert!(close(
+                assert!(close_abs(
                     _0_1i * (_1_0i - (_0_1i * c * 2.0).exp()) / (_1_0i + (_0_1i * c * 2.0).exp()),
                     c.tan()
                 ));
@@ -1093,21 +1124,21 @@ mod complex {
                 assert!(close(c.cosh() * c.cosh() - c.sinh() * c.sinh(), _1_0i));
 
                 // sinh(asinh(z)) = z
-                assert!(close(c.asinh().sinh(), c));
+                assert!(close_abs(c.asinh().sinh(), c));
                 // cosh(acosh(z)) = z
                 assert!(close_abs(c.acosh().cosh(), c));
                 // tanh(atanh(z)) = z
                 // 1 and -1 are branch points
                 if c != _1_0i && c != _1_0i * (-1.0) {
-                    assert!(close(c.atanh().tanh(), c));
+                    assert!(close_abs(c.atanh().tanh(), c));
                 }
 
                 // sinh(z) = (e^z - e^(-z))/2
-                assert!(close((c.exp() - c.exp().recip()) / 2.0, c.sinh()));
+                assert!(close_abs((c.exp() - c.exp().recip()) / 2.0, c.sinh()));
                 // cosh(z) = (e^z + e^(-z))/2
                 assert!(close((c.exp() + c.exp().recip()) / 2.0, c.cosh()));
                 // tanh(z) = ( e^(2z) - 1)/(e^(2z) + 1)
-                assert!(close(
+                assert!(close_abs(
                     ((c * 2.0).exp() - _1_0i) / ((c * 2.0).exp() + _1_0i),
                     c.tanh()
                 ));
@@ -1335,6 +1366,40 @@ mod quaternion {
     #[cfg(any(feature = "std", feature = "libm"))]
     mod analytic {
         use super::*;
+        #[test]
+        fn test_sqrt1() {
+            // if the imaginary value is too small compares with the real value, it will snap to the axis
+            let a = Quaternion::new(-1.0, 2.0e-20, 0., 0.);
+            assert!((a.sqrt() - Quaternion::new(1.0e-20, 1.0, 0., 0.)).abs() < 0.2e-20, "got {}", a.sqrt());
+            let a = Quaternion::new(-4.0, 8.0e-20, 0., 0.);
+            assert!((a.sqrt() - Quaternion::new(2.0e-20, 2.0, 0., 0.)).abs() < 0.2e-20);
+            let a = Quaternion::new(1.0, 2.0e-20, 0., 0.);
+            assert!((a.sqrt() - Quaternion::new(1.0, 1.0e-20, 0., 0.)).abs() < 0.2e-20);
+            let a = Quaternion::new(4.0, 8.0e-20, 0., 0.);
+            assert!((a.sqrt() - Quaternion::new(2.0, 2.0e-20, 0., 0.)).abs() < 0.2e-20);
+            let a = Quaternion::new(-1.0, 2.0e-15, 0., 0.);
+            assert!(
+                (a.sqrt() - Quaternion::new(1.0e-15, 1.0, 0., 0.)).abs() < 0.5e-15,
+                "had {}",
+                a.sqrt()
+            );
+            let a = Quaternion::new(-1.0, 2.0e-16, 0., 0.);
+            assert!((a.sqrt() - Quaternion::new(1.0e-16, 1.0, 0., 0.)).abs() < 0.5e-16);
+            // im: 0.0
+            let a = Quaternion::new(-4.0, 0.0f64, 0., 0.);
+            assert!(
+                (Quaternion::new(0.0, 2.0, 0., 0.) - a.sqrt()).abs() < 1e-15,
+                "error, this is wrong: {}",
+                a.sqrt()
+            );
+            // im: -0.0
+            let a = Quaternion::new(-4.0, -0.0f64, 0., 0.);
+            assert!(
+                (Quaternion::new(0.0, -2.0, 0., 0.) - a.sqrt()).abs() < 1e-15,
+                "error, this is wrong: {}",
+                a.sqrt()
+            );
+        }
 
         #[test]
         fn test_sqrt() {
@@ -1795,6 +1860,61 @@ mod quaternion {
     }
 
     #[test]
+    fn test_spinors() {
+        use crate::quaternion as q;
+        // 32 component object
+        pub type DiracSpinor<T> = Quaternion<Quaternion<Complex<T>>>;
+
+        // define the gamma matrices
+        let _0c = complex!(0.+0. i);
+        let _1c = complex!(1.+0. i);
+        let _ic = complex!(0.+1. i);
+        let id: DiracSpinor<f64> = q!(q!(_1c));
+        let g0: DiracSpinor<f64> = q!((q!(_0c)) + k (q!(_ic)));
+        let g1: DiracSpinor<f64> = q!((q!(_0c)) + j (q!(_0c + i (-_ic))));
+        let g2: DiracSpinor<f64> = q!((q!(_0c)) + j (q!(_0c + j (-_ic))));
+        let g3: DiracSpinor<f64> = q!((q!(_0c)) + j (q!(_0c + k (-_ic))));
+        let g5: DiracSpinor<f64> = q!((q!(_0c)) + i (q!(_ic)));
+
+        assert_ne!(g0, g1);
+        assert_ne!(g0, g2);
+        assert_ne!(g0, g3);
+        assert_ne!(g0, g5);
+        assert_ne!(g1, g2);
+        assert_ne!(g1, g3);
+        assert_ne!(g1, g5);
+        assert_ne!(g2, g3);
+        assert_ne!(g2, g5);
+        assert_ne!(g3, g5);
+
+        assert_eq!(g0 * g0, id);
+        assert_eq!(g1 * g1, -id);
+        assert_eq!(g2 * g2, -id);
+        assert_eq!(g3 * g3, -id);
+        assert_eq!(g5 * g5, id);
+        assert_eq!(g0 * g1, -g1 * g0);
+        assert_eq!(g0 * g2, -g2 * g0);
+        assert_eq!(g0 * g3, -g3 * g0);
+        assert_eq!(g2 * g1, -g1 * g2);
+        assert_eq!(g3 * g2, -g2 * g3);
+        assert_eq!(g1 * g3, -g3 * g1);
+        assert_eq!(g5 * g0, -g0 * g5);
+        assert_eq!(g5 * g1, -g1 * g5);
+        assert_eq!(g5 * g2, -g2 * g5);
+        assert_eq!(g5 * g3, -g3 * g5);
+        assert_eq!(g0 * g1 * g2 * g3 * q!(_ic), g5);
+        let a = g0 + g2;
+        let b = g1 + g3;
+        let c = g1 + g3 - g5;
+        assert_eq!(a * b / b, a);
+        //assert_eq!(b * a / a, b); // can not divide by a, as it's not invertible! (determinant is zero!)
+        assert_eq!(b * c / c, b);
+        assert_eq!(a.abs_sqr().abs_sqr().abs_sqr(), 0.0);
+        assert_eq!(b.abs_sqr().abs_sqr(), 4.0.into()); // this ends up being the determinant
+        assert_eq!(c.abs_sqr().abs_sqr(), 1.0.into());
+    }
+
+    #[test]
     fn test_string_formatting() {
         assert_fmt_eq!(format_args!("{}", _0), "0+0i+0j+0k");
         assert_fmt_eq!(format_args!("{}", _1), "1+0i+0j+0k");
@@ -2006,7 +2126,7 @@ mod rational {
         assert_eq!(_1, Ratio::new_raw(-1, -1));
         assert_eq!(Ratio::new_raw(-1, -2), _1_2);
         assert_eq!(_1_2, Ratio::new_raw(-1, -2));
-        assert_eq!(Ratio::new_raw(-1, -2).cmp(&_1_2), Ordering::Equal);
+        assert_eq!(Ratio::new_raw(-1, -2).partial_cmp(&_1_2), Some(Ordering::Equal));
 
         assert!(_0 <= _0 && _1 <= _1);
         assert!(_0 <= _1 && !(_1 <= _0));
@@ -2064,8 +2184,8 @@ mod rational {
 
         fn check_cmp(a: Ratio<i8>, b: Ratio<i8>, ord: Ordering) {
             //std::println!("comparing {} and {}", a, b);
-            assert_eq!(a.cmp(&b), ord);
-            assert_eq!(b.cmp(&a), ord.reverse());
+            assert_eq!(a.partial_cmp(&b), Some(ord));
+            assert_eq!(b.partial_cmp(&a), Some(ord.reverse()));
             assert_eq!(a == b, ord == Ordering::Equal);
             assert_eq!(a != b, ord != Ordering::Equal);
             assert_eq!(b == a, ord == Ordering::Equal);
@@ -3599,9 +3719,9 @@ mod extension {
         let mut iter = DevelopContinuedFraction::new(Ratio::from(x));
         for _ in 0..10 {
             let _next = iter.next().unwrap();
-            // TODO this has a problem with NaNs...
+            // This is NaN, because the gcd is computed on a transcendent f64 number.
             //std::println!("{}", next);
-            //assert!(next.value.is_finite() && next.ext.is_finite());
+            //assert!(next.value.is_finite() && next.ext.is_finite()); // would fail
         }
 
         // this next form gives different results including notably 22/7
@@ -3696,6 +3816,7 @@ mod extension {
     #[test]
     fn test_complex_sqrt_ext() {
         type T = SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>>;
+        type TR = SqrtExt<i32, Sqrt<i32, 5>>;
         let x = T::new(Complex::i() * 4, Complex::i() * 4);
         let y = T::new(Complex::i() * 2, Complex::i() * 2);
         assert_eq!(x / y, Complex::from(2i32).into());
@@ -3706,14 +3827,20 @@ mod extension {
         assert!((x % y).is_zero());
         assert_eq!(x.abs_sqr(), SqrtExt::new(16 + 16 * 5, 0));
         // let u = T::unit(); // what is the complex version of this???
-        //println!("{}", x / y);
+        //std::println!("{}", x / y);
 
-        // TODO test Complex<SqrtExt<...>> e.g. with Euclid and conversion between them.
+        // test Complex<SqrtExt<...>> conversion
+        let z: Complex<TR> = x.into();
+        let w: Complex<TR> = y.into();
+        assert_eq!(x, z.into());
+        assert_eq!(y, w.into());
+        assert_eq!(z / w, Complex::new(Zero::zero(), TR::new((-2i32).into(), Zero::zero())));
+        // TODO test Complex<SqrtExt<...>> e.g. with Euclid
     }
 
     #[test]
     #[cfg(feature = "std")]
-    fn test_display() {
+    fn test_display_complex_sqrt_ext() {
         type T = SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>>;
         let x = T::new(One::one(), One::one());
         assert_eq!("1+0i+√(5+0i)", std::format!("{x}"));

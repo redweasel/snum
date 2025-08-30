@@ -217,6 +217,7 @@ where
 /// however a/p+(b/q)√n can be used instead, requiring a bit more memory and computation, but
 /// with an extended value range.
 #[derive(Hash)]
+#[repr(C)]
 pub struct SqrtExt<T: Num, E: SqrtConst<T>> {
     pub value: T,
     pub ext: T,
@@ -447,6 +448,42 @@ where
             "can not convert between SqrtExt with different constants"
         );
         SqrtExt::new(value.value.into(), value.ext.into())
+    }
+}
+impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<Complex<SqrtExt<T, E>>>
+    for SqrtExt<Complex<T>, E2>
+where
+    Complex<T>: Num<Real = T>,
+{
+    fn from(value: Complex<SqrtExt<T, E>>) -> Self {
+        // equallity of the constants can not be checked at compile time here.
+        assert_eq!(
+            E2::sqr(),
+            E::sqr().into(),
+            "can not convert between SqrtExt with different constants"
+        );
+        SqrtExt::new(
+            Complex::new(value.re.value, value.im.value),
+            Complex::new(value.re.ext, value.im.ext),
+        )
+    }
+}
+impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<SqrtExt<Complex<T>, E2>>
+    for Complex<SqrtExt<T, E>>
+where
+    Complex<T>: Num<Real = T>,
+{
+    fn from(value: SqrtExt<Complex<T>, E2>) -> Self {
+        // equallity of the constants can not be checked at compile time here.
+        assert_eq!(
+            E2::sqr(),
+            E::sqr().into(),
+            "can not convert between SqrtExt with different constants"
+        );
+        Complex::new(
+            SqrtExt::new(value.value.re, value.ext.re),
+            SqrtExt::new(value.value.im, value.ext.im),
+        )
     }
 }
 impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<SqrtExt<Ratio<T>, E2>>
@@ -967,7 +1004,7 @@ where
     }
 }
 
-// Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
+// Safety: `SqrtExt<T, _>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
 // `SqrtExt<T, E>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
@@ -976,7 +1013,7 @@ unsafe impl<T: Num + bytemuck::Zeroable, E: Copy + SqrtConst<T>> bytemuck::Zeroa
 {
 }
 
-// Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
+// Safety: `SqrtExt<T, _>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Pod`,
 // `SqrtExt<T, E>` is also `Pod`
 #[cfg(feature = "bytemuck")]

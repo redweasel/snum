@@ -66,14 +66,15 @@ where
     }
 }
 
-impl<T: Conjugate + Neg<Output = T>> Conjugate for Quaternion<T> {
+impl<T: Clone + Neg<Output = T>> Conjugate for Quaternion<T> {
     #[inline(always)]
     fn conj(&self) -> Self {
+        // treat T as real valued and don't cascade complex conjugation
         Self {
-            im_i: -self.im_i.conj(),
-            im_j: -self.im_j.conj(),
-            im_k: -self.im_k.conj(),
-            re: self.re.conj(),
+            im_i: -self.im_i.clone(),
+            im_j: -self.im_j.clone(),
+            im_k: -self.im_k.clone(),
+            re: self.re.clone(),
         }
     }
 }
@@ -236,18 +237,21 @@ impl<'a, T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>> Mul for
     }
 }
 
-impl<T: Num<Real = T> + Neg<Output = T> + Zero> Num for Quaternion<T>
+impl<T: Num + Neg<Output = T> + Zero> Num for Quaternion<T>
 where
     for<'a> &'a T: Mul<Output = T>,
 {
     const CHAR: u64 = T::CHAR;
     type Real = T;
     fn abs_sqr(&self) -> Self::Real {
-        self.im_i.abs_sqr() + self.im_j.abs_sqr() + self.im_k.abs_sqr() + self.re.abs_sqr()
+        &self.im_i * &self.im_i
+            + &self.im_j * &self.im_j
+            + &self.im_k * &self.im_k
+            + &self.re * &self.re
     }
     #[inline(always)]
     fn re(&self) -> Self::Real {
-        self.re.re()
+        self.re.clone()
     }
     #[inline(always)]
     fn is_unit(&self) -> bool {
@@ -255,44 +259,44 @@ where
     }
 }
 
-impl<T: Conjugate + Neg<Output = T> + Add<Output = T> + Sub<Output = T>> Div for Quaternion<T>
+impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T>> Div for Quaternion<T>
 where
     for<'a> &'a T: Mul<Output = T> + Div<Output = T>,
 {
     type Output = Quaternion<T>;
     fn div(self, rhs: Self) -> Self::Output {
-        let abs_sqr = &rhs.im_i * &rhs.im_i.conj()
-            + &rhs.im_j * &rhs.im_j.conj()
-            + &rhs.im_k * &rhs.im_k.conj()
-            + &rhs.re * &rhs.re.conj();
+        let abs_sqr = &rhs.im_i * &rhs.im_i
+            + &rhs.im_j * &rhs.im_j
+            + &rhs.im_k * &rhs.im_k
+            + &rhs.re * &rhs.re;
         self * rhs.conj() / abs_sqr
     }
 }
 impl<
     'a,
-    T: Clone + Conjugate + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>,
+    T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>,
 > Div for &'a Quaternion<T>
 where
     for<'b> &'b T: Mul<Output = T>,
 {
     type Output = Quaternion<T>;
     fn div(self, rhs: Self) -> Self::Output {
-        let abs_sqr = &rhs.im_i * &rhs.im_i.conj()
-            + &rhs.im_j * &rhs.im_j.conj()
-            + &rhs.im_k * &rhs.im_k.conj()
-            + &rhs.re * &rhs.re.conj();
+        let abs_sqr = &rhs.im_i * &rhs.im_i
+            + &rhs.im_j * &rhs.im_j
+            + &rhs.im_k * &rhs.im_k
+            + &rhs.re * &rhs.re;
         &(self.clone() * rhs.conj()) / &abs_sqr
     }
 }
-impl<T: Conjugate + Neg<Output = T> + Add<Output = T> + Sub<Output = T>> Quaternion<T>
+impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T>> Quaternion<T>
 where
     for<'a> &'a T: Mul<Output = T> + Div<Output = T>,
 {
     pub fn recip(self) -> Self {
-        let abs_sqr = &self.im_i * &self.im_i.conj()
-            + &self.im_j * &self.im_j.conj()
-            + &self.im_k * &self.im_k.conj()
-            + &self.re * &self.re.conj();
+        let abs_sqr = &self.im_i * &self.im_i
+            + &self.im_j * &self.im_j
+            + &self.im_k * &self.im_k
+            + &self.re * &self.re;
         self.conj() / abs_sqr
     }
 }
@@ -521,27 +525,22 @@ where
             }; // copy imaginary zero signs
         }
         let im_sqr = self.im_i.abs_sqr() + self.im_j.abs_sqr() + self.im_k.abs_sqr();
-        if im_sqr.is_zero() {
-            // TODO handle not just zero
+        let re_sqr = self.re.abs_sqr();
+        if &im_sqr + &re_sqr == re_sqr {
             let sqrt = self.re.abs().sqrt();
-            //let im = &self.im / &(&(T::one() + T::one()) * &sqrt);
+            let div = &(T::one() + T::one()) * &sqrt;
             if self.re >= T::zero() {
-                return Self {
-                    re: sqrt,
-                    ..self.clone()
-                };
+                let mut q = self / &div;
+                q.re = sqrt;
+                return q;
             } else {
-                // this makes it different for 0.0 and -0.0 !!!
-                return Self::new(
-                    im_sqr.sqrt(),
-                    sqrt.copysign(&self.im_i),
-                    T::zero(),
-                    T::zero(),
-                );
+                let mut q = self.sign_im() * sqrt;
+                q.re = im_sqr.sqrt() / div;
+                return q;
             }
         }
         // Use angle bisection
-        // Note currently it's limited by the types epsilon at 1.0 for re << 0
+        // Note, this approach limited by the types epsilon at 1.0 for re << 0
         // e.g. in theory (-1.0 + 1e-20 i).sqrt() = (0.5e-20 + i), but rounding will occur here.
         // However (-1.0f64 + 2e-8 i).sqrt() = (1e-8 + i) still works.
         let len = self.abs(); // sqrt eval 1
@@ -746,6 +745,19 @@ where
 /// Write a quaternion in the notation `real + i x + j y + k z`. Any term can be left out, however the order needs to be kept.
 #[macro_export]
 macro_rules! quaternion {
+    ($($ri:ident)? $(($re:expr))? $(+ i $i:literal)? $(+ i ($ie:expr))? $(+ j $j:literal)? $(+ j ($je:expr))? $(+ k $k:literal)? $(+ k ($ke:expr))?) => {
+        {
+            #[allow(unused_mut)]
+            let mut q = $crate::quaternion::Quaternion::from($($ri)?$($re)?);
+            $(q.im_i = q.im_i + $i;)?
+            $(q.im_i = q.im_i + ($ie);)?
+            $(q.im_j = q.im_j + $j;)?
+            $(q.im_j = q.im_j + ($je);)?
+            $(q.im_k = q.im_k + $k;)?
+            $(q.im_k = q.im_k + ($ke);)?
+            q
+        }
+    };
     ($re:literal $(+ i $i:literal)? $(+ i ($ie:expr))? $(+ j $j:literal)? $(+ j ($je:expr))? $(+ k $k:literal)? $(+ k ($ke:expr))?) => {
         {
             #[allow(unused_mut)]
