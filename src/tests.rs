@@ -3911,3 +3911,45 @@ mod serde {
         assert_eq!(r, r2);
     }
 }
+
+#[cfg(feature = "bytemuck")]
+mod bytemuck {
+    use super::*;
+
+    #[test]
+    fn test_bytemuck_complex() {
+        let c = complex!(1.2f64 + 2.7 i);
+        let c_arr = [c];
+        let bytes: &[u8] = ::bytemuck::cast_slice(&c_arr);
+        let recovered: &[Complex<f64>] = ::bytemuck::cast_slice(bytes);
+        assert_eq!(recovered[0], c);
+    }
+    #[test]
+    #[cfg(feature = "quaternion")]
+    fn test_bytemuck_quaternion() {
+        let c = quaternion!(1.2f64 + i 2.7 + j 3.1 + k -1.4);
+        let c_arr = [c];
+        let bytes: &[u8] = ::bytemuck::cast_slice(&c_arr);
+        let recovered: &[Quaternion<f64>] = ::bytemuck::cast_slice(bytes);
+        assert_eq!(recovered[0], c);
+    }
+    #[test]
+    #[cfg(feature = "rational")]
+    fn test_bytemuck_rational() {
+        let c = Ratio::<i32>::new_raw(100, -70);
+        let c_arr = [c];
+        let bytes: &[u8] = ::bytemuck::cast_slice(&c_arr);
+        let recovered: &[Ratio<i32>] = ::bytemuck::cast_slice(bytes);
+        assert_eq!(recovered[0], c);
+    }
+    #[test]
+    #[cfg(feature = "rational")]
+    fn test_bytemuck_extension() {
+        let c = SqrtExt::<i32, Sqrt<_, 5>>::new(100, -70);
+        let c_arr = [c];
+        let bytes: &[u8] = ::bytemuck::cast_slice(&c_arr);
+        // Note, that this is a way to change the constant. This would be the users fault.
+        let recovered: &[SqrtExt::<i32, Sqrt<_, 5>>] = ::bytemuck::cast_slice(bytes);
+        assert_eq!(recovered[0], c);
+    }
+}

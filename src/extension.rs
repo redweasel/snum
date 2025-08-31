@@ -1008,7 +1008,7 @@ where
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
 // `SqrtExt<T, E>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: Num + bytemuck::Zeroable, E: Copy + SqrtConst<T>> bytemuck::Zeroable
+unsafe impl<T: Num + bytemuck::Zeroable, E: SqrtConst<T>> bytemuck::Zeroable
     for SqrtExt<T, E>
 {
 }
@@ -1017,7 +1017,7 @@ unsafe impl<T: Num + bytemuck::Zeroable, E: Copy + SqrtConst<T>> bytemuck::Zeroa
 // can guarantee it contains no *added* padding. Thus, if `T: Pod`,
 // `SqrtExt<T, E>` is also `Pod`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: Num + bytemuck::Pod, E: 'static + Copy + SqrtConst<T>> bytemuck::Pod
+unsafe impl<T: Num + bytemuck::Pod, E: 'static + SqrtConst<T>> bytemuck::Pod
     for SqrtExt<T, E>
 {
 }

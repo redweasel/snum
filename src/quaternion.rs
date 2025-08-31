@@ -13,6 +13,7 @@ use take_mut::take;
 /// All three variables i,j,k are considered the complex part, which change
 /// sign under conjugation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[repr(C)]
 pub struct Quaternion<T> {
     pub im_i: T,
     pub im_j: T,
@@ -30,6 +31,18 @@ impl<T> Quaternion<T> {
         }
     }
 }
+
+// Safety: `Quaternion<T>` is `repr(C)` and contains only instances of `T`, so we
+// can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
+// `Quaternion<T>` is also `Zeroable`
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::Zeroable> bytemuck::Zeroable for Quaternion<T> {}
+
+// Safety: `Quaternion<T>` is `repr(C)` and contains only instances of `T`, so we
+// can guarantee it contains no *added* padding. Thus, if `T: Pod`,
+// `Quaternion<T>` is also `Pod`
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::Pod> bytemuck::Pod for Quaternion<T> {}
 
 impl<T: Zero> Zero for Quaternion<T>
 where
