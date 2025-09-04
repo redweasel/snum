@@ -5,6 +5,7 @@ pub trait PowerU {
     /// Compute the power with an unsigned integer exponent.
     ///
     /// Runtime complexity: O(log n) calls of `mul`.
+    #[must_use]
     fn powu(&self, n: u64) -> Self;
 }
 
@@ -31,6 +32,7 @@ pub trait PowerI {
     /// Compute the power with an unsigned integer exponent.
     ///
     /// Runtime complexity: O(log n) calls of `mul`.
+    #[must_use]
     fn powi(&self, n: i64) -> Self;
 }
 
@@ -52,6 +54,7 @@ pub trait IntMul {
     /// Runtime complexity: O(log n) calls of `add`.
     ///
     /// This is rarely the best solution.
+    #[must_use]
     fn mulu(&self, n: u64) -> Self;
 }
 

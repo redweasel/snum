@@ -11,6 +11,7 @@ use core::{fmt::Debug, num::Wrapping, ops::*};
 pub trait Zero: Sized + Add<Self, Output = Self> {
     /// Returns the additive identity element of `Self`, `0`.
     /// This function call is usually optimized away, so a constant isn't needed.
+    #[must_use]
     fn zero() -> Self;
 
     /// Sets `self` to the additive identity element of `Self`, `0`.
@@ -34,6 +35,7 @@ pub trait Zero: Sized + Add<Self, Output = Self> {
 pub trait One: Sized + Mul<Self, Output = Self> {
     /// Returns the multiplicative identity element of `Self`, `1`.
     /// This function call is usually optimized away, so a constant isn't needed.
+    #[must_use]
     fn one() -> Self;
 
     /// Sets `self` to the multiplicative identity element of `Self`, `1`.
@@ -166,7 +168,7 @@ where
     Self::Real: Num<Real = Self::Real> + Zero + Neg<Output = Self::Real>,
 {
 }
-impl<'b, T: Num + Zero + Neg<Output = T> + Sub<Output = T>> Ring for T
+impl<T: Num + Zero + Neg<Output = T> + Sub<Output = T>> Ring for T
 where
     for<'a> &'a T: AddMulSub<Output = T>,
     for<'a> &'a T::Real: AddMulSub<Output = T::Real>,
@@ -342,11 +344,13 @@ pub trait Euclid: Sized {
     /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as the chosen norm `|r|` might be larger than `|div|`.
     /// For fields on the other hand, the implementation `(q=self/div, r=0)` IS valid, however fields may also implement a
     /// different notion of division here based on modulo, as that also fulfills the condition, just not with minimal `r`.
+    #[must_use]
     fn div_rem_euclid(&self, div: &Self) -> (Self, Self);
     /// Return, whether the number could be the result of an Euclidean remainder.
     ///
     /// Axiom:
     /// - For all x: x or -x need to be "valid euclid". Therefore zero is always "valid euclid"
+    #[must_use]
     fn is_valid_euclid(&self) -> bool;
 }
 
@@ -447,12 +451,10 @@ pub fn gcd<T: Zero + One + PartialEq + Sub<Output = T> + Euclid>(mut a: T, mut b
     if a.is_zero() {
         return if b.is_zero() {
             T::one()
+        } else if b.is_valid_euclid() {
+            b
         } else {
-            if b.is_valid_euclid() {
-                b
-            } else {
-                T::zero() - b
-            }
+            T::zero() - b
         };
     }
     let mut count = 0;
@@ -463,11 +465,9 @@ pub fn gcd<T: Zero + One + PartialEq + Sub<Output = T> + Euclid>(mut a: T, mut b
             // could not determine the gcd, so the gcd is 1.
             if count > 2 {
                 return T::one();
-            } else {
-                count += 1;
             }
-        }
-        else {
+            count += 1;
+        } else {
             count = 0;
         }
         (b, a) = (r, b);
@@ -506,12 +506,10 @@ pub fn bezout<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Mul<Output =
     if a.is_zero() {
         return if b.is_zero() {
             ((T::zero(), T::zero()), T::zero())
+        } else if b.is_valid_euclid() {
+            ((T::zero(), T::one()), b)
         } else {
-            if b.is_valid_euclid() {
-                ((T::zero(), T::one()), b)
-            } else {
-                ((T::zero(), T::zero() - T::one()), T::zero() - b)
-            }
+            ((T::zero(), T::zero() - T::one()), T::zero() - b)
         };
     }
     let mut x0 = T::zero();
@@ -534,7 +532,7 @@ pub fn bezout<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Mul<Output =
 pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + Euclid {
     /// Cancel two numbers by dividing by their (signed) greatest common divisor.
     /// This will keep the signs intact if one of the numbers is zero.
-    /// 
+    ///
     /// This is based on the assumption, that `Div` is exact if `Euclid::div_rem_euclid` has zero remainder.
     #[must_use]
     fn cancel(self, b: Self) -> (Self, Self);
@@ -542,12 +540,12 @@ pub trait Cancel: Sized + Clone + Zero + One + Sub<Output = Self> + PartialEq + 
 impl<T: Clone + Zero + One + Sub<Output = T> + PartialEq + Div<Output = T> + Euclid> Cancel for T {
     fn cancel(self, b: Self) -> (Self, Self) {
         if self == b {
-            if self.is_zero() {
-                return (T::zero(), T::zero());
+            return if self.is_zero() {
+                (T::zero(), T::zero())
             } else {
                 // Note, the sign is lost here!
-                return (T::one(), T::one());
-            }
+                (T::one(), T::one())
+            };
         }
         let gcd = gcd(self.clone(), b.clone());
         //(self.div_rem_euclid(&gcd).0, b.div_rem_euclid(&gcd).0) // this messes with the signs...
@@ -588,7 +586,9 @@ impl<T: Num + Cancel + Div<Output = T>> SafeDiv for T {
 
 pub trait IntoDiscrete: PartialEq + From<Self::Output> {
     type Output: Clone + Zero + One;
+    #[must_use]
     fn floor(&self) -> Self::Output;
+    #[must_use]
     fn ceil(&self) -> Self::Output {
         let x = self.floor();
         if self == &Self::from(x.clone()) {
@@ -597,6 +597,7 @@ pub trait IntoDiscrete: PartialEq + From<Self::Output> {
             x + One::one()
         }
     }
+    #[must_use]
     fn round(&self) -> Self::Output;
 }
 

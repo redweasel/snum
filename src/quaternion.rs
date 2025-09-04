@@ -24,10 +24,10 @@ pub struct Quaternion<T> {
 impl<T> Quaternion<T> {
     pub const fn new(re: T, im_i: T, im_j: T, im_k: T) -> Self {
         Self {
-            re,
             im_i,
             im_j,
             im_k,
+            re,
         }
     }
 }
@@ -173,8 +173,7 @@ impl_add!(Sub, sub);
 
 macro_rules! impl_mul_real {
     ($Mul: ident, $mul: ident) => {
-        impl<T: Clone + $Mul<Output = T>> $Mul<T> for Quaternion<T>
-        {
+        impl<T: Clone + $Mul<Output = T>> $Mul<T> for Quaternion<T> {
             type Output = Quaternion<T>;
             fn $mul(self, rhs: T) -> Self::Output {
                 Self {
@@ -188,7 +187,7 @@ macro_rules! impl_mul_real {
 
         impl<'a, T> $Mul<&'a T> for &'a Quaternion<T>
         where
-            for<'b> &'b T: $Mul<Output = T>
+            for<'b> &'b T: $Mul<Output = T>,
         {
             type Output = Quaternion<T>;
             fn $mul(self, rhs: &'a T) -> Self::Output {
@@ -226,7 +225,7 @@ where
         }
     }
 }
-impl<'a, T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>> Mul for &'a Quaternion<T> {
+impl<T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>> Mul for &Quaternion<T> {
     type Output = Quaternion<T>;
     fn mul(self, rhs: Self) -> Self::Output {
         Quaternion {
@@ -285,10 +284,10 @@ where
         &(self * rhs.conj()) / &abs_sqr
     }
 }
-impl<'a, T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>> Div
-    for &'a Quaternion<T>
+impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>> Div
+    for &Quaternion<T>
 where
-    for<'b> &'b T: Mul<Output = T>,
+    for<'a> &'a T: Mul<Output = T>,
 {
     type Output = Quaternion<T>;
     fn div(self, rhs: Self) -> Self::Output {
@@ -303,6 +302,7 @@ impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T>> Quaternion<
 where
     for<'a> &'a T: Mul<Output = T> + Div<Output = T>,
 {
+    #[must_use]
     pub fn recip(self) -> Self {
         let abs_sqr = &self.im_i * &self.im_i
             + &self.im_j * &self.im_j
@@ -390,9 +390,11 @@ impl<T: NumAlgebraic<Real = T> + Zero + One> Quaternion<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
+    #[must_use]
     pub fn im_abs(&self) -> T {
         (self.im_i.abs_sqr() + self.im_j.abs_sqr() + self.im_k.abs_sqr()).sqrt()
     }
+    #[must_use]
     pub fn sign_im(&self) -> Self {
         let len = self.im_abs();
         if len.is_zero() {
@@ -500,15 +502,15 @@ where
         if &im_sqr + &re_sqr == re_sqr {
             let sqrt = self.re.abs().sqrt();
             let div = &(T::one() + T::one()) * &sqrt;
-            if self.re >= T::zero() {
+            return if self.re >= T::zero() {
                 let mut q = self / &div;
                 q.re = sqrt;
-                return q;
+                q
             } else {
                 let mut q = self.sign_im() * sqrt;
                 q.re = im_sqr.sqrt() / div;
-                return q;
-            }
+                q
+            };
         }
         // Use angle bisection
         // Note, this approach limited by the types epsilon at 1.0 for re << 0

@@ -2,6 +2,7 @@
 
 use core::cmp::Ordering;
 use core::fmt;
+use core::hash::Hash;
 use core::iter::{Product, Sum};
 use core::marker::PhantomData;
 use core::ops::*;
@@ -13,7 +14,7 @@ use crate::*;
 /// A constant representing `sqrt(Self::sqr())`
 pub trait SqrtConst<T: Num> {
     type Real: SqrtConst<T::Real, Real = Self::Real>;
-    /// constant for internal use to be able to check at compile time, if a SqrtConst is allowed.
+    /// constant for internal use to be able to check at compile time, if a [SqrtConst] is allowed.
     const _TEST_SQRT: () = ();
     /// Get the square of this sqrt constant, i.e. the content of the sqrt, which is representable in `T`.
     /// This constant is not allowed to be representable with `T`, as otherwise e.g. the equallity check
@@ -26,9 +27,11 @@ pub trait SqrtConst<T: Num> {
     ///
     /// Note, there is nothing enforcing that this is a compile time constant,
     /// however if it changes at runtime, the values of all numbers using it, will change.
+    #[must_use]
     fn sqr() -> T;
     /// Get the rounded down version of this square root by computing `floor(sqrt(Self::sqr()))`.
     /// For non integers, this returns the closest approximation, which is smaller than the real constant.
+    #[must_use]
     fn floor() -> T;
 }
 
@@ -49,11 +52,10 @@ where
             T::CHAR == 0 || N <= T::CHAR,
             "N is not allowed to be larger than the ring characteristic"
         );
-        ()
     };
     #[inline(always)]
     fn sqr() -> T {
-        let _ = Self::_TEST_SQRT;
+        let () = Self::_TEST_SQRT;
         T::from_u64(N)
     }
     #[inline(always)]
@@ -180,6 +182,7 @@ where
     ///     assert_eq!(res, Ratio::approx_sqrt::<Sqrt<i64, N>>((n / 2) as u64));
     /// }
     /// ```
+    #[must_use]
     pub fn approx_sqrt<E: SqrtConst<T>>(iterations: u64) -> Self {
         // Note, that (√N - floor(√N))^n converges to 0 for increasing n
         // This gives a rational number by x + y√N = 0 -> -x/y = √N
@@ -216,7 +219,6 @@ where
 /// Note, the special implementation for fractions (a+b√n)/q isn't available in this library,
 /// however a/p+(b/q)√n can be used instead, requiring a bit more memory and computation, but
 /// with an extended value range.
-#[derive(Hash)]
 #[repr(C)]
 pub struct SqrtExt<T: Num, E: SqrtConst<T>> {
     pub value: T,
@@ -266,6 +268,12 @@ where
     /// See <https://en.wikipedia.org/wiki/Dirichlet%27s_unit_theorem> for more information.
     ///
     /// This (non const) function is computing it, so avoid calling it multiple times and precompute it, if possible.
+    /// 
+    /// # Panics
+    /// 
+    /// - If the unit can not be found.
+    /// - If overflow detection is on and the smallest unit is too large.
+    #[must_use]
     pub fn unit() -> Self {
         if E::sqr().is_unit() {
             return SqrtExt::new(T::zero(), T::one());
@@ -283,12 +291,15 @@ where
         let x = SqrtExt::<T, E>::new(T::zero(), T::one());
         let mut cfrac_iter = DevelopContinuedFraction::new(x).continued_fraction(T::zero());
         for _ in 0..1000 {
-            let xy = cfrac_iter.next().unwrap();
-            if xy.is_finite() {
-                let s = SqrtExt::new(xy.numer, xy.denom);
-                if s.abs_sqr_ext().is_unit() {
-                    return s;
+            if let Some(xy) = cfrac_iter.next() {
+                if xy.is_finite() {
+                    let s = SqrtExt::new(xy.numer, xy.denom);
+                    if s.abs_sqr_ext().is_unit() {
+                        return s;
+                    }
                 }
+            } else {
+                break;
             }
         }
         panic!("didn't find solution");
@@ -326,6 +337,14 @@ impl<T: PartialEq + Num, E: SqrtConst<T>> PartialEq for SqrtExt<T, E> {
     }
 }
 impl<T: Eq + Num, E: SqrtConst<T>> Eq for SqrtExt<T, E> {}
+
+// need to implement myself, as otherwise E is required to be Hash, which is silly.
+impl<T: Hash + Num, E: SqrtConst<T>> Hash for SqrtExt<T, E> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state);
+        self.ext.hash(state);
+    }
+}
 
 impl<T: Num + PartialOrd + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> PartialOrd
     for SqrtExt<T, E>
@@ -546,6 +565,7 @@ impl<T: Num + Neg<Output = T>, E: SqrtConst<T>> Conjugate for SqrtExt<T, E> {
 
 impl<T: Num + Neg<Output = T>, E: SqrtConst<T>> SqrtExt<T, E> {
     /// negate the sqrt part.
+    #[must_use]
     pub fn conj_ext(&self) -> Self {
         Self::new(self.value.clone(), -self.ext.clone())
     }
@@ -553,6 +573,7 @@ impl<T: Num + Neg<Output = T>, E: SqrtConst<T>> SqrtExt<T, E> {
 
 impl<T: Num + One + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> SqrtExt<T, E> {
     /// compute `self * self.conj_ext() = value^2 - ext^2 * E::sqr()`
+    #[must_use]
     pub fn abs_sqr_ext(&self) -> T {
         // overflows easily
         //self.value.clone() * self.value.clone() - self.ext.clone() * self.ext.clone() * E::sqr()
@@ -632,7 +653,7 @@ where
         )
     }
 }
-impl<'a, T: Num + Add<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Mul for &'a SqrtExt<T, E> {
+impl<T: Num + Add<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Mul for &SqrtExt<T, E> {
     type Output = SqrtExt<T, E>;
     fn mul(self, rhs: Self) -> Self::Output {
         SqrtExt::new(
@@ -673,6 +694,7 @@ impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: 
 impl<T: Num + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>>
     SqrtExt<T, E>
 {
+    #[must_use]
     pub fn recip(self) -> Self {
         let abs_sqr = self.abs_sqr_ext();
         Self::new(
@@ -1008,19 +1030,13 @@ where
 // can guarantee it contains no *added* padding. Thus, if `T: Zeroable`,
 // `SqrtExt<T, E>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: Num + bytemuck::Zeroable, E: SqrtConst<T>> bytemuck::Zeroable
-    for SqrtExt<T, E>
-{
-}
+unsafe impl<T: Num + bytemuck::Zeroable, E: SqrtConst<T>> bytemuck::Zeroable for SqrtExt<T, E> {}
 
 // Safety: `SqrtExt<T, _>` is `repr(C)` and contains only instances of `T`, so we
 // can guarantee it contains no *added* padding. Thus, if `T: Pod`,
 // `SqrtExt<T, E>` is also `Pod`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: Num + bytemuck::Pod, E: 'static + SqrtConst<T>> bytemuck::Pod
-    for SqrtExt<T, E>
-{
-}
+unsafe impl<T: Num + bytemuck::Pod, E: 'static + SqrtConst<T>> bytemuck::Pod for SqrtExt<T, E> {}
 
 impl<T: Num + fmt::Debug, E: SqrtConst<T>> fmt::Debug for SqrtExt<T, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

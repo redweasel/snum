@@ -28,9 +28,11 @@ pub struct Ratio<T> {
 
 impl<T> Ratio<T> {
     /// create a rational number without cancelling.
+    #[must_use]
     pub const fn new_raw(numer: T, denom: T) -> Self {
         Ratio { numer, denom }
     }
+    #[must_use]
     pub fn recip(self) -> Self {
         Self {
             numer: self.denom,
@@ -39,9 +41,11 @@ impl<T> Ratio<T> {
     }
 }
 impl<T: Zero + PartialEq> Ratio<T> {
+    #[must_use]
     pub fn is_finite(&self) -> bool {
         !self.denom.is_zero() && self.numer == self.numer && self.denom == self.denom
     }
+    #[must_use]
     pub fn is_nan(&self) -> bool {
         (self.denom.is_zero() && self.numer.is_zero())
             || self.numer != self.numer
@@ -54,6 +58,7 @@ where
 {
     /// rounds to the next integer towards zero by dividing the numerator
     /// by the denominator and setting the new denominator to one.
+    #[must_use]
     pub fn trunc(self) -> Self {
         if self.is_finite() {
             Self::from(&self.numer / &self.denom)
@@ -69,6 +74,7 @@ where
     /// Returns the fractional part of a number, with division rounded towards zero. (based on [Rem])
     ///
     /// Satisfies `self == self.trunc() + self.fract()`.
+    #[must_use]
     pub fn fract(self) -> Ratio<T> {
         if self.is_finite() {
             Ratio::new_raw(&self.numer % &self.denom, self.denom)
@@ -90,7 +96,7 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
             if self.denom != self.denom {
                 return self.denom.clone(); // NaN
             }
-            panic!("Called floor on non finite rational");
+            panic!("called floor on non finite rational");
         }
         // Due to PartialOrd, there is a guarantee, that this is the correct floor.
         if self.denom >= T::zero() {
@@ -104,9 +110,7 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
     ///
     /// Panics if the rational is not finite.
     fn round(&self) -> T {
-        if !self.is_finite() {
-            panic!("Called round on non finite rational");
-        }
+        assert!(self.is_finite(), "called round on non finite rational");
         let mut t1 = self.floor();
         let mut t2 = t1.clone() + T::one();
         let mut denom_abs = self.denom.clone();
@@ -127,12 +131,13 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
             if ord == Ordering::Less { t1 } else { t2 }
         } else {
             // round down
-            if ord != Ordering::Greater { t1 } else { t2 }
+            if ord == Ordering::Greater { t2 } else { t1 }
         }
     }
 }
 impl<T: Zero + Euclid + PartialEq> Ratio<T> {
     /// Returns true if the rational number can be written as a normal number (i.e. `self == self.trunc()`).
+    #[must_use]
     pub fn is_integral(&self) -> bool {
         self.is_finite() && self.numer.div_rem_euclid(&self.denom).1.is_zero()
     }
@@ -140,6 +145,7 @@ impl<T: Zero + Euclid + PartialEq> Ratio<T> {
 impl<T: Cancel> Ratio<T> {
     /// Create a rational number with cancelling.
     /// To create a `Ratio` in a const function, use `new_raw`.
+    #[must_use]
     pub fn new(numer: T, denom: T) -> Self {
         let (mut numer, mut denom) = numer.cancel(denom);
         if !numer.is_zero() && !denom.is_valid_euclid() {
@@ -149,7 +155,7 @@ impl<T: Cancel> Ratio<T> {
         }
         Ratio { numer, denom }
     }
-
+    #[must_use]
     pub fn reduced(self) -> Self {
         Self::new(self.numer, self.denom)
     }
@@ -157,6 +163,7 @@ impl<T: Cancel> Ratio<T> {
 
 impl<T: SafeDiv> Ratio<T> {
     /// reduce, not only by canceling, but also by dividing by the denominator, if it has a representable inverse.
+    #[must_use]
     pub fn reduced_full(mut self) -> Self {
         // not using safe_div directly though, as this should also cancel x/0 to ±1/0 with correct sign.
         (self.numer, self.denom) = self.numer.cancel(self.denom);
@@ -319,45 +326,44 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
                 } else {
                     ord.map(Ordering::reverse)
                 };
+            }
+            // Compare as floored integers and remainders
+            // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
+            // when negative denominators are used, so the denominators have to be checked.
+            let a = if s.denom >= zero {
+                s
             } else {
-                // Compare as floored integers and remainders
-                // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
-                // when negative denominators are used, so the denominators have to be checked.
-                let a = if s.denom >= zero {
-                    s
-                } else {
-                    Ratio::new_raw(T::zero() - s.numer, T::zero() - s.denom)
-                };
-                let b = if o.denom >= zero {
-                    o
-                } else {
-                    Ratio::new_raw(T::zero() - o.numer, T::zero() - o.denom)
-                };
-                // after flipping signs, the denominators might have become equal.
-                if a.denom == b.denom {
-                    return a.numer.partial_cmp(&b.numer);
-                }
-                let (a_int, a_rem) = a.numer.div_rem_euclid(&a.denom);
-                let (b_int, b_rem) = b.numer.div_rem_euclid(&b.denom);
-                return match a_int.partial_cmp(&b_int)? {
-                    Ordering::Greater => Some(Ordering::Greater),
-                    Ordering::Less => Some(Ordering::Less),
-                    Ordering::Equal => {
-                        match (a_rem.is_zero(), b_rem.is_zero()) {
-                            (true, true) => Some(Ordering::Equal),
-                            (true, false) => Some(Ordering::Less),
-                            (false, true) => Some(Ordering::Greater),
-                            (false, false) => {
-                                // Compare the reciprocals of the remaining fractions in reverse
-                                // Note, the denominators are smaller, so this can't lead to infinite recursion if the gcd doesn't.
-                                o = Ratio::new_raw(a.denom, a_rem);
-                                s = Ratio::new_raw(b.denom, b_rem);
-                                continue;
-                            }
+                Ratio::new_raw(T::zero() - s.numer, T::zero() - s.denom)
+            };
+            let b = if o.denom >= zero {
+                o
+            } else {
+                Ratio::new_raw(T::zero() - o.numer, T::zero() - o.denom)
+            };
+            // after flipping signs, the denominators might have become equal.
+            if a.denom == b.denom {
+                return a.numer.partial_cmp(&b.numer);
+            }
+            let (a_int, a_rem) = a.numer.div_rem_euclid(&a.denom);
+            let (b_int, b_rem) = b.numer.div_rem_euclid(&b.denom);
+            return match a_int.partial_cmp(&b_int)? {
+                Ordering::Greater => Some(Ordering::Greater),
+                Ordering::Less => Some(Ordering::Less),
+                Ordering::Equal => {
+                    match (a_rem.is_zero(), b_rem.is_zero()) {
+                        (true, true) => Some(Ordering::Equal),
+                        (true, false) => Some(Ordering::Less),
+                        (false, true) => Some(Ordering::Greater),
+                        (false, false) => {
+                            // Compare the reciprocals of the remaining fractions in reverse
+                            // Note, the denominators are smaller, so this can't lead to infinite recursion if the gcd doesn't.
+                            o = Ratio::new_raw(a.denom, a_rem);
+                            s = Ratio::new_raw(b.denom, b_rem);
+                            continue;
                         }
                     }
-                };
-            }
+                }
+            };
         }
     }
 }
@@ -409,16 +415,16 @@ impl<T: Conjugate> Conjugate for Ratio<T> {
 impl<T: Zero + Neg<Output = T>> Neg for Ratio<T> {
     type Output = Ratio<T>;
     fn neg(self) -> Self::Output {
-        if !self.numer.is_zero() {
-            Self {
-                numer: -self.numer,
-                denom: self.denom,
-            }
-        } else {
+        if self.numer.is_zero() {
             // negative zero
             Self {
                 numer: self.numer,
                 denom: -self.denom,
+            }
+        } else {
+            Self {
+                numer: -self.numer,
+                denom: self.denom,
             }
         }
     }
@@ -524,7 +530,7 @@ where
         r
     }
 }
-impl<'a, T: Cancel> Mul for &'a Ratio<T> {
+impl<T: Cancel> Mul for &Ratio<T> {
     type Output = Ratio<T>;
     fn mul(self, rhs: Self) -> Self::Output {
         // avoid overflows by computing the gcd early (in each operation)
@@ -597,7 +603,7 @@ where
         self * rhs.recip()
     }
 }
-impl<'a, T: Cancel> Div for &'a Ratio<T> {
+impl<T: Cancel> Div for &Ratio<T> {
     type Output = Ratio<T>;
     fn div(self, rhs: Self) -> Self::Output {
         self * &rhs.clone().recip()
@@ -640,7 +646,7 @@ impl<T: Cancel + Div<Output = T>> Rem for Ratio<T> {
         &self - &(&rhs * &(f.numer / f.denom))
     }
 }
-impl<'a, T: Cancel + Div<Output = T>> Rem for &'a Ratio<T> {
+impl<T: Cancel + Div<Output = T>> Rem for &Ratio<T> {
     type Output = Ratio<T>;
     /// remainder like for floats, not the division remainder, but rather a signed modulo function.
     fn rem(self, rhs: Self) -> Self::Output {
@@ -751,18 +757,18 @@ where
     #[inline(always)]
     fn re(&self) -> Self::Real {
         let d = self.denom.conj();
-        if d != self.denom {
+        if d == self.denom {
+            Ratio {
+                numer: self.numer.re(),
+                denom: self.denom.re(),
+            }
+        } else {
             // do the trick of multiplying with denom.conj()
             // the result is not cancelled! This is BAD for real numbers, hence the check above.
             // (all operations also work without canceling and canceling doesn't extend the range of this operation)
             Ratio {
                 numer: (self.numer.clone() * d).re(),
                 denom: self.denom.abs_sqr(),
-            }
-        } else {
-            Ratio {
-                numer: self.numer.re(),
-                denom: self.denom.re(),
             }
         }
     }
@@ -831,18 +837,18 @@ where
         if !(F::one() / value.clone()).is_finite() {
             // same as in to_approx, handle subnormal inputs by multiplying.
             // all of this needs to happen without integer overflows.
-            let mut _16 = T::one() + T::one();
-            _16 = _16.clone() * _16;
-            _16 = _16.clone() * _16;
-            let _16f: F = _16.to_approx();
+            let mut v16 = T::one() + T::one();
+            v16 = v16.clone() * v16;
+            v16 = v16.clone() * v16;
+            let v16f: F = v16.to_approx();
             // do a loop instead of recursion to avoid stack overflows at all cost.
-            let mut normalized = value * _16f.clone();
-            let mut norm_tol = tol * _16f.clone();
-            let mut fac = _16.clone();
+            let mut normalized = value * v16f.clone();
+            let mut norm_tol = tol * v16f.clone();
+            let mut fac = v16.clone();
             while !(F::one() / normalized.clone()).is_finite() {
-                normalized = normalized * _16f.clone();
-                norm_tol = norm_tol * _16f.clone();
-                fac = fac * _16.clone();
+                normalized = normalized * v16f.clone();
+                norm_tol = norm_tol * v16f.clone();
+                fac = fac * v16.clone();
             }
             return Some(&Self::from_approx(normalized, norm_tol)? / &fac);
         }
@@ -873,13 +879,13 @@ where
         }
         let mut d = denom.to_approx();
         if !n.is_zero() && !d.is_finite() {
-            let mut _16 = T::one() + T::one();
-            _16 = _16.clone() * _16;
-            _16 = _16.clone() * _16;
-            let _16f: F = _16.to_approx();
+            let mut v16 = T::one() + T::one();
+            v16 = v16.clone() * v16;
+            v16 = v16.clone() * v16;
+            let v16f: F = v16.to_approx();
             loop {
-                denom = denom.div_rem_euclid(&_16).0;
-                n = n / _16f.clone();
+                denom = denom.div_rem_euclid(&v16).0;
+                n = n / v16f.clone();
                 d = denom.to_approx();
                 if n.is_zero() || d.is_finite() {
                     break;
@@ -908,13 +914,12 @@ impl<T: Clone + Zero + Euclid + Hash> Hash for Ratio<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let mut r = self.clone();
         loop {
-            if !r.denom.is_zero() {
-                let (int, rem) = r.numer.div_rem_euclid(&r.denom);
-                (r.denom, r.numer) = (r.numer, rem);
-                int.hash(state);
-            } else {
+            if r.denom.is_zero() {
                 return r.denom.hash(state);
             }
+            let (int, rem) = r.numer.div_rem_euclid(&r.denom);
+            (r.denom, r.numer) = (r.numer, rem);
+            int.hash(state);
         }
     }
 }

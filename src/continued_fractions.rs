@@ -41,20 +41,18 @@ impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFract
     type Item = Ratio<T>;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|x| {
-            take_mut::take(&mut self.accum, |accum| next(accum, &x.borrow()));
+            take_mut::take(&mut self.accum, |accum| next(accum, x.borrow()));
             end(self.accum.clone(), self.end.clone())
         })
     }
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        if let Some(max_len) = self.iter.size_hint().1 {
-            if n > max_len {
-                return None;
-            }
+        if let Some(max_len) = self.iter.size_hint().1 && n > max_len {
+            return None;
         }
         // doing multiple steps at once, makes the computation of the outputs in between unecessary.
         for _ in 0..=n {
             if let Some(x) = self.iter.next() {
-                take_mut::take(&mut self.accum, |accum| next(accum, &x.borrow()));
+                take_mut::take(&mut self.accum, |accum| next(accum, x.borrow()));
             } else {
                 return None;
             }
@@ -64,8 +62,8 @@ impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFract
     fn last(mut self) -> Option<Self::Item> {
         // in this case one can also backwards evaluated if the iterator is a DoubleEndedIterator, however that required specialisaton.
         // -> compute forwards until the end, don't compute intermediate outputs
-        while let Some(x) = self.iter.next() {
-            take_mut::take(&mut self.accum, |accum| next(accum, &x.borrow()));
+        for x in self.iter.by_ref() {
+            take_mut::take(&mut self.accum, |accum| next(accum, x.borrow()));
         }
         Some(end(self.accum, self.end))
     }
@@ -78,7 +76,7 @@ pub trait IntoContinuedFraction<T: Sized> {
     /// This is done forward, so `[1, 2, 2]` turns into `[1+1/1, 1+1/(2+1/1), 1+1/(2+1/(2+1/1))]`
     fn continued_fraction(self, end: T) -> Self::IntoIter;
 }
-impl<'a, T: 'a + Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T> for I {
+impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> IntoContinuedFraction<T> for I {
     type IntoIter = ContinuedFractionIter<T, Self>;
     fn continued_fraction(self, end: T) -> ContinuedFractionIter<T, Self> {
         ContinuedFractionIter {

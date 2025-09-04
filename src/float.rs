@@ -125,12 +125,12 @@ fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
     let bits: u32 = f.to_bits();
     let mut exponent: i16 = ((bits >> 23) & 0xff) as i16;
     let finite = exponent != 0xff;
-    let mut mantissa = bits & 0x7fffff;
+    let mut mantissa = bits & 0x7f_ffff;
     let zero_mantissa = mantissa == 0;
     if exponent == 0 {
         mantissa <<= 1;
     } else {
-        mantissa |= 0x800000;
+        mantissa |= 0x80_0000;
     }
     // Exponent bias + mantissa shift
     exponent -= 127 + 23;
@@ -152,12 +152,12 @@ fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
     let bits: u64 = f.to_bits();
     let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
     let finite = exponent != 0x7ff;
-    let mut mantissa = bits & 0xfffffffffffff;
+    let mut mantissa = bits & 0xf_ffff_ffff_ffff;
     let zero_mantissa = mantissa == 0;
     if exponent == 0 {
         mantissa <<= 1;
     } else {
-        mantissa |= 0x10000000000000;
+        mantissa |= 0x10_0000_0000_0000;
     }
     // Exponent bias + mantissa shift
     exponent -= 1023 + 52;

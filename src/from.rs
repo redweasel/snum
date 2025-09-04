@@ -26,6 +26,7 @@ macro_rules! impl_from_float {
     ($($type:ty),+) => {
         $(impl FromU64 for $type {
             #[inline(always)]
+            #[allow(clippy::cast_precision_loss)]
             fn from_u64(value: u64) -> Self {
                 value as $type // accept errors here!
             }

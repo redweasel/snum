@@ -13,18 +13,21 @@ pub struct Complex<T> {
 }
 
 impl<T> Complex<T> {
+    #[must_use]
     pub const fn new(re: T, im: T) -> Self {
         Self { re, im }
     }
 }
 
 impl<T: Zero> Complex<T> {
+    #[must_use]
     pub fn real(re: T) -> Self {
         Self {
             re,
             im: Zero::zero(),
         }
     }
+    #[must_use]
     pub fn imag(im: T) -> Self {
         Self {
             re: Zero::zero(),
@@ -64,6 +67,7 @@ where
 }
 
 impl<T: Zero + One> Complex<T> {
+    #[must_use]
     pub fn i() -> Self {
         Self {
             re: Zero::zero(),
@@ -74,6 +78,7 @@ impl<T: Zero + One> Complex<T> {
 
 impl<T: Neg<Output = T>> Complex<T> {
     /// Multiply with i with correct handling of infinities.
+    #[must_use]
     pub fn mul_i(self) -> Self {
         Self {
             re: -self.im,
@@ -185,7 +190,7 @@ macro_rules! impl_add_real {
         }
         impl<'a, T: Clone> $Add<&'a T> for &'a Complex<T>
         where
-            for<'b> &'b T: $Add<Output = T>
+            for<'b> &'b T: $Add<Output = T>,
         {
             type Output = Complex<T>;
             fn $add(self, rhs: &'a T) -> Self::Output {
@@ -258,6 +263,7 @@ impl<'a, T: Clone + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Ou
 }
 
 impl<T: Clone + Neg<Output = T> + Add<Output = T> + Mul<Output = T> + Div<Output = T>> Complex<T> {
+    #[must_use]
     pub fn recip(self) -> Self {
         let abs_sqr = self.re.clone() * self.re.clone() + self.im.clone() * self.im.clone();
         Complex {
@@ -282,7 +288,6 @@ where
 }
 
 impl<
-    'a,
     T: Clone
         + One
         + Add<Output = T>
@@ -290,7 +295,7 @@ impl<
         + Sub<Output = T>
         + Div<Output = T>
         + Rem<Output = T>,
-> Rem for &'a Complex<T>
+> Rem for &Complex<T>
 {
     type Output = Complex<T>;
     fn rem(self, rhs: Self) -> Self::Output {
@@ -420,7 +425,7 @@ impl<T: NumElementary + Zero + Neg<Output = T> + Mul<T, Output = T>> Complex<T> 
     }
     /// Compute `cis(phase) := exp(i * phase)`, which is the more efficient version of `from_polar(1, phase)`.
     /// "cis" is an acronym for "*cos i sin".
-    pub fn cis(phase: T) -> Self {
+    pub fn cis(phase: &T) -> Self {
         Self::new(phase.cos(), phase.sin())
     }
 }
@@ -471,12 +476,12 @@ where
         if !self.re.is_zero() && &(&(&self.im * &self.im) / &self.re) + &self.re == self.re {
             let sqrt = self.re.abs().sqrt();
             let im = &self.im / &(&(T::one() + T::one()) * &sqrt);
-            if self.re >= T::zero() {
-                return Complex { im, re: sqrt };
+            return if self.re >= T::zero() {
+                Complex { im, re: sqrt }
             } else {
                 // this makes it different for 0.0 and -0.0 !!!
-                return Complex::new(im.abs(), sqrt.copysign(&self.im));
-            }
+                Complex::new(im.abs(), sqrt.copysign(&self.im))
+            };
         }
         // Use angle bisection
         // Note, this approach is limited by the types epsilon at 1.0 for re << 0

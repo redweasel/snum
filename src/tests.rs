@@ -1971,6 +1971,16 @@ mod quaternion {
     }
 }
 
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+fn hash<T: std::hash::Hash>(x: &T) -> u64 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::*;
+    let mut hasher = <RandomState as BuildHasher>::Hasher::new();
+    x.hash(&mut hasher);
+    hasher.finish()
+}
+
 #[cfg(feature = "rational")]
 mod rational {
     use super::*;
@@ -1980,15 +1990,6 @@ mod rational {
     type BigRational = Ratio<IBig>;
     use crate::rational::Ratio;
     type Rational64 = Ratio<i64>;
-
-    #[cfg(feature = "std")]
-    fn hash<T: std::hash::Hash>(x: &T) -> u64 {
-        use std::collections::hash_map::RandomState;
-        use std::hash::*;
-        let mut hasher = <RandomState as BuildHasher>::Hasher::new();
-        x.hash(&mut hasher);
-        hasher.finish()
-    }
 
     pub const _0: Rational64 = Ratio::new_raw(0, 1);
     pub const _1: Rational64 = Ratio::new_raw(1, 1);
@@ -2064,6 +2065,13 @@ mod rational {
     fn test_new_zero() {
         assert_eq!(Ratio::new(1, 0), Ratio::new_raw(1, 0));
         assert_eq!(Ratio::new(-1, 0), Ratio::new_raw(-1, 0));
+    }
+
+    #[test]
+    fn test_num_complex() {
+        assert_eq!(_1_2.re(), _1_2);
+        let r = Ratio::new(complex!(1 + 2 i), complex!(-2 + 3 i));
+        assert_eq!(r.re(), Ratio::new((r.numer * r.denom.conj()).re(), r.denom.abs_sqr()));
     }
 
     #[test]
@@ -3283,11 +3291,18 @@ mod extension {
     use super::*;
     use core::cmp::Ordering;
 
+    const ZERO: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 0);
+    const ONE: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 0);
+    const SQRT5: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 1);
+    const PHI: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 1);
+    const PHI2: SqrtExt<u32, Sqrt<u32, 5>> = SqrtExt::new(1, 1); // // 1 + √5
+    const RF: SqrtExt<f32, Sqrt<f32, 5>> = SqrtExt::new(1.5, -2.7);
+    const R: SqrtExt<Ratio<i32>, Sqrt<Ratio<i32>, 5>> =
+        SqrtExt::new(Ratio::new_raw(1, 2), Ratio::new_raw(1, 3));
+
     #[test]
     fn test_extension() {
-        // 1 + √5
-        const PHI2: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 1);
-        assert_eq!(PHI2.abs_sqr(), (PHI2 + 2) * 2); // phi^2 = phi+1
+        assert_eq!(PHI.abs_sqr(), (PHI + 2) * 2); // phi^2 = phi+1
         // 1 + i√5
         const C: SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>> =
             SqrtExt::new(Complex::new(1, 0), Complex::new(0, 1));
@@ -3312,14 +3327,6 @@ mod extension {
     #[test]
     #[allow(dead_code)]
     fn test_extension_string_formatting() {
-        const ZERO: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 0);
-        const ONE: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 0);
-        const SQRT5: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 1);
-        const PHI: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 1);
-        const PHI2: SqrtExt<u32, Sqrt<u32, 5>> = SqrtExt::new(1, 1);
-        const RF: SqrtExt<f32, Sqrt<f32, 5>> = SqrtExt::new(1.5, -2.7);
-        const R: SqrtExt<Ratio<i32>, Sqrt<Ratio<i32>, 5>> =
-            SqrtExt::new(Ratio::new_raw(1, 2), Ratio::new_raw(1, 3));
         // normal numbers are handled using the default formatter, so don't test these too much
         assert_fmt_eq!(format_args!("{:5}", ZERO), "    0");
         assert_fmt_eq!(format_args!("{:5}", ONE), "    1");
@@ -3855,6 +3862,13 @@ mod extension {
         assert_eq!(y, w.into());
         assert_eq!(z / w, Complex::new(Zero::zero(), TR::new((-2i32).into(), Zero::zero())));
         // TODO test Complex<SqrtExt<...>> e.g. with Euclid
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_hash() {
+        assert_ne!(hash(&ZERO), hash(&ONE));
+        assert_eq!(hash(&PHI), hash(&PHI2)); // assuming hash is equal for u32 and i32
     }
 
     #[test]

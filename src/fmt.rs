@@ -22,7 +22,7 @@ impl NumberDetector {
             is_alphanum: true,
             is_number: true,
             no_number_chars,
-            prefix: core::array::from_fn(|i| prefix.chars().skip(i).next().unwrap_or('\0')),
+            prefix: core::array::from_fn(|i| prefix.chars().nth(i).unwrap_or('\0')),
             first: None,
             first_tmp: [0],
             second: None,
@@ -56,7 +56,7 @@ impl NumberDetector {
     }
 
     pub fn has_prefix(&self) -> bool {
-        self.prefix.len() > 0 && self.prefix_counter == self.prefix.len()
+        !self.prefix.is_empty() && self.prefix_counter == self.prefix.len()
     }
 
     pub fn is_number(&self) -> bool {
@@ -68,7 +68,7 @@ impl NumberDetector {
     }
 
     pub fn starts_alphanumeric(&self) -> bool {
-        self.first.map_or(false, |c| c.is_alphanumeric())
+        self.first.is_some_and(char::is_alphanumeric)
     }
 }
 
@@ -76,13 +76,11 @@ impl fmt::Write for NumberDetector {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
             if self.first.is_some() || (c != '-' && c != '+') {
-                if self.width - self.prefix_counter <= 1 {
-                    if let Some(pc) = self.prefix.get(self.prefix_counter) {
-                        if pc == &c {
-                            self.prefix_counter += 1;
-                        } else {
-                            self.prefix_counter = 0;
-                        }
+                if self.width - self.prefix_counter <= 1 && let Some(pc) = self.prefix.get(self.prefix_counter) {
+                    if pc == &c {
+                        self.prefix_counter += 1;
+                    } else {
+                        self.prefix_counter = 0;
                     }
                 }
                 self.is_alphanum &= c.is_ascii_alphanumeric();
@@ -102,9 +100,9 @@ impl fmt::Write for NumberDetector {
 
 struct SkipWriteN<'a, 'b>(&'b mut fmt::Formatter<'a>, usize);
 
-impl<'a, 'b> fmt::Write for SkipWriteN<'a, 'b> {
+impl fmt::Write for SkipWriteN<'_, '_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        if let Some((i, _)) = s.char_indices().skip(self.1).next() {
+        if let Some((i, _)) = s.char_indices().nth(self.1) {
             self.0.write_str(&s[i..])?;
         }
         self.1 = self.1.saturating_sub(s.chars().count());
@@ -138,7 +136,7 @@ pub fn pad_expr(
     }
     // pad by doing the formatting twice
     let mut dec = NumberDetector::new("", prefix);
-    write!(&mut dec, "{}", buf_args)?;
+    write!(&mut dec, "{buf_args}")?;
     let mut width = dec.width();
 
     let sign = dec.sign();
@@ -156,7 +154,7 @@ pub fn pad_expr(
     if width >= min {
         // We're over the minimum width, so then we can just write the bytes.
         f.write_str(add_sign)?;
-        write!(f, "{}", buf_args)
+        write!(f, "{buf_args}")
     } else if f.sign_aware_zero_pad() && dec.starts_alphanumeric() {
         // skip the sign and prefix -0x
         write!(f, "{sign}")?;
@@ -167,7 +165,7 @@ pub fn pad_expr(
         }
         // Then add the 0 padding.
         for _ in width..min {
-            f.write_char('0')?
+            f.write_char('0')?;
         }
         write!(SkipWriteN(f, skip_n), "{buf_args}")
     } else {
@@ -176,27 +174,27 @@ pub fn pad_expr(
         // (can't access the fill character from the public API)
         let fill = f.fill();
         let l = (min - width) / 2;
-        let r = (min - width + 1) / 2;
+        let r = (min - width).div_ceil(2);
         match align {
             fmt::Alignment::Right => {
                 for _ in 0..l + r {
-                    f.write_char(fill)?
+                    f.write_char(fill)?;
                 }
                 write!(f, "{add_sign}{buf_args}")?;
             }
             fmt::Alignment::Center => {
                 for _ in 0..l {
-                    f.write_char(fill)?
+                    f.write_char(fill)?;
                 }
                 write!(f, "{add_sign}{buf_args}")?;
                 for _ in 0..r {
-                    f.write_char(fill)?
+                    f.write_char(fill)?;
                 }
             }
             fmt::Alignment::Left => {
                 write!(f, "{add_sign}{buf_args}")?;
                 for _ in 0..l + r {
-                    f.write_char(fill)?
+                    f.write_char(fill)?;
                 }
             }
         }
@@ -205,14 +203,14 @@ pub fn pad_expr(
 }
 
 #[inline(never)]
-pub fn fmt_poly<'a>(
+pub fn fmt_poly(
     f: &mut fmt::Formatter<'_>,
     prefix: &str,
     pretty: bool,
-    monoms: &[(fmt::Arguments<'a>, &str)],
+    monoms: &[(fmt::Arguments<'_>, &str)],
 ) -> fmt::Result {
     struct DisplayPoly<'a>(&'a [(fmt::Arguments<'a>, &'a str)], &'a str, bool);
-    impl<'a> fmt::Display for DisplayPoly<'a> {
+    impl fmt::Display for DisplayPoly<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let mut first = true;
             for (args, monom) in self.0 {
@@ -220,14 +218,14 @@ pub fn fmt_poly<'a>(
                 let mut args_dec = NumberDetector::new("+-/*", self.1);
                 write!(&mut args_dec, "{args}")?;
                 if !self.2 || !args_dec.is_zero() {
-                    let parens = monom.len() > 0 && !args_dec.is_number();
+                    let parens = !monom.is_empty() && !args_dec.is_number();
                     let sign = if first && !f.sign_plus() { "" } else { "+" };
                     let sign_add = if parens {
                         "+"
                     } else {
                         args_dec.sign().map_or(sign, |_| "")
                     };
-                    if self.2 && monom.len() > 0 && args_dec.is_one() {
+                    if self.2 && !monom.is_empty() && args_dec.is_one() {
                         write!(f, "{}{monom}", args_dec.sign().unwrap_or(sign))
                     } else {
                         write!(f, "{sign_add}{}{monom}", Parenthesis(args, parens))
@@ -425,7 +423,7 @@ mod rational {
         prefix: &str,
     ) -> fmt::Result {
         let mut numer_dec = NumberDetector::new("+-/", prefix);
-        write!(&mut numer_dec, "{}", numer_args)?;
+        write!(&mut numer_dec, "{numer_args}")?;
         if denom_zero {
             if numer_zero {
                 pad_expr(f, prefix, format_args!("NaN"))
@@ -445,7 +443,7 @@ mod rational {
         } else {
             // note, this is missing a lot of annotations like the precision in case of floats.
             let mut denom_dec = NumberDetector::new("+-/*", prefix);
-            write!(&mut denom_dec, "{}", denom_args)?;
+            write!(&mut denom_dec, "{denom_args}")?;
             // Note, the signs can not be processed as strings, as the expression might be e.g. -1+i
             pad_expr(
                 f,
@@ -559,25 +557,21 @@ mod rational {
             } else {
                 pad_expr(f, prefix, format_args!("{value_args}+√{sqr}"))
             }
+        } else if value_zero {
+            pad_expr(
+                f,
+                prefix,
+                format_args!("{}√{sqr}", Parenthesis(ext_args, !ext_dec.is_number())),
+            )
+        } else if ext_dec.is_number() {
+            let add_sign = if ext_dec.sign().is_none() { "+" } else { "" };
+            pad_expr(
+                f,
+                prefix,
+                format_args!("{value_args}{add_sign}{ext_args}√{sqr}"),
+            )
         } else {
-            if value_zero {
-                pad_expr(
-                    f,
-                    prefix,
-                    format_args!("{}√{sqr}", Parenthesis(ext_args, !ext_dec.is_number())),
-                )
-            } else {
-                if ext_dec.is_number() {
-                    let add_sign = if ext_dec.sign().is_none() { "+" } else { "" };
-                    pad_expr(
-                        f,
-                        prefix,
-                        format_args!("{value_args}{add_sign}{ext_args}√{sqr}"),
-                    )
-                } else {
-                    pad_expr(f, prefix, format_args!("{value_args}+({ext_args})√{sqr}"))
-                }
-            }
+            pad_expr(f, prefix, format_args!("{value_args}+({ext_args})√{sqr}"))
         }
     }
 
