@@ -1,7 +1,6 @@
 //! Traits for evaluating the continued fraction with iterators
 
 use core::borrow::Borrow;
-
 use crate::{Cancel, IntoDiscrete, rational::Ratio};
 
 // forward evaluation of continued fractions is a bit harder than backwards evaluation, as one has to use Möbius transformations.
@@ -111,7 +110,7 @@ impl<T: Cancel + IntoDiscrete> Iterator for DevelopContinuedFraction<T> {
             // finished
             return None;
         }
-        let i = self.numer.div_rem_euclid(&self.denom).0.floor();
+        let i = self.numer.div_floor(&self.denom);
         (self.numer, self.denom) = {
             let r = self.numer.clone() - T::from(i.clone()) * self.denom.clone();
             if r.is_zero() {

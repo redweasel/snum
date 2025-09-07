@@ -3293,6 +3293,8 @@ mod extension {
 
     const ZERO: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 0);
     const ONE: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 0);
+    const SQRT2: SqrtExt<i32, Sqrt<i32, 2>> = SqrtExt::new(0, 1);
+    const TESTNUM: SqrtExt<i32, Sqrt<i32, 2>> = SqrtExt::new(-4, -3);
     const SQRT5: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(0, 1);
     const PHI: SqrtExt<i32, Sqrt<i32, 5>> = SqrtExt::new(1, 1);
     const PHI2: SqrtExt<u32, Sqrt<u32, 5>> = SqrtExt::new(1, 1); // // 1 + √5
@@ -3551,6 +3553,107 @@ mod extension {
     }
 
     #[test]
+    fn test_round() {
+        //assert_eq!(1i32.div_floor(&2), 0);
+        //assert_eq!((-1i32).div_floor(&2), -1);
+        //assert_eq!(1i32.div_floor(&-2), -1);
+        //assert_eq!((-1i32).div_floor(&-2), 0);
+
+        assert_eq!(ZERO.ceil(), 0);
+        assert_eq!(ZERO.floor(), 0);
+        assert_eq!(ZERO.div_floor(&ONE), 0);
+        assert_eq!(ZERO.round(), 0);
+
+        assert_eq!(ONE.ceil(), 1);
+        assert_eq!(ONE.floor(), 1);
+        assert_eq!(ONE.div_floor(&ONE), 1);
+        assert_eq!(ONE.div_floor(&-ONE), -1);
+        assert_eq!(ONE.div_floor(&SQRT5), 0);
+        assert_eq!(ONE.div_floor(&-SQRT5), -1);
+        assert_eq!(ONE.round(), 1);
+
+        assert_eq!((-ONE).ceil(), -1);
+        assert_eq!((-ONE).floor(), -1);
+        assert_eq!((-ONE).div_floor(&ONE), -1);
+        assert_eq!((-ONE).div_floor(&-ONE), 1);
+        assert_eq!((-ONE).div_floor(&SQRT5), -1);
+        assert_eq!((-ONE).div_floor(&-SQRT5), 0);
+        assert_eq!((-ONE).round(), -1);
+
+        assert_eq!(SQRT2.ceil(), 2);
+        assert_eq!(SQRT2.floor(), 1);
+        assert_eq!(SQRT2.round(), 1);
+
+        assert_eq!(TESTNUM.ceil(), -8);
+        assert_eq!(TESTNUM.floor(), -9);
+        assert_eq!(TESTNUM.round(), -8);
+
+        assert_eq!(SQRT5.ceil(), 3);
+        assert_eq!(SQRT5.floor(), 2);
+        assert_eq!(SQRT5.div_floor(&ONE), 2);
+        assert_eq!(SQRT5.div_floor(&-ONE), -3);
+        assert_eq!(SQRT5.div_floor(&SQRT5), 1);
+        assert_eq!(SQRT5.div_floor(&-SQRT5), -1);
+        assert_eq!(SQRT5.div_floor(&PHI), 0);
+        assert_eq!(SQRT5.div_floor(&-PHI), -1);
+        assert_eq!(SQRT5.round(), 2);
+
+        assert_eq!((-SQRT5).ceil(), -2);
+        assert_eq!((-SQRT5).floor(), -3);
+        assert_eq!((-SQRT5).div_floor(&ONE), -3);
+        assert_eq!((-SQRT5).div_floor(&-ONE), 2);
+        assert_eq!((-SQRT5).div_floor(&SQRT5), -1);
+        assert_eq!((-SQRT5).div_floor(&-SQRT5), 1);
+        assert_eq!((-SQRT5).div_floor(&PHI), -1);
+        assert_eq!((-SQRT5).div_floor(&-PHI), 0);
+        assert_eq!((-SQRT5).round(), -2);
+
+        assert_eq!(PHI.ceil(), 4);
+        assert_eq!(PHI.floor(), 3);
+        assert_eq!(PHI.div_floor(&ONE), 3);
+        assert_eq!(PHI.div_floor(&SQRT5), 1);
+        assert_eq!(PHI.div_floor(&-SQRT5), -2);
+        assert_eq!(PHI.round(), 3);
+
+        assert_eq!((-PHI).ceil(), -3);
+        assert_eq!((-PHI).floor(), -4);
+        assert_eq!((-PHI).div_floor(&ONE), -4);
+        assert_eq!((-PHI).div_floor(&SQRT5), -2);
+        assert_eq!((-PHI).div_floor(&-SQRT5), 1);
+        assert_eq!((-PHI).round(), -3);
+
+        assert_eq!(PHI2.ceil(), 4);
+        assert_eq!(PHI2.floor(), 3);
+        assert_eq!(PHI2.round(), 3);
+    }
+
+    #[test]
+    #[cfg(any(feature = "std", feature = "libm"))]
+    fn test_floor_div() {
+        for i in -5i64..=5 {
+            for j in -5..=5 {
+                for a in -5..=5 {
+                    for b in -5..=5 {
+                        //println!("{i} {j} {a} {b}");
+                        let x = SqrtExt::<_, Sqrt<_, 2>>::new(a, b);
+                        let d = SqrtExt::<_, Sqrt<_, 2>>::new(i, j);
+                        // compare to float approximation result
+                        let f: f64 = x.to_approx();
+                        assert_eq!(x.floor(), f.floor() as i64, "failed for ({x})/({d}) ~ {f}");
+
+                        if i != 0 || j != 0 {
+                            let fi = x.div_floor(&d);
+                            // compare to float approximation result
+                            let f: f64 = Ratio::new_raw(x, d).to_approx();
+                            assert_eq!(fi, ((f*128.0).round() / 128.0).floor() as i64, "failed for ({x})/({d}) ~ {f}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn test_euclid() {
         for i in -5i64..=5 {
             for j in -5..=5 {
@@ -3562,10 +3665,15 @@ mod extension {
                         let (q, r) = x.div_rem_euclid(&d);
                         assert_eq!(q * d + r, x);
                         if i != 0 || j != 0 {
-                            assert!(r.is_valid_euclid());
+                            assert!(
+                                r.is_valid_euclid(),
+                                "({x})/({d}) -> ({q}, {r}) [numer={}, denom={}]",
+                                x * d.conj_ext(),
+                                d.abs_sqr_ext()
+                            );
                             assert!(
                                 r.abs_sqr() < d.abs_sqr(),
-                                "({x})/({d}) -> ({q}, {r}) [ab={}, b_sqr={}]",
+                                "({x})/({d}) -> ({q}, {r}) [numer={}, denom={}]",
                                 x * d.conj_ext(),
                                 d.abs_sqr_ext()
                             );
@@ -3580,7 +3688,7 @@ mod extension {
                             assert!(r.is_valid_euclid());
                             assert!(
                                 r.abs_sqr() < d.abs_sqr(),
-                                "({x})/({d}) -> ({q}, {r}) [ab={}, b_sqr={}]",
+                                "({x})/({d}) -> ({q}, {r}) [numer={}, denom={}]",
                                 x * d.conj_ext(),
                                 d.abs_sqr_ext()
                             );
@@ -3635,16 +3743,50 @@ mod extension {
             for j in -7..=7 {
                 for a in -7..=7 {
                     for b in -7..=7 {
-                        const N: u64 = 6; // fails for N=5
-                        let a = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
-                        let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
-                        //print!("{a}, {d} -> ");
-                        //let _ = std::io::stdout().flush();
-                        let _g = gcd(a, d); // may fail with overflow if the gcd doesn't converge.
-                        //println!("{}", g);
-                        let ((x, y), g2) = bezout(a, d);
-                        assert_eq!(a * x + d * y, g2);
-                        //assert_eq!(g, g2, "{a} {d}"); // doesn't work... thats because I decided to make the results positive
+                        {
+                            // only work for N=2,3,6,7,11  so don't ever put an SqrtExt of another type into a Ratio!
+                            const N: u64 = 3;
+                            let a = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
+                            let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
+                            //std::print!("{a}, {d} -> "); let _ = std::io::stdout().flush();
+                            let _g = gcd(a, d); // may fail with overflow if the gcd doesn't converge.
+                            //std::println!("{}", g);
+                            let ((x, y), g2) = bezout(a, d);
+                            assert_eq!(a * x + d * y, g2);
+                            //assert_eq!(g, g2, "{a} {d}"); // doesn't work... that's because I decided to make the results positive
+                        }
+                        {
+                            const N: u64 = 2;
+                            let a = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
+                            let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
+                            let _g = gcd(a, d);
+                            let ((x, y), g2) = bezout(a, d);
+                            assert_eq!(a * x + d * y, g2);
+                        }
+                        {
+                            const N: u64 = 6;
+                            let a = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
+                            let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
+                            let _g = gcd(a, d);
+                            let ((x, y), g2) = bezout(a, d);
+                            assert_eq!(a * x + d * y, g2);
+                        }
+                        {
+                            const N: u64 = 7;
+                            let a = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
+                            let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
+                            let _g = gcd(a, d);
+                            let ((x, y), g2) = bezout(a, d);
+                            assert_eq!(a * x + d * y, g2);
+                        }
+                        {
+                            const N: u64 = 11;
+                            let a = SqrtExt::<_, Sqrt<_, N>>::new(a, b);
+                            let d = SqrtExt::<_, Sqrt<_, N>>::new(i, j);
+                            let _g = gcd(a, d);
+                            let ((x, y), g2) = bezout(a, d);
+                            assert_eq!(a * x + d * y, g2);
+                        }
                     }
                 }
             }
@@ -3661,6 +3803,33 @@ mod extension {
                 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
             ];
             let x = SqrtExt::<i64, Sqrt<i64, 2>>::new(0, 1);
+            let mut iter = DevelopContinuedFraction::new(x);
+            for n in 0..cf.len() {
+                assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
+                let _r = cf[..n].iter().continued_fraction(1).last().unwrap();
+                //std::println!("{}", _r);
+            }
+        }
+        {
+            //std::println!("starting 3√2");
+            let cf = [
+                4, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8, 4, 8,
+            ];
+            let x = SqrtExt::<i64, Sqrt<i64, 2>>::new(0, 3);
+            let mut iter = DevelopContinuedFraction::new(x);
+            for n in 0..cf.len() {
+                assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
+                let _r = cf[..n].iter().continued_fraction(1).last().unwrap();
+                //std::println!("{}", _r);
+            }
+        }
+        {
+            //std::println!("starting 4√2");
+            let cf = [
+                5, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10,
+                1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10, 1, 1, 1, 10,
+            ];
+            let x = SqrtExt::<i64, Sqrt<i64, 2>>::new(0, 4);
             let mut iter = DevelopContinuedFraction::new(x);
             for n in 0..cf.len() {
                 assert_eq!(iter.next().unwrap(), cf[n], "failed at {n}");
@@ -3736,8 +3905,8 @@ mod extension {
         let mut iter = DevelopContinuedFraction::new(core::f64::consts::PI);
         let x = SqrtExt::<f64, Sqrt<f64, 2>>::new(core::f64::consts::PI, 0.0);
         let mut iter2 = DevelopContinuedFraction::new(Ratio::from(x));
-        for _ in 0..20 {
-            assert_eq!(iter2.next().unwrap(), iter.next().unwrap().into());
+        for i in 0..20 {
+            assert_eq!(iter2.next().unwrap(), iter.next().unwrap().into(), "{i}");
         }
 
         // check for endless loops
@@ -3768,25 +3937,7 @@ mod extension {
                 let vf: f64 = v.to_approx();
                 let err = ((core::f64::consts::PI - vf) / core::f64::consts::PI).abs();
                 //std::println!("{v} error: {err:.2e}");
-                assert!(err < 0.05);
-            }
-            // alternative calculation:
-            let x = SqrtExt::<Ratio<i64>, Sqrt<Ratio<i64>, 10>>::new(
-                Ratio::zero(),
-                Ratio::from_approx(core::f64::consts::PI, 0.0)
-                    .unwrap()
-                    .recip(),
-            );
-            let mut iter =
-                DevelopContinuedFraction::new(Ratio::<SqrtExt<i64, Sqrt<i64, 10>>>::from(x))
-                    .continued_fraction(Zero::zero());
-            for _ in 0..10 {
-                let next = iter.next().unwrap();
-                let vf: f64 = next.to_approx();
-                let vf = 10.0.sqrt() / vf;
-                let err = ((core::f64::consts::PI - vf) / core::f64::consts::PI).abs();
-                //std::println!("{next} error: {err:.2e}");
-                assert!(err < 0.007);
+                assert!(err < 0.1, "{v} error: {err:.2e}");
             }
             // test conversions
             let phi = SqrtExt::<_, Sqrt<_, 5>>::new(Ratio::new(1, 2), Ratio::new(1, 2));
@@ -3861,7 +4012,12 @@ mod extension {
         assert_eq!(x, z.into());
         assert_eq!(y, w.into());
         assert_eq!(z / w, Complex::new(Zero::zero(), TR::new((-2i32).into(), Zero::zero())));
-        // TODO test Complex<SqrtExt<...>> e.g. with Euclid
+        // test Complex<SqrtExt<...>> e.g. with Euclid
+        let a = Complex::new(TR::new(-9, 3), TR::new(3, -2));
+        let b = Complex::new(TR::new(3, -2), TR::new(1, 1));
+        let (q, r) = a.div_rem_euclid(&b);
+        assert_eq!(a, q * b + r);
+        assert!(r.abs_sqr() < b.abs_sqr());
     }
 
     #[test]

@@ -83,12 +83,13 @@ where
         }
     }
 }
-impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
+impl<T: Cancel + IntoDiscrete + PartialOrd> IntoDiscrete for Ratio<T>
+where <T as IntoDiscrete>::Output: Add<Output = <T as IntoDiscrete>::Output> + Div<Output = <T as IntoDiscrete>::Output> {
     type Output = T;
-    /// rounds to the next integer towards -oo, using [Euclid].
+    /// rounds to an integer by rounding towards -∞
     ///
-    /// Panics if the rational is not finite.
-    fn floor(&self) -> T {
+    /// Panics if the rational is non finite.
+    fn div_floor(&self, div: &Self) -> T {
         if !self.is_finite() {
             if self.numer != self.numer {
                 return self.numer.clone(); // NaN
@@ -96,15 +97,19 @@ impl<T: Cancel + PartialOrd> IntoDiscrete for Ratio<T> {
             if self.denom != self.denom {
                 return self.denom.clone(); // NaN
             }
-            panic!("called floor on non finite rational");
+            panic!("called div_floor on non finite rational");
         }
-        // Due to PartialOrd, there is a guarantee, that this is the correct floor.
-        if self.denom >= T::zero() {
-            self.numer.div_rem_euclid(&self.denom)
-        } else {
-            (T::zero() - self.numer.clone()).div_rem_euclid(&(T::zero() - self.denom.clone()))
+        if !div.is_finite() {
+            if div.numer != div.numer {
+                return div.numer.clone(); // NaN
+            }
+            if div.denom != div.denom {
+                return div.denom.clone(); // NaN
+            }
+            panic!("called div_floor on non finite rational");
         }
-        .0
+        let x = self / div;
+        x.numer.div_floor(&x.denom).into()
     }
     /// rounds to the closest integer, breaking ties by rounding away from zero.
     ///
@@ -304,7 +309,7 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
         let mut s = self.clone();
         let mut o = other.clone();
         // Compare by comparing the continued fraction expansion.
-        // based on `num_rational`, but fixed critical stackoverflow.
+        // based on `num_rational`, but fixed stackoverflow.
         loop {
             if s.denom == o.denom {
                 // With equal denominators, the numerators can be compared

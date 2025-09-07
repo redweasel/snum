@@ -147,7 +147,7 @@ macro_rules! dynamic_sqrt_const {
 
 // TODO implement alternative macro to dynamic_sqrt_const for no_std
 
-impl<T: Num + Cancel + Neg<Output = T> + PartialOrd> Ratio<T>
+impl<T: RealNum + Cancel + Neg<Output = T>> Ratio<T>
 where
     for<'a> &'a T: AddMulSub<Output = T>,
 {
@@ -197,7 +197,7 @@ where
     }
 }
 
-impl<T: Num + Cancel + Neg<Output = T> + PartialOrd + Div<Output = T>, E: SqrtConst<T>>
+impl<T: RealNum + Cancel + Neg<Output = T> + Div<Output = T>, E: SqrtConst<T>>
     SqrtExt<T, E>
 where
     for<'a> &'a T: AddMulSub<Output = T>,
@@ -261,7 +261,7 @@ impl<T: Zero + Num, E: SqrtConst<T>> SqrtExt<T, E> {
 
 impl<T: SafeDiv, E: SqrtConst<T>> SqrtExt<T, E>
 where
-    Self: SafeDiv + IntoDiscrete<Output = T>,
+    Self: SafeDiv + IntoDiscrete<Output = T> + PartialOrd,
 {
     /// Returns the (positive) fundamental unit != 1 derived from [One] in `T`: x+y√N (satisfies `(x^2 - y^2 N).is_unit()`, `x,y > 0`)
     /// The number x-y√N (the generalized conjugate) is the inverse and all other units are integer powers of this one.
@@ -346,7 +346,7 @@ impl<T: Hash + Num, E: SqrtConst<T>> Hash for SqrtExt<T, E> {
     }
 }
 
-impl<T: Num + PartialOrd + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> PartialOrd
+impl<T: RealNum + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> PartialOrd
     for SqrtExt<T, E>
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -355,85 +355,173 @@ impl<T: Num + PartialOrd + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> P
         // and for b >= 0: <=> b^2 N > a^2
         let a = self.value.partial_cmp(&other.value)?;
         let b = self.ext.partial_cmp(&other.ext)?;
-        Some(match (a, b) {
-            (Ordering::Equal, _) => b,
-            (_, Ordering::Equal) => a,
-            (Ordering::Greater, Ordering::Greater) => Ordering::Greater,
-            (Ordering::Less, Ordering::Less) => Ordering::Less,
-            _ => {
-                let x = self - other;
-                let c =
-                    (x.value.clone() * x.value).partial_cmp(&(x.ext.clone() * x.ext * E::sqr()))?;
-                match (a, b) {
-                    (Ordering::Less, _) => c.reverse(),
-                    (_, Ordering::Less) => c,
-                    _ => unreachable!(),
-                }
+        match (a, b) {
+            (Ordering::Equal, _) => Some(b),
+            (_, Ordering::Equal) => Some(a),
+            (Ordering::Greater, Ordering::Greater) => Some(Ordering::Greater),
+            (Ordering::Less, Ordering::Less) => Some(Ordering::Less),
+            // safe for unsigned integers
+            (Ordering::Less, Ordering::Greater) => {
+                let neg_x_value = other.value.clone() - self.value.clone();
+                let x_ext = self.ext.clone() - other.ext.clone();
+                (x_ext.abs_sqr() * E::sqr()).partial_cmp(&neg_x_value.abs_sqr())
             }
-        })
+            (Ordering::Greater, Ordering::Less) => {
+                let x_value = self.value.clone() - other.value.clone();
+                let neg_x_ext = other.ext.clone() - self.ext.clone();
+                x_value.abs_sqr().partial_cmp(&(neg_x_ext.abs_sqr() * E::sqr()))
+            }
+        }
     }
 }
-impl<T: Num + Zero + Ord + Neg<Output = T> + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Ord
+impl<T: RealNum + Ord + Neg<Output = T> + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Ord
     for SqrtExt<T, E>
 where
     for<'a> &'a T: Mul<Output = T>,
 {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap() // no panic
+        self.partial_cmp(other).unwrap() // panic only if T has not held it's promise made by the Ord trait bound.
     }
 }
 
-impl<T: Num + Cancel + IntoDiscrete + Neg<Output = T> + PartialOrd, E: SqrtConst<T>> IntoDiscrete
+impl<T: RealNum + Zero + One + IntoDiscrete + Sub<Output = T>, E: SqrtConst<T>> IntoDiscrete
     for SqrtExt<T, E>
 where
     <T as IntoDiscrete>::Output: fmt::Debug
         + IntoDiscrete<Output = <T as IntoDiscrete>::Output>
-        + Add<Output = <T as IntoDiscrete>::Output>
-        + Div<Output = <T as IntoDiscrete>::Output>,
+        + Zero + Div<Output = <T as IntoDiscrete>::Output>,
+    T: Cancel,
 {
     type Output = T;
-    fn floor(&self) -> Self::Output {
-        if self.ext.is_zero() || self.ext.is_one() {
-            self.ext.clone() * E::floor() + self.value.floor().into()
-        } else if (-self.ext.clone()).is_one() {
-            T::from(self.value.floor()) - self.ext.clone() * (E::floor() + T::one())
+    fn div_floor(&self, div: &Self) -> Self::Output {
+        if div.ext.is_zero() {
+            if div.value.is_zero() {
+                panic!("division by zero");
+            }
+            if div.value.is_one() {
+                return self.floor();
+            }
+        }
+        // this is a more complicated version of floor.
+        let denom = div.abs_sqr_ext();
+        let numer = Self::new(
+            self.value.clone() * div.value.clone() - self.ext.clone() * div.ext.clone() * E::sqr(),
+            self.ext.clone() * div.value.clone() - self.value.clone() * div.ext.clone(),
+        );
+        // now compute floor((a+b√N)/d) = floor(a/d) + floor(b√N/d) + k with 0 <= k <= 1 (already lost a 1)
+        let value = numer.value.div_floor(&denom); // floor(a/d)
+        if numer.ext.is_zero() {
+            T::from(value)
         } else {
-            // 1. split the integral part off
-            // 2. floor(x√N) = floor(x)*floor(√N) + n with integer 0 <= n < x (+ floor(√N) for non integer types)
-            // -> do a binary search for the integer n in O(log x) steps to find the value n where x√N <> floor(x)*floor(√N) + n switches
-            // Note, it would be much better to have integers here, but that requires e.g. TryInto<u64>, as I would need E::floor() as u64
-            let v = self.ext.clone() * E::floor();
-            let w = Self::new(T::zero(), self.ext.clone());
-            assert!(w > v.clone().into());
-            let mut a = T::zero().floor();
-            // Note, if ext is a non finite float, this will result in an endless loop!
-            let mut b = (self.ext.clone() + E::floor() - T::one()).floor();
-            let two = (T::one() + T::one()).floor();
+            // floor(a/d) + floor(b/d)floor(√N) <= n <= a/d + b/d √N < n+1 <= ceil(a/d) + ceil(b/d) ceil(√N) <= floor(a/d)+1 + (floor(b/d)+1) (floor(√N)+1)
+            // -> compute n by bisection directly, n = a, n+1 = b
+            let ratio = numer.ext.div_floor(&denom);
+            let ext_positive = T::zero() <= ratio.clone().into();
+            let mut a = value.clone() + (E::floor() + if ext_positive { T::zero() } else { T::one() }).floor() * ratio.clone();
+            let mut b = value + One::one() + (E::floor() + if !ext_positive { T::zero() } else { T::one() }).floor() * (ratio.clone() + T::one().floor());
+            // NaN checks
+            if a != a {
+                return a.into();
+            }
+            if b != b {
+                return b.into();
+            }
+            if denom < T::zero() {
+                (a, b) = (b, a);
+            }
+            let two = <T as IntoDiscrete>::Output::one() + <T as IntoDiscrete>::Output::one();
+            // bisection invariants
+            debug_assert!(numer > Self::from(denom.clone() * a.clone().into()), "{numer:?} vs {denom:?}*{a:?}");
+            debug_assert!(numer < Self::from(denom.clone() * b.clone().into()), "{numer:?} vs {denom:?}*{b:?}");
             loop {
-                let c = ((a.clone() + b.clone()) / two.clone()).floor(); // this way to also handle float
-                if c != a && c != b {
-                    let add: T = v.clone() + c.clone().into();
-                    if w > add.into() {
-                        // too small still
-                        a = c;
+                let n = ((a.clone() + b.clone()) / two.clone()).floor(); // this way to also handle float
+                if n != a && n != b {
+                    if numer > (denom.clone() * n.clone().into()).into() {
+                        a = n;
                     } else {
-                        b = c;
+                        b = n;
                     }
                 } else {
                     // is only reached for "good" T
                     break;
                 }
             }
-            // now we have v+a < x√N < v+b, so v+a is the floor
-            self.value.clone() + v + a.into()
+            // now we have v+a < |numer/denom| < v+b, so v+a is the floor of |x|√N
+            debug_assert!(numer > Self::from(denom.clone() * a.clone().into()));
+            debug_assert!(numer < Self::from(denom.clone() * b.clone().into()));
+            (if denom < T::zero() { b } else { a }).into()
+        }
+    }
+    // TODO test on float NaN, as Ord is not specified above. If necessary panic and document that this method can panic for non Ord types.
+    fn floor(&self) -> Self::Output {
+        let value = T::from(self.value.floor());
+        if self.ext.is_zero() || self.ext.is_one() {
+            self.ext.clone() * E::floor() + value
+        } else {
+            // 1. split the integral part off
+            // 2. floor(|x|√N) = floor(|x|)*floor(√N) + n with integer 0 <= n < |x| (+ floor(√N) for non integer types)
+            // -> do a binary search for the integer n in O(log |x|) steps to find the value n where |x|√N <> floor(|x|)*floor(√N) + n switches
+            // Note, it would be much better to have integers here, but that requires e.g. TryInto<u64>, as I would need E::floor() as u64
+            let positive = self.ext >= T::zero();
+            let abs_ext = if positive { self.ext.clone() } else { T::zero() - self.ext.clone() };
+            let v = abs_ext.clone() * E::floor();
+            let w = Self::new(T::zero(), abs_ext.clone());
+            assert!(w > v.clone().into(), "{w:?} > {v:?} failed");
+            let mut a = v.clone().floor();
+            // Note, if ext is a non finite float, this will result in an endless loop!
+            let mut b = (v + abs_ext.clone() + E::floor() - T::one()).floor();
+            let two = <T as IntoDiscrete>::Output::one() + <T as IntoDiscrete>::Output::one();
+            loop {
+                let n = ((a.clone() + b.clone()) / two.clone()).floor(); // this way to also handle float
+                if n != a && n != b {
+                    let add: T = n.clone().into();
+                    if w > add.into() {
+                        a = n;
+                    } else {
+                        b = n;
+                    }
+                } else {
+                    // is only reached for "good" T
+                    break;
+                }
+            }
+            // now we have v+a < |x|√N < v+b, so v+a is the floor of |x|√N
+            if positive {
+                value + a.into()
+            } else {
+                value - b.into()
+            }
         }
     }
     fn round(&self) -> Self::Output {
         let x1 = self.floor();
         let x2 = x1.clone() + T::one();
-        let d1 = -(self - &x1); // positive
-        let d2 = self - &x2; // positive
-        if d1 < d2 { x1 } else { x2 }
+
+        // idea:
+        // let d1 = self - &x1;
+        // let d2 = &Self::from(x2.clone()) - self;
+        // if d1 < d2 { x1 } else { x2 }
+
+        // problem: d1 and d2 are positive, but d1.value, d2.value might be negative (and d2.ext <= 0)
+        // -> reimplement PartialOrd here to make it safe for unsigned integers. (faster anyway)
+        let x_sum = x2.clone() + x1.clone();
+        let value2 = self.value.clone() + self.value.clone();
+        let a = value2.partial_cmp(&x_sum);
+        match a {
+            Some(Ordering::Equal) => x2,
+            Some(Ordering::Greater) => x2,
+            Some(Ordering::Less) => {
+                let neg_x_value = x_sum - value2;
+                let x_ext = self.ext.clone() + self.ext.clone();
+                match (x_ext.abs_sqr() * E::sqr()).partial_cmp(&neg_x_value.abs_sqr()) {
+                    Some(Ordering::Equal) => x2,
+                    Some(Ordering::Greater) => x2,
+                    Some(Ordering::Less) => x1,
+                    None => x1, // invalid case
+                }
+            },
+            None => x1, // some kind of NaN or unsortable item. Return the invalid value as is.
+        }
     }
 }
 
@@ -578,7 +666,6 @@ impl<T: Num + One + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> SqrtExt<
         // overflows easily
         //self.value.clone() * self.value.clone() - self.ext.clone() * self.ext.clone() * E::sqr()
         // less overflows (but slower) with rearranged form (value - ext)(value + ext*N) - (N-1)*value*ext
-        // TODO make two versions depending on the sign of ext. The current version works well for negative ext.
         (self.value.clone() - self.ext.clone()) * (self.value.clone() + self.ext.clone() * E::sqr())
             - (E::sqr() - T::one()) * self.value.clone() * self.ext.clone()
     }
@@ -748,33 +835,50 @@ macro_rules! impl_mul {
 impl_mul!(Mul, mul; Div, div; Rem, rem);
 
 impl<
-    T: Num + Zero + One + Euclid + PartialOrd + Neg<Output = T> + Sub<Output = T> + Div<Output = T>,
+    T: RealNum + Zero + One + Euclid + Neg<Output = T> + Sub<Output = T> + Div<Output = T>,
     E: SqrtConst<T>,
 > Euclid for SqrtExt<T, E>
 where
     Self: PartialOrd,
 {
     /// Euclidean division for √2 and √3 with positive remainder. Otherwise use an extension to √N, which ensures `|r| < |d|`,
-    /// but can't be used in a `gcd` or `lcm` as the set of |r| is not finite. That is because Z[√5] is no Euclidean domain.
+    /// but can't be used in a `gcd` or `lcm` as the set of |r| is not finite. That is because Z[√5] and higher is no Euclidean domain.
     fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
         if b.value.is_zero() && b.ext.is_zero() {
             // invalid division -> invalid result, which still holds up the equation self = q * div + r = r;
             return (T::zero().into(), self.clone());
         }
-        if self == b {
-            return (T::one().into(), T::zero().into());
+        // check first, if the quotient is expressible without the sqrt part
+        if !b.value.is_zero() && self.value.clone() * b.ext.clone() == self.ext.clone() * b.value.clone() {
+            let (mut q, _) = self.value.div_rem_euclid(&b.value);
+            let mut r = self - &(b * &q);
+            // see comments below, make r positive.
+            let mut step = T::one();
+            if b.is_valid_euclid() {
+                step = -step;
+            }
+            // with "while" this can lead to infinite loops for floats, if r is non finite.
+            while !r.is_valid_euclid() && r.value == r.value {
+                q = q + step.clone();
+                r = self - &(b * &q);
+            }
+            return (q.into(), r.into());
         }
         // for any E::sqr().abs(), which is not a perfect square,
         // one can arbitrarily closely approx the inverse of any number,
         // as the numbers are dense in the reals (because √N is irrational).
         // However that is not, what should be used here.
         // Instead a solution with as simple as possible numbers is searched.
+        // compute `a/b = q.value + q.ext √N` using rational numbers, then round those.
         let mut denom = b.abs_sqr_ext();
+        // Note, denom is not zero. Easy to prove by considering the prime factorisation of x^2 and y^2*N, even for rational numbers.
         let mut numer = Self::new(
             self.value.clone() * b.value.clone() - self.ext.clone() * b.ext.clone() * E::sqr(),
             self.ext.clone() * b.value.clone() - self.value.clone() * b.ext.clone(),
         );
-        // compute `a/b = q.value + q.ext √N` using rational numbers, then round those.
+        if denom.is_unit() {
+            return (&numer / &denom, T::zero().into());
+        }
         // before rounding, decompose √N = floor(√N) + (√N - floor(√N))
         // q = (q.value + q.ext floor(√N)) + q.ext (√N - floor(√N))
         // then round both components and recover the original form.
@@ -807,8 +911,9 @@ where
         );
         q.value = q.value - q.ext.clone() * E::floor();
         let mut r = self - &(b * &q);
-        // The following breaks sqrt(2) and sqrt(3) as Euclidean domains, but it's needed to make the results positive.
-        // add/subtract 1, this makes the gcd stable apparently (for N != 5) (TODO proof)
+        // The following breaks √2 and √3 as Euclidean domains,
+        // but it's needed to make the results positive.
+        // add/subtract 1
         let mut step = T::one();
         if b.is_valid_euclid() {
             step = -step;
@@ -821,9 +926,6 @@ where
         (q, r)
     }
     fn is_valid_euclid(&self) -> bool {
-        // a+b√N > 0 <=> a > -b√N <=> b > -a/√N
-        // and for a >= 0: <=> a^2 > b^2 N
-        // and for b >= 0: <=> b^2 N > a^2
         self >= &T::zero().into()
     }
 }

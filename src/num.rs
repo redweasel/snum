@@ -261,6 +261,9 @@ pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
     fn is_unit(&self) -> bool;
 }
 
+pub trait RealNum: Num<Real = Self> + PartialOrd { }
+impl<T: Num<Real = T> + PartialOrd> RealNum for T { }
+
 /// A number that supports sqrt and cbrt (E.g. a float).
 /// Integers should not implement this, as their sqrt and cbrt are approx.
 // sqrt and cbrt are enough to get all analytic polynomial solutions working, which was the goal with this type.
@@ -586,8 +589,15 @@ impl<T: Num + Cancel + Div<Output = T>> SafeDiv for T {
 
 pub trait IntoDiscrete: PartialEq + From<Self::Output> {
     type Output: Clone + Zero + One;
+    /// Divide `self/div` and round down, essentially computing `floor(self/div)` without remainder.
     #[must_use]
-    fn floor(&self) -> Self::Output;
+    fn div_floor(&self, div: &Self) -> Self::Output;
+    /// Round to an integer by rounding towards -∞
+    #[must_use]
+    fn floor(&self) -> Self::Output {
+        self.div_floor(&Self::Output::one().into())
+    }
+    /// Round to an integer by rounding towards ∞
     #[must_use]
     fn ceil(&self) -> Self::Output {
         let x = self.floor();
@@ -597,12 +607,17 @@ pub trait IntoDiscrete: PartialEq + From<Self::Output> {
             x + One::one()
         }
     }
+    /// Round to the closest integer, breaking ties by rounding away from zero.
     #[must_use]
     fn round(&self) -> Self::Output;
 }
 
 impl IntoDiscrete for f32 {
     type Output = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
+    #[inline(always)]
+    fn div_floor(&self, div: &Self) -> Self::Output {
+        f32::floor(*self / *div)
+    }
     #[inline(always)]
     fn floor(&self) -> Self::Output {
         f32::floor(*self)
@@ -619,6 +634,10 @@ impl IntoDiscrete for f32 {
 impl IntoDiscrete for f64 {
     type Output = f64;
     #[inline(always)]
+    fn div_floor(&self, div: &Self) -> Self::Output {
+        f64::floor(*self / *div)
+    }
+    #[inline(always)]
     fn floor(&self) -> Self::Output {
         f64::floor(*self)
     }
@@ -634,7 +653,20 @@ impl IntoDiscrete for f64 {
 macro_rules! impl_into_discrete_int {
     ($($t:ty),+) => {
         $(impl IntoDiscrete for $t {
-            type Output = $t;
+            type Output = Self;
+            #[inline(always)]
+            fn div_floor(&self, div: &Self) -> Self::Output {
+                if (self >= &0) != (div >= &0) {
+                    if div >= &0 {
+                        self.div_euclid(*div)
+                    }
+                    else {
+                        (0 - self).div_euclid(0 - div)
+                    }
+                } else {
+                    self / div
+                }
+            }
             #[inline(always)]
             fn floor(&self) -> Self::Output {
                 self.clone()
@@ -654,13 +686,48 @@ impl_into_discrete_int!(
     u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
 );
 #[cfg(feature = "ibig")]
+macro_rules! impl_into_discrete_int {
+    ($($t:ty),+) => {
+        $(impl IntoDiscrete for $t {
+            type Output = Self;
+            #[inline(always)]
+            fn div_floor(&self, div: &Self) -> Self::Output {
+                use ibig::ops::DivEuclid;
+                let zero = Self::zero();
+                if div >= &zero {
+                    self.div_euclid(div)
+                }
+                else {
+                    (&zero - self).div_euclid(&zero - div)
+                }
+            }
+            #[inline(always)]
+            fn floor(&self) -> Self::Output {
+                self.clone()
+            }
+            #[inline(always)]
+            fn ceil(&self) -> Self::Output {
+                self.clone()
+            }
+            #[inline(always)]
+            fn round(&self) -> Self::Output {
+                self.clone()
+            }
+        })+
+    };
+}
+#[cfg(feature = "ibig")]
 impl_into_discrete_int!(ibig::IBig, ibig::UBig);
 
-impl<T: Clone + PartialEq> IntoDiscrete for Wrapping<T>
+impl<T: Clone + PartialEq + IntoDiscrete<Output = T>> IntoDiscrete for Wrapping<T>
 where
     Self: Zero + One,
 {
     type Output = Self;
+    #[inline(always)]
+    fn div_floor(&self, div: &Self) -> Self::Output {
+        Wrapping(self.0.div_floor(&div.0))
+    }
     #[inline(always)]
     fn floor(&self) -> Self::Output {
         self.clone()
