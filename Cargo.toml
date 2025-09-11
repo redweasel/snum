@@ -2,6 +2,16 @@
 name = "snum"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.87.0"
+
+authors = ["redweasel"]
+
+description = "Lightweight number types library with first class complex support."
+documentation = "https://docs.rs/snum/"
+repository = "https://github.com/redweasel/snum/"
+categories = ["science", "mathematics", "wasm", "no-std", "random"]
+license = "MIT OR Apache-2.0"
+keywords = ["math", "complex", "quaternion", "rational", "random"]
 
 [dependencies]
 take_mut = { version = "0.2.2", default-features = false }

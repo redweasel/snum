@@ -76,11 +76,13 @@ impl fmt::Write for NumberDetector {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
             if self.first.is_some() || (c != '-' && c != '+') {
-                if self.width - self.prefix_counter <= 1 && let Some(pc) = self.prefix.get(self.prefix_counter) {
-                    if pc == &c {
-                        self.prefix_counter += 1;
-                    } else {
-                        self.prefix_counter = 0;
+                if self.width - self.prefix_counter <= 1 {
+                    if let Some(pc) = self.prefix.get(self.prefix_counter) {
+                        if pc == &c {
+                            self.prefix_counter += 1;
+                        } else {
+                            self.prefix_counter = 0;
+                        }
                     }
                 }
                 self.is_alphanum &= c.is_ascii_alphanumeric();

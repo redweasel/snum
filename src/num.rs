@@ -273,7 +273,7 @@ pub trait NumAlgebraic: Num {
     #[must_use]
     fn cbrt(&self) -> Self;
     /// absolute value/magnitude of the number.
-    /// Note that it's possible that `x.abs_sqr().sqrt() != x.abs()`, but `x.abs() * x.abs() = x.abs_sqr()` should always hold.
+    /// Note, that it's possible that `x.abs_sqr().sqrt() != x.abs()`, but `x.abs() * x.abs() = x.abs_sqr()` should always hold.
     #[must_use]
     fn abs(&self) -> Self::Real;
     /// the sign/phase of a number, defined as `x.sign() = x / x.abs()` or ±1 (unitary) if `x.abs() == 0`.
