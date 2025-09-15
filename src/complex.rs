@@ -550,7 +550,8 @@ where
     fn sign(&self) -> Self {
         let a = self.abs_sqr();
         if a.is_zero() {
-            Complex::one()
+            // assume it's a "real 0"
+            Complex::new(self.re.sign(), self.im.clone())
         } else {
             self.clone() / a.sqrt()
         }
@@ -761,6 +762,9 @@ where
     ///
     /// The branch satisfies `-π/2 ≤ Im(asinh(z)) ≤ π/2`.
     fn asinh(&self) -> Self {
+        if self.im.is_zero() {
+            return Complex::new(self.re.asinh(), self.im.clone());
+        }
         // formula: arsinh(z) = ln(z + sqrt(1+z^2))
         (self + &(self * self + T::one()).sqrt()).ln()
     }
@@ -796,7 +800,7 @@ where
         // using (1+z)(1-z*) = 1+2i*Im(z)-|z|^2 and (1-z)(1+z*) = 1-2i*Im(z)-|z|^2.
         // Then combine the two branches using copysign and sign functions.
         if self.re.is_zero() {
-            return Complex::imag(self.im.atan());
+            return Complex::new(self.re.clone(), self.im.atan()); // keep zero sign
         }
         let one = &T::one();
         let two = -(one + one).copysign(&self.re);

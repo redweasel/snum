@@ -268,6 +268,19 @@ fn test_rand() {
     assert!(sum_q.abs() < 15., "got {sum_q}");
 }
 
+#[cfg(any(feature = "std", feature = "libm"))]
+#[test]
+fn test_sign() {
+    for x in [-2.0f64, -1.0, -1e-100, -0.0, 0.0, 1e-100, 1.0, 2.0] {
+        assert_eq!(x.sign(), if x.is_sign_positive() { 1.0 } else { -1.0 });
+        assert_eq!(1.0f64.copysign(x), if x.is_sign_positive() { 1.0 } else { -1.0 });
+    }
+    for x in [-2.0f32, -1.0, -1e-100, -0.0, 0.0, 1e-100, 1.0, 2.0] {
+        assert_eq!(x.sign(), if x.is_sign_positive() { 1.0 } else { -1.0 });
+        assert_eq!(1.0f32.copysign(x), if x.is_sign_positive() { 1.0 } else { -1.0 });
+    }
+}
+
 #[allow(non_upper_case_globals)]
 mod complex {
     use super::*;
@@ -399,13 +412,16 @@ mod complex {
                 for a in -5..=5 {
                     for b in -5..=5 {
                         //println!("{i} {j} {a} {b}");
+                        let x = Complex::new(a, b);
+                        let d = Complex::new(i, j);
+                        let (q, r) = x.div_rem_euclid(&d);
+                        assert!(r.is_valid_euclid());
+                        assert_eq!(q * d + r, x);
                         if i != 0 || j != 0 {
-                            let x = Complex::new(a, b);
-                            let d = Complex::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
-                            assert!(r.is_valid_euclid());
-                            assert_eq!(q * d + r, x);
                             assert!(r.abs_sqr() <= d.abs_sqr() / 2);
+                        }
+                        else {
+                            assert!(q.is_zero());
                         }
                     }
                 }
@@ -607,6 +623,8 @@ mod complex {
         #[test]
         fn test_exp_m1() {
             assert!(close(_1_0i.exp_m1(), _1_0i * (f64::consts::E - 1.)));
+            assert_eq!((-_0_0i).exp_m1(), _0_0i);
+            assert!((-_0_0i).exp_m1().re.is_sign_negative());
             assert_eq!(_0_0i.exp_m1(), _0_0i);
             assert!(close(
                 _0_1i.exp_m1() + 1.0,
@@ -664,6 +682,8 @@ mod complex {
                 assert!(close(c.conj().ln(), c.ln().conj()));
                 // for this branch, -pi <= arg(ln(z)) <= pi
                 assert!(-f64::consts::PI <= c.ln().arg() && c.ln().arg() <= f64::consts::PI);
+                // test ln_1p
+                assert!(close((c + 1.0).ln(), c.ln_1p()));
             }
         }
 
@@ -812,8 +832,30 @@ mod complex {
         }
 
         #[test]
+        fn test_sign() {
+            for &c in all_consts.iter() {
+                // sign(conj(z)) = conj(sign(z))
+                assert_eq!(c.conj().sign(), c.sign().conj());
+                // sign(-z) = -sign(z)
+                assert_eq!((c * -1.0).sign(), c.sign() * -1.0);
+                if !c.abs_sqr().is_zero() {
+                    // sign(z/|z|) = sign(z)
+                    assert!(close((c / c.abs()).sign(), c.sign()));
+                }
+                // |sign(z)| = 1
+                assert!((c.sign().abs() - 1.0).abs() < 1e-14);
+                // copysign(1, z) = sign(z)
+                assert!(close(_1_0i.copysign(&c), c.sign()));
+                // copysign(i, z) = sign(z)
+                assert!(close(_0_1i.copysign(&c), c.sign()));
+            }
+        }
+
+        #[test]
         fn test_sin() {
             assert!(close(_0_0i.sin(), _0_0i));
+            assert_eq!((-_0_0i).sin(), _0_0i);
+            assert!((-_0_0i).sin().re.is_sign_negative());
             assert!(close_abs((_1_0i * f64::consts::PI * 2.0).sin(), _0_0i));
             assert!(close(_0_1i.sin(), _0_1i * 1.0.sinh()));
             for &c in all_consts.iter() {
@@ -838,8 +880,18 @@ mod complex {
         }
 
         #[test]
+        fn test_cis() {
+            assert!(close(Complex::cis(&0.0), _1_0i));
+            assert!(close(Complex::cis(&core::f64::consts::FRAC_PI_2), _0_1i));
+            assert!(close(Complex::cis(&-core::f64::consts::FRAC_PI_2), -_0_1i));
+            assert!(close(Complex::cis(&core::f64::consts::PI), -_1_0i));
+        }
+
+        #[test]
         fn test_tan() {
             assert!(close(_0_0i.tan(), _0_0i));
+            assert_eq!((-_0_0i).tan(), _0_0i);
+            assert!((-_0_0i).tan().re.is_sign_negative());
             assert!(close((_1_0i * f64::consts::PI / 4.0).tan(), _1_0i));
             assert!(close_abs((_1_0i * f64::consts::PI).tan(), _0_0i));
             for &c in all_consts.iter() {
@@ -853,6 +905,8 @@ mod complex {
         #[test]
         fn test_asin() {
             assert_eq!(_0_0i.asin(), _0_0i);
+            assert_eq!((-_0_0i).asin(), _0_0i);
+            assert!((-_0_0i).asin().re.is_sign_negative());
             assert!(close(_1_0i.asin(), _1_0i * (f64::consts::PI / 2.0)));
             assert!(close(
                 (_1_0i * -1.0).asin(),
@@ -890,7 +944,9 @@ mod complex {
 
         #[test]
         fn test_atan() {
-            assert!(close(_0_0i.atan(), _0_0i));
+            assert_eq!(_0_0i.atan(), _0_0i);
+            assert_eq!((-_0_0i).atan(), _0_0i);
+            assert!((-_0_0i).atan().re.is_sign_negative());
             assert!(close(_1_0i.atan(), _1_0i * (f64::consts::PI / 4.0)));
             assert!(close(Complex::real(f64::INFINITY).atan(), _1_0i * (f64::consts::PI / 2.0)));
             assert!(close(Complex::real(-f64::INFINITY).atan(), _1_0i * (-f64::consts::PI / 2.0)));
@@ -949,7 +1005,9 @@ mod complex {
 
         #[test]
         fn test_sinh() {
-            assert!(close(_0_0i.sinh(), _0_0i));
+            assert_eq!(_0_0i.sinh(), _0_0i);
+            assert_eq!((-_0_0i).sinh(), _0_0i);
+            assert!((-_0_0i).sinh().re.is_sign_negative());
             assert!(close(
                 _1_0i.sinh(),
                 _1_0i * ((f64::consts::E - 1.0 / f64::consts::E) / 2.0)
@@ -982,6 +1040,8 @@ mod complex {
         #[test]
         fn test_tanh() {
             assert!(close(_0_0i.tanh(), _0_0i));
+            assert_eq!((-_0_0i).tanh(), _0_0i);
+            assert!((-_0_0i).tanh().re.is_sign_negative());
             assert!(close(
                 _1_0i.tanh(),
                 _1_0i * ((f64::consts::E.powi(2) - 1.0) / (f64::consts::E.powi(2) + 1.0))
@@ -998,6 +1058,8 @@ mod complex {
         #[test]
         fn test_asinh() {
             assert!(close(_0_0i.asinh(), _0_0i));
+            assert_eq!((-_0_0i).asinh(), _0_0i);
+            assert!((-_0_0i).asinh().re.is_sign_negative());
             assert!(close(_1_0i.asinh(), _1_0i * (1.0 + 2.0.sqrt()).ln()));
             assert!(close(_0_1i.asinh(), _0_1i * (f64::consts::PI / 2.0)));
             assert!(close(
@@ -1040,6 +1102,8 @@ mod complex {
         #[test]
         fn test_atanh() {
             assert!(close(_0_0i.atanh(), _0_0i));
+            assert_eq!((-_0_0i).atanh(), _0_0i);
+            assert!((-_0_0i).atanh().re.is_sign_negative());
             assert!(close(_0_1i.atanh(), _0_1i * (f64::consts::PI / 4.0)));
             assert!(close(_1_0i.atanh(), Complex::new(f64::INFINITY, 0.0)));
             assert!(close(Complex::new(1.0, -0.0).atanh(), Complex::new(f64::INFINITY, 0.0)));
@@ -3679,6 +3743,9 @@ mod extension {
                             );
                             //assert!(r.abs_sqr_ext().abs() < d.abs_sqr_ext().abs());
                         }
+                        else {
+                            assert!(q.is_zero());
+                        }
 
                         let x = SqrtExt::<_, Sqrt<_, 3>>::new(a, b);
                         let d = SqrtExt::<_, Sqrt<_, 3>>::new(i, j);
@@ -3694,6 +3761,9 @@ mod extension {
                             );
                             //assert!(r.abs_sqr_ext().abs() < d.abs_sqr_ext().abs());
                         }
+                        else {
+                            assert!(q.is_zero());
+                        }
 
                         let x = SqrtExt::<_, Sqrt<_, 5>>::new(a, b);
                         let d = SqrtExt::<_, Sqrt<_, 5>>::new(i, j);
@@ -3702,6 +3772,9 @@ mod extension {
                         if i != 0 || j != 0 {
                             assert!(r.is_valid_euclid());
                             assert!(r.abs_sqr() < d.abs_sqr());
+                        }
+                        else {
+                            assert!(q.is_zero());
                         }
 
                         let x = SqrtExt::<_, Sqrt<_, 6>>::new(a, b);
@@ -3712,6 +3785,9 @@ mod extension {
                             assert!(r.is_valid_euclid());
                             assert!(r.abs_sqr() < d.abs_sqr());
                         }
+                        else {
+                            assert!(q.is_zero());
+                        }
 
                         let x = SqrtExt::<_, Sqrt<_, 7>>::new(a, b);
                         let d = SqrtExt::<_, Sqrt<_, 7>>::new(i, j);
@@ -3720,6 +3796,9 @@ mod extension {
                         if i != 0 || j != 0 {
                             assert!(r.is_valid_euclid());
                             assert!(r.abs_sqr() < d.abs_sqr());
+                        }
+                        else {
+                            assert!(q.is_zero());
                         }
                         if j != 0 && b != 0 {
                             let x = Ratio::new(a, b);
