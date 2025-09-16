@@ -40,6 +40,15 @@ impl<T> Ratio<T> {
         }
     }
 }
+impl<T: One> Ratio<T> {
+    /// create a rational number from the numerator. The denominator is set to one.
+    /// Use `.into()` if the intention was to use the `From` trait. This function fixes
+    /// the type inference when used as `Ratio::from(x)`.
+    #[must_use]
+    pub fn from(numer: T) -> Self {
+        Ratio { numer, denom: T::one() }
+    }
+}
 impl<T: Zero + PartialEq> Ratio<T> {
     #[must_use]
     pub fn is_finite(&self) -> bool {
@@ -397,6 +406,14 @@ impl<T> From<Ratio<T>> for (T, T) {
 impl<T> From<(T, T)> for Ratio<T> {
     fn from(value: (T, T)) -> Self {
         Ratio::new_raw(value.0, value.1)
+    }
+}
+impl<T: One + Zero> From<T> for Ratio<Complex<T>> {
+    fn from(value: T) -> Self {
+        Ratio {
+            numer: Complex::real(value),
+            denom: Complex::real(T::one()),
+        }
     }
 }
 

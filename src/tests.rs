@@ -3102,10 +3102,10 @@ mod rational {
 
     #[test]
     fn test_from_pair() {
-        assert_eq!(_0, Ratio::from((0, 1)));
-        assert_eq!(_1, Ratio::from((1, 1)));
-        assert_eq!(_NEG2, Ratio::from((-2, 1)));
-        assert_eq!(_1_NEG2, Ratio::from((1, -2)));
+        assert_eq!(_0, (0, 1).into());
+        assert_eq!(_1, (1, 1).into());
+        assert_eq!(_NEG2, (-2, 1).into());
+        assert_eq!(_1_NEG2, (1, -2).into());
     }
 
     #[test]
@@ -3253,7 +3253,8 @@ mod rational {
             )
             .to_approx()
         );
-        assert_eq!(5e-324f64, Ratio::<IBig>::from(5e-324).to_approx());
+        let r: Ratio::<IBig> = 5e-324.into();
+        assert_eq!(5e-324f64, r.to_approx());
         assert_eq!(
             5e-324f64,
             Ratio::<IBig>::from_approx(5e-324, 0.0)

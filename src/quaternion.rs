@@ -22,12 +22,35 @@ pub struct Quaternion<T> {
 }
 
 impl<T> Quaternion<T> {
+    #[must_use]
     pub const fn new(re: T, im_i: T, im_j: T, im_k: T) -> Self {
         Self {
             im_i,
             im_j,
             im_k,
             re,
+        }
+    }
+}
+
+impl<T: Zero> Quaternion<T> {
+    #[must_use]
+    pub fn real(re: T) -> Self {
+        Self {
+            re,
+            im_i: Zero::zero(),
+            im_j: Zero::zero(),
+            im_k: Zero::zero(),
+        }
+    }
+    #[must_use]
+    pub fn imag(im: [T; 3]) -> Self {
+        let [im_i, im_j, im_k] = im;
+        Self {
+            re: Zero::zero(),
+            im_i,
+            im_j,
+            im_k,
         }
     }
 }
@@ -113,6 +136,7 @@ impl<T: Zero> From<T> for Quaternion<T> {
         }
     }
 }
+// From<Complex<T>> is deliberately not implemented, as the choice of complex unit would be arbitrary.
 
 macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
