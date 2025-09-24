@@ -114,7 +114,7 @@ impl ApproxFloat<f64> for f32 {
     #[inline(always)]
     fn from_approx(value: f64, tol: f64) -> Option<Self> {
         let v = value as f32;
-        ((v as f64 - value).abs() <= tol).then_some(v)
+        (!((v as f64 - value).abs() > tol)).then_some(v)
     }
 }
 

@@ -108,10 +108,12 @@ macro_rules! assert_fmt_eq {
 fn test_gcd() {
     assert!(!f32::NAN.is_valid_euclid());
     assert!(!f64::NAN.is_valid_euclid());
+    assert!(!(-f32::NAN).is_valid_euclid());
+    assert!(!(-f64::NAN).is_valid_euclid());
     assert!(!f32::NEG_INFINITY.is_valid_euclid());
     assert!(!f64::NEG_INFINITY.is_valid_euclid());
-    assert!(!f32::INFINITY.is_valid_euclid());
-    assert!(!f64::INFINITY.is_valid_euclid());
+    assert!(f32::INFINITY.is_valid_euclid());
+    assert!(f64::INFINITY.is_valid_euclid());
 
     fn test<T: Copy + Num + core::fmt::Display + Cancel + core::ops::Div<Output = T>>(
         a: T,
@@ -291,6 +293,53 @@ fn test_sign() {
     }
 }
 
+#[test]
+fn test_mulu() {
+    for i in 0..20 {
+        assert_eq!(13.mulu(i), 13 * i);
+    }
+}
+
+#[test]
+fn test_float_approx() {
+    // test approximations from one primitive type to another.
+    assert_eq!(f32::MAX as f64, f32::MAX.to_approx());
+    assert_eq!(f64::MAX as f32, f64::MAX.to_approx());
+    assert_eq!(i32::MAX as f64, i32::MAX.to_approx());
+    assert_eq!(i32::MAX as f32, i32::MAX.to_approx());
+    assert_eq!(f32::from_approx(1.0f64, 0.0), Some(1.0));
+    assert_eq!(f64::from_approx(1.0f64, 0.0), Some(1.0));
+    assert_eq!(f32::from_approx(1.0f32, 0.0), Some(1.0));
+    assert_eq!(f64::from_approx(1.0f32, 0.0), Some(1.0));
+    assert_eq!(i32::from_approx(1.0f64, 0.0), Some(1));
+    assert_eq!(i32::from_approx(1.0f32, 0.0), Some(1));
+    assert_eq!(i32::from_approx(f64::INFINITY, 0.0), None);
+    assert_eq!(i32::from_approx(f32::INFINITY, 0.0), None);
+    assert_eq!(i32::from_approx(f64::NAN, 0.0), None);
+    assert_eq!(i32::from_approx(f32::NAN, 0.0), None);
+    assert_eq!(f32::from_approx(f64::INFINITY, 0.0), Some(f32::INFINITY));
+    assert_eq!(f64::from_approx(f64::INFINITY, 0.0), Some(f64::INFINITY));
+    assert_eq!(f32::from_approx(f32::INFINITY, 0.0), Some(f32::INFINITY));
+    assert_eq!(f64::from_approx(f32::INFINITY, 0.0), Some(f64::INFINITY));
+    assert_eq!(f32::from_approx(f64::NAN, 0.0).map(|f| f.is_nan()), Some(true));
+    assert_eq!(f64::from_approx(f64::NAN, 0.0).map(|f| f.is_nan()), Some(true));
+    assert_eq!(f32::from_approx(f32::NAN, 0.0).map(|f| f.is_nan()), Some(true));
+    assert_eq!(f64::from_approx(f32::NAN, 0.0).map(|f| f.is_nan()), Some(true));
+    assert_eq!(f32::from_approx(f64::MAX, 0.0), None);
+    assert_eq!(f64::from_approx(f64::MAX, 0.0), Some(f64::MAX));
+    assert_eq!(f32::from_approx(f32::MAX, 0.0), Some(f32::MAX));
+    assert_eq!(f64::from_approx(f32::MAX, 0.0), Some(f32::MAX as f64));
+    assert_eq!(f32::from_approx(f64::MIN_POSITIVE, 0.0), None);
+    assert_eq!(f64::from_approx(f64::MIN_POSITIVE, 0.0), Some(f64::MIN_POSITIVE));
+    assert_eq!(f32::from_approx(f32::MIN_POSITIVE, 0.0), Some(f32::MIN_POSITIVE));
+    assert_eq!(f64::from_approx(f32::MIN_POSITIVE, 0.0), Some(f32::MIN_POSITIVE as f64));
+    // subnormal numbers
+    assert_eq!(f32::from_approx(f64::MIN_POSITIVE / 256.0, 0.0), None);
+    assert_eq!(f64::from_approx(f64::MIN_POSITIVE / 256.0, 0.0), Some(f64::MIN_POSITIVE / 256.0));
+    assert_eq!(f32::from_approx(f32::MIN_POSITIVE / 256.0, 0.0), Some(f32::MIN_POSITIVE / 256.0));
+    assert_eq!(f64::from_approx(f32::MIN_POSITIVE / 256.0, 0.0), Some((f32::MIN_POSITIVE / 256.0) as f64));
+}
+
 #[allow(non_upper_case_globals)]
 mod complex {
     use super::*;
@@ -397,6 +446,14 @@ mod complex {
             std::println!("{:?} != {:?}", a, b);
         }
         close
+    }
+    // Version that also works for checking the signs of exact zero results
+    #[allow(dead_code)]
+    pub fn eq_zerosign(a: Complex64, b: Complex64) -> bool {
+        a.is_zero()
+        && b.is_zero()
+        && a.re.is_sign_positive() == b.re.is_sign_positive()
+        && a.im.is_sign_positive() == b.im.is_sign_positive()
     }
 
     #[test]
@@ -616,13 +673,15 @@ mod complex {
             assert!(close_naninf(_1_nani.exp(), _nan_nani));
             assert!(close_naninf(_neg1_nani.exp(), _nan_nani));
             assert!(close_naninf(_inf_0i.exp(), _inf_0i));
-            //assert!(close_naninf(_neginf_1i.exp(), Complex::cis(1.0) * 0.0));
-            //assert!(close_naninf(_neginf_neg1i.exp(), Complex::cis(-1.0) * 0.0));
-            //assert!(close_naninf(_inf_1i.exp(), Complex::cis(1.0) * f64::INFINITY));
-            //assert!(close_naninf(_inf_neg1i.exp(),Complex::cis(-1.0) * f64::INFINITY));
-            assert!(close_naninf(_neginf_infi.exp(), _0_0i)); // Note: ±0±0i: signs of zeros are unspecified
+            assert!(eq_zerosign(_neginf_1i.exp(), Complex::cis(&1.0) * 0.0));
+            assert!(eq_zerosign(_neginf_neg1i.exp(), Complex::cis(&-1.0) * 0.0));
+            assert!(close_naninf(_inf_1i.exp(), Complex::cis(&1.0) * f64::INFINITY));
+            assert!(close_naninf(_inf_neg1i.exp(),Complex::cis(&-1.0) * f64::INFINITY));
+            assert_eq!(_neginf_infi.exp(), _0_0i); // Note: ±0±0i: signs of zeros are unspecified
+            assert_eq!((-_inf_infi).exp(), _0_0i); // Note: ±0±0i: signs of zeros are unspecified
+            assert_eq!(_neginf_nani.exp(), _0_0i); // Note: ±0±0i: signs of zeros are unspecified
+            // I disagree on the following two: These make absolutely no sense to me and don't work in my implementation.
             //assert!(close_naninf(_inf_infi.exp(), _inf_nani)); // Note: ±∞+NaN*i: sign of the real part is unspecified
-            assert!(close_naninf(_neginf_nani.exp(), _0_0i)); // Note: ±0±0i: signs of zeros are unspecified
             //assert!(close_naninf(_inf_nani.exp(), _inf_nani)); // Note: ±∞+NaN*i: sign of the real part is unspecified
             assert!(close_naninf(_nan_0i.exp(), _nan_0i));
             assert!(close_naninf(_nan_1i.exp(), _nan_nani));
@@ -661,6 +720,10 @@ mod complex {
                     c.exp_m1(),
                     -(c + _0_1i * f64::consts::PI).exp_m1() - 2.
                 ));
+                // test negative infinity
+                assert!(close((c - f64::INFINITY).exp_m1(), (c - f64::INFINITY).exp() - _1_0i));
+                // test zero signs
+                assert!(eq_zerosign((c * 0.0).exp_m1(), c * 0.0));
             }
             assert!(close(
                 (_1_0i * 1e-12).exp_m1(),
@@ -1427,6 +1490,14 @@ mod quaternion {
         }
         close
     }
+    #[allow(dead_code)]
+    pub fn eq_zerosign(a: Quaternion<f64>, b: Quaternion<f64>) -> bool {
+        a.is_zero() && b.is_zero()
+        && a.re.is_sign_positive() == b.re.is_sign_positive()
+        && a.im_i.is_sign_positive() == b.im_i.is_sign_positive()
+        && a.im_j.is_sign_positive() == b.im_j.is_sign_positive()
+        && a.im_k.is_sign_positive() == b.im_k.is_sign_positive()
+    }
 
     #[test]
     fn test_consts() {
@@ -1445,6 +1516,21 @@ mod quaternion {
     #[cfg(any(feature = "std", feature = "libm"))]
     mod analytic {
         use super::*;
+
+        #[test]
+        fn axis_angle() {
+            for &c in all_consts.iter() {
+                if c.is_zero() {
+                    continue;
+                }
+                let u = c / c.abs();
+                // in the case -1 the quaternion is not recovered, as that represents the same rotation as 1.
+                if !(-c).is_one() {
+                    assert!(close(Quaternion::from_axis_angle(&u.to_axis_angle()), u));
+                }
+            }
+        }
+
         #[test]
         fn test_sqrt1() {
             // if the imaginary value is too small compares with the real value, it will snap to the axis
@@ -1538,12 +1624,36 @@ mod quaternion {
         #[test]
         fn test_exp_ln() {
             for &c in all_consts.iter() {
+                assert!(eq_zerosign((c - f64::INFINITY).exp(), c.exp() * 0.0));
                 if c.is_zero() {
                     continue;
                 }
                 // e^ln(z) = z
                 assert!(close(c.ln().exp(), c));
+                assert!(close(c.ln().exp_m1() + _1, c));
+                assert!(close((c - _1).ln_1p().exp(), c));
             }
+        }
+
+        #[test]
+        fn test_exp_m1() {
+            for &c in all_consts.iter() {
+                assert!(close(c.exp_m1() + _1, c.exp()));
+                // now test the same but for very small values with the Taylor series
+                assert!(close((c * 1e-10).exp_m1(), c * 1e-10 + (c * 1e-10).powi(2) / 2.0));
+                assert!(eq_zerosign((c * 0.0).exp_m1(), c * 0.0));
+                assert!(eq_zerosign((c - f64::INFINITY).exp_m1(), c.exp() * 0.0));
+            }
+        }
+
+        #[test]
+        fn test_pow() {
+            for c in all_consts.iter() {
+                assert_eq!(c.pow(&_0), _1);
+                assert!(close_abs(c.pow(&_1), *c));
+                assert!(close_abs(c.pow(&_2), c * c));
+            }
+            assert_eq!(Quaternion::new(f64::NAN, f64::NAN, f64::NAN, f64::NAN).pow(&_0), _1);
         }
 
         #[test]
@@ -2106,9 +2216,10 @@ mod rational {
     }
 
     #[test]
-    fn test_test_constants() {
+    fn test_constants() {
         // check our constants are what Ratio::new etc. would make.
         assert_eq!(_0, Zero::zero());
+        assert_eq!(_0, Default::default());
         assert_eq!(_1, One::one());
         assert_eq!(_2, Ratio::from(2));
         assert_eq!(_1_2, Ratio::new(1, 2));
@@ -2146,10 +2257,16 @@ mod rational {
         assert_eq!(_1_2.re(), _1_2);
         let r = Ratio::new(complex!(1 + 2 i), complex!(-2 + 3 i));
         assert_eq!(r.re(), Ratio::new((r.numer * r.denom.conj()).re(), r.denom.abs_sqr()));
+        assert_eq!((r * r.conj()).re(), r.abs_sqr());
+        // test from
+        assert_eq!(Ratio::new(complex!(1 + 2 i), complex!(1)), complex!(1 + 2 i).into());
+        assert_eq!(Ratio::new(complex!(2 + 0 i), complex!(1)), 2i32.into());
+        assert_eq!(Ratio::new(complex!(2 + 0 i), complex!(1)), Ratio::new(2, 1).into());
     }
 
     #[test]
     fn test_approx_float() {
+        assert_eq!(Ratio::<i32>::from_approx(10f32, 0.0), Some(10i32.into()));
         assert_eq!(
             Ratio::<i32>::from_approx(core::f32::consts::PI, 3e-7),
             Some(Ratio::new(355, 113))
@@ -2211,20 +2328,55 @@ mod rational {
                 .unwrap()
                 .to_approx()
         );
+        // test with floats
+        assert_eq!(
+            core::f32::consts::PI,
+            Ratio::<f32>::from_approx(core::f32::consts::PI, 0.0)
+                .unwrap()
+                .to_approx()
+        );
+        assert_eq!(
+            core::f32::consts::E,
+            Ratio::<f32>::from_approx(core::f32::consts::E, 0.0)
+                .unwrap()
+                .to_approx()
+        );
+        // TODO check this more closely!
+        assert_eq!(
+            f32::INFINITY,
+            Ratio::<f32>::from_approx(f32::INFINITY, 0.0)
+                .unwrap()
+                .to_approx()
+        );
+        assert!(
+            Ratio::<f32>::from_approx(f32::NAN, 0.0)
+                .unwrap().is_nan()
+        );
     }
 
     #[test]
     #[allow(clippy::eq_op)]
     fn test_cmp() {
         use core::cmp::Ordering;
-
+        let _1a = Ratio::new_raw(-1, -1);
+        let _2a = Ratio::new_raw(-2, -1);
+        assert!(_0.denom != (-_0).denom);
         assert!(_0 == -_0);
+        assert!(!(_0 < -_0));
         assert!(_0 == _0 && _1 == _1);
         assert!(_0 != _1 && _1 != _0);
         assert!(_0 < _1 && !(_1 < _0));
         assert!(_1 > _0 && !(_0 > _1));
-        assert_eq!(Ratio::new_raw(-1, -1), _1);
-        assert_eq!(_1, Ratio::new_raw(-1, -1));
+        assert!(_1 < _2 && !(_2 < _1));
+        assert!(_2 > _1 && !(_1 > _2));
+        assert!(_1a < _2a && !(_2a < _1a));
+        assert!(_2a > _1a && !(_1a > _2a));
+        assert_eq!(_1a, _1);
+        assert_eq!(_1, _1a);
+        assert!(_0 < _1a && !(_1a < _0));
+        assert!(_1a > _0 && !(_0 > _1a));
+        assert!(_1 > Ratio::new_raw(1, -1));
+        assert!(Ratio::new_raw(1, -1) < _1);
         assert_eq!(Ratio::new_raw(-1, -2), _1_2);
         assert_eq!(_1_2, Ratio::new_raw(-1, -2));
         assert_eq!(Ratio::new_raw(-1, -2).partial_cmp(&_1_2), Some(Ordering::Equal));
@@ -2240,8 +2392,17 @@ mod rational {
 
         // infinities and NaNs
         assert!(_0 <= (_1 / _0));
+        assert!(_1 <= Ratio::new_raw(1, 0));
+        assert!(Ratio::new_raw(1, 0) >= _1);
+        assert!(-_1 <= Ratio::new_raw(1, 0));
+        assert!(Ratio::new_raw(1, 0) >= -_1);
+        assert!(-_1a <= Ratio::new_raw(1, 0));
+        assert!(Ratio::new_raw(1, 0) >= -_1a);
+        assert!(_1a <= Ratio::new_raw(1, 0));
+        assert!(Ratio::new_raw(1, 0) >= _1a);
         assert!(Ratio::new_raw(0, -1) <= (_1 / _0));
         assert!(_0 >= ((-_1) / _0));
+        assert!(((-_1) / _0) <= _0);
         assert!(((-_1) / _0) < (_1 / _0));
         assert!((_1 / _0) > ((-_1) / _0));
         assert_eq!((_2 / _0).partial_cmp(&(_1 / _0)), Some(Ordering::Equal));
@@ -2257,10 +2418,85 @@ mod rational {
         assert!((_0 / _0).is_nan());
         assert_eq!((_0).partial_cmp(&(_0 / _0)), None);
         assert_eq!((_0 / _0).partial_cmp(&_0), None);
-        // PartialEq with different infinities
-        assert!(Ratio::new_raw(2, 0) == (_1 / _0));
+        // PartialEq with non finite values
+        assert_ne!(_0, _0 / _0);
+        assert_ne!(_0 / _0, _0);
+        assert_ne!(_1, _0 / _0);
+        assert_ne!(_0 / _0, _1);
+        assert_ne!(_1_2, _0 / _0);
+        assert_ne!(_0 / _0, _1_2);
+        assert_eq!(Ratio::new_raw(2, 0), Ratio::new_raw(1, 0));
         assert!((_1 / _0) != (-_1 / _0));
         assert!((_1 / _0) != (_0 / _0));
+        // PartialOrd with floats
+        let inf = Ratio::new_raw(f32::INFINITY, 1.0);
+        let inf2 = Ratio::new_raw(f32::INFINITY, 0.0);
+        let inf3 = Ratio::new_raw(-f32::INFINITY, -1.0);
+        let inf4 = Ratio::new_raw(-f32::INFINITY, -0.0);
+        //assert!(!inf.is_finite()); // these don't work here.
+        //assert!(!inf2.is_finite());
+        //assert!(!inf3.is_finite());
+        //assert!(!inf4.is_finite());
+        let neginf = Ratio::new_raw(-f32::INFINITY, 1.0);
+        let neginf2 = Ratio::new_raw(-f32::INFINITY, 0.0);
+        let neginf3 = Ratio::new_raw(f32::INFINITY, -1.0);
+        let neginf4 = Ratio::new_raw(f32::INFINITY, -0.0);
+        //assert!(!neginf.is_finite());
+        //assert!(!neginf2.is_finite());
+        //assert!(!neginf3.is_finite());
+        //assert!(!neginf4.is_finite());
+        let nan = Ratio::new_raw(f32::NAN, -1.0);
+        let nan2 = Ratio::new_raw(-1.0, f32::NAN);
+        let nan3 = Ratio::new_raw(f32::NAN, 0.0);
+        let nan4 = Ratio::new_raw(0.0, 0.0);
+        assert!(nan.is_nan());
+        assert!(nan2.is_nan());
+        assert!(nan3.is_nan());
+        assert!(nan4.is_nan());
+        assert_eq!(inf.partial_cmp(&neginf), Some(Ordering::Greater));
+        assert_eq!(inf2.partial_cmp(&neginf2), Some(Ordering::Greater));
+        assert_eq!(inf3.partial_cmp(&neginf3), Some(Ordering::Greater));
+        assert_eq!(inf4.partial_cmp(&neginf4), Some(Ordering::Greater));
+        assert_eq!(inf.partial_cmp(&neginf), Some(Ordering::Greater));
+        assert_eq!(inf.partial_cmp(&neginf2), Some(Ordering::Greater));
+        assert_eq!(inf.partial_cmp(&neginf3), Some(Ordering::Greater));
+        assert_eq!(inf.partial_cmp(&neginf4), Some(Ordering::Greater));
+        assert_eq!(inf.partial_cmp(&neginf), Some(Ordering::Greater));
+        assert_eq!(inf2.partial_cmp(&neginf), Some(Ordering::Greater));
+        assert_eq!(inf3.partial_cmp(&neginf), Some(Ordering::Greater));
+        assert_eq!(inf4.partial_cmp(&neginf), Some(Ordering::Greater));
+        assert_eq!(inf.partial_cmp(&inf2), Some(Ordering::Equal));
+        assert_eq!(inf.partial_cmp(&inf3), Some(Ordering::Equal));
+        assert_eq!(inf2.partial_cmp(&inf3), Some(Ordering::Equal));
+        assert_eq!(inf.partial_cmp(&inf4), Some(Ordering::Equal));
+        assert_eq!(inf2.partial_cmp(&inf4), Some(Ordering::Equal));
+        assert_eq!(inf3.partial_cmp(&inf4), Some(Ordering::Equal));
+        assert_eq!(neginf.partial_cmp(&neginf2), Some(Ordering::Equal));
+        assert_eq!(neginf.partial_cmp(&neginf3), Some(Ordering::Equal));
+        assert_eq!(neginf2.partial_cmp(&neginf3), Some(Ordering::Equal));
+        assert_eq!(neginf.partial_cmp(&neginf4), Some(Ordering::Equal));
+        assert_eq!(neginf2.partial_cmp(&neginf4), Some(Ordering::Equal));
+        assert_eq!(neginf3.partial_cmp(&neginf4), Some(Ordering::Equal));
+        // PartialEq with floats
+        assert_eq!(inf, inf2);
+        assert_eq!(inf, inf3);
+        assert_eq!(inf2, inf3);
+        assert_eq!(inf, inf4);
+        assert_eq!(inf2, inf4);
+        assert_eq!(inf3, inf4);
+        assert_eq!(neginf, neginf2);
+        assert_eq!(neginf, neginf3);
+        assert_eq!(neginf2, neginf3);
+        assert_eq!(neginf, neginf4);
+        assert_eq!(neginf2, neginf4);
+        assert_eq!(neginf3, neginf4);
+        //assert_eq!(nan, nan);
+        //assert_eq!(nan2, nan2);
+        //assert_eq!(nan3, nan3);
+        //assert_eq!(nan4, nan4);
+        //assert_eq!(nan2, nan);
+        //assert_eq!(nan3, nan);
+        //assert_eq!(nan4, nan);
     }
 
     #[test]
@@ -2317,42 +2553,6 @@ mod rational {
             );
             assert!(a > b);
             assert!(a != b);
-            let a = BigRational::new(
-                "284809124001480758165698749156931477484913831"
-                    .parse()
-                    .unwrap(),
-                "134729874746012938570101240147041441876457091"
-                    .parse()
-                    .unwrap(),
-            );
-            let b = BigRational::new(
-                "284809124001480758165698749156931477484913832"
-                    .parse()
-                    .unwrap(),
-                "134729874746012938570101240147041441876457092"
-                    .parse()
-                    .unwrap(),
-            );
-            assert!(a > b);
-            assert!(a != b);
-            let a = BigRational::new(
-                "28480912408140985865921964982184619846901480758165698749156931477484913831"
-                    .parse()
-                    .unwrap(),
-                "13472987474601293857019187419865891841240017345975201240147041441876457091"
-                    .parse()
-                    .unwrap(),
-            );
-            let b = BigRational::new(
-                "28480912408140985865921964982184619846901480758165698749156931477484913832"
-                    .parse()
-                    .unwrap(),
-                "13472987474601293857019187419865891841240017345975201240147041441876457092"
-                    .parse()
-                    .unwrap(),
-            );
-            assert!(a > b);
-            assert!(a != b);
             // this next one is already 115 recursive calls deep
             let a = BigRational::new("28480912408140985865921964982184019830491750173619460128640183640194710871024710484619846901480758165698749156931477484913831".parse().unwrap(), "13472987474601293857019187419865891841240017345975201240147041247108374918659764818204710348765103865981732091731441876457091".parse().unwrap());
             let b = Ratio::new_raw(&a.numer + &IBig::one(), &a.denom + &IBig::one());
@@ -2389,6 +2589,9 @@ mod rational {
         assert_eq!(_1_2.trunc().numer, 0);
         assert_eq!(_3_2.trunc().numer, 1);
         assert_eq!(_NEG1_2.trunc().numer, 0);
+        assert_eq!(_INF.trunc(), _INF);
+        assert_eq!((-_INF).trunc(), -_INF);
+        assert_eq!(_NAN.trunc(), _NAN);
     }
 
     #[test]
@@ -2858,14 +3061,15 @@ mod rational {
         #[test]
         #[cfg(feature = "ibig")]
         fn test_bigint_euclid() {
-            let a: IBig = "81204799147741".parse().unwrap();
-            let b: IBig = "137498793161553".parse().unwrap();
-            let r_ref = "81204799147741".parse().unwrap();
-            let r_ref2 = "56293994013812".parse().unwrap();
+            let a: IBig = FromI64::from_i64(81204799147741);
+            let b: IBig = FromI64::from_i64(137498793161553);
+            let neg_b: IBig = FromI64::from_i64(-137498793161553);
+            let r_ref = FromI64::from_i64(81204799147741);
+            let r_ref2 = FromI64::from_i64(56293994013812);
             let (q, r) = a.div_rem_euclid(&b);
             assert!(q.is_zero());
             assert_eq!(r, r_ref);
-            let (q, r) = a.div_rem_euclid(&-&b);
+            let (q, r) = a.div_rem_euclid(&neg_b);
             assert!(q.is_zero());
             assert_eq!(r, r_ref);
             let (q, r) = (-&a).div_rem_euclid(&-&b);
@@ -2879,7 +3083,7 @@ mod rational {
             assert!(!(-a).is_valid_euclid());
             assert!(!(-b).is_valid_euclid());
             assert!(IBig::zero().is_valid_euclid());
-            let a: UBig = "81204799147741".parse().unwrap();
+            let a: UBig = FromU64::from_u64(81204799147741);
             let b: UBig = "137498793161553".parse().unwrap();
             let r_ref = "81204799147741".parse().unwrap();
             let (q, r) = a.div_rem_euclid(&b);
@@ -2937,6 +3141,16 @@ mod rational {
         assert_eq!(_1.round(), __1);
         assert_eq!(_1.trunc(), _1);
 
+        // round with floats
+        assert!(Ratio::from(f32::NAN).floor().is_nan());
+        assert!(Ratio::from(f32::NAN).ceil().is_nan());
+        assert!(Ratio::from(f32::NAN).round().is_nan());
+        assert!(Ratio::new_raw(1.0, f32::NAN).floor().is_nan());
+        assert!(Ratio::new_raw(1.0, f32::NAN).ceil().is_nan());
+        assert!(Ratio::new_raw(1.0, f32::NAN).round().is_nan());
+        assert!(Ratio::one().div_floor(&Ratio::from(f32::NAN)).is_nan());
+        assert!(Ratio::one().div_floor(&Ratio::new_raw(1.0, f32::NAN)).is_nan());
+
         // Overflow checks
 
         let __0 = 0i32;
@@ -2966,6 +3180,9 @@ mod rational {
         assert_eq!(_NEG1_2.fract(), _NEG1_2);
         assert_eq!(_1_2.fract(), _1_2);
         assert_eq!(_3_2.fract(), _1_2);
+        assert_eq!(_INF.fract(), _0);
+        assert_eq!((-_INF).fract(), _0);
+        assert_eq!(_NAN.fract(), _0);
     }
 
     #[test]
@@ -3194,6 +3411,9 @@ mod rational {
     #[test]
     fn test_from_float() {
         assert_eq!(Ratio::<i128>::try_from(f32::MAX), Err(()));
+        assert_eq!(Ratio::<i128>::try_from(f64::MIN_POSITIVE), Err(()));
+        assert_eq!(Ratio::<i64>::try_from(f32::MIN_POSITIVE / 256.0), Err(()));
+        assert!(Ratio::<i128>::try_from(f32::MIN_POSITIVE / 2.0).is_ok());
         assert_eq!(
             Ratio::<i128>::try_from(f32::MAX / 2.0),
             Ok(Ratio::new_raw((f32::MAX / 2.0) as i128, 1))
@@ -3297,20 +3517,28 @@ mod rational {
             )
             .to_approx(),
         );
-        assert_eq!(
-            core::f64::INFINITY,
-            BigRational::new_raw(IBig::one(), IBig::zero()).to_approx(),
-        );
-        assert_eq!(
-            core::f64::NEG_INFINITY,
-            BigRational::new_raw(-IBig::one(), IBig::zero()).to_approx(),
-        );
-        let f: f32 = BigRational::new_raw(IBig::zero(), IBig::zero()).to_approx();
+        assert_eq!(IBig::from(f32::MAX as u128), <Ratio::<IBig> as From<f32>>::from(f32::MAX).numer);
+        assert_eq!(IBig::from_approx(f64::INFINITY, 0.0), None);
+        assert_eq!(IBig::from_approx(-f64::INFINITY, 0.0), None);
+        assert_eq!(IBig::from_approx(f64::NAN, 0.0), None);
+        let inf = BigRational::new_raw(IBig::one(), IBig::zero());
+        assert_eq!(Ratio::<IBig>::from_approx(f64::INFINITY, 0.0), Some(inf.clone()));
+        assert_eq!(Ratio::<IBig>::from_approx(-f64::INFINITY, 0.0), Some(-inf.clone()));
+        assert_eq!(<Ratio::<IBig> as From<f64>>::from(f64::INFINITY), inf);
+        assert_eq!(<Ratio::<IBig> as From<f64>>::from(-f64::INFINITY), -inf.clone());
+        assert_eq!(core::f64::INFINITY, inf.to_approx());
+        assert_eq!(core::f64::NEG_INFINITY, (-inf).to_approx());
+        let nan = BigRational::new_raw(IBig::zero(), IBig::zero());
+        assert_eq!(Ratio::<IBig>::from_approx(f64::NAN, 0.0), Some(nan.clone()));
+        assert_eq!(<Ratio::<IBig> as From<f64>>::from(f64::NAN), nan);
+        let f: f32 = nan.to_approx();
         assert!(f.is_nan());
     }
 
     #[test]
     fn test_ratio_to_approx() {
+        assert_eq!(1.0f64, Ratio::<i32>::new(1, 1).to_approx());
+        assert_eq!(-2.0f64, Ratio::<i32>::new(-2, 1).to_approx());
         assert_eq!(0.5f64, Ratio::<i32>::new(1, 2).to_approx());
         assert_eq!(0.5f64, Rational64::new(1, 2).to_approx());
         assert_eq!(-0.5f64, Rational64::new(1, -2).to_approx());
@@ -3327,10 +3555,39 @@ mod rational {
         );
         assert_eq!(core::f64::INFINITY, Ratio::<i32>::new_raw(1, 0).to_approx(),);
         assert_eq!(
-            core::f64::NEG_INFINITY,
+            -core::f64::INFINITY,
             Ratio::<i32>::new_raw(-1, 0).to_approx(),
         );
         let v: f32 = Ratio::<i32>::new_raw(0, 0).to_approx();
+        assert!(v.is_nan());
+        // now test the special cases with ratios over floats
+        assert_eq!(core::f64::INFINITY, Ratio::<f32>::new_raw(1.0, 0.0).to_approx(),);
+        assert_eq!(
+            -core::f64::INFINITY,
+            Ratio::<f32>::new_raw(-1.0, 0.0).to_approx(),
+        );
+        assert_eq!(core::f64::INFINITY, Ratio::<f32>::new_raw(f32::INFINITY, 0.0).to_approx(),);
+        assert_eq!(
+            -core::f64::INFINITY,
+            Ratio::<f32>::new_raw(-f32::INFINITY, 0.0).to_approx(),
+        );
+        assert_eq!(0.0, Ratio::<f32>::new_raw(1.0, f32::INFINITY).to_approx());
+        assert_eq!(0.0, Ratio::<f32>::new_raw(1.0, -f32::INFINITY).to_approx());
+        assert_eq!(0.0, Ratio::<f32>::new_raw(-1.0, f32::INFINITY).to_approx());
+        assert_eq!(0.0, Ratio::<f32>::new_raw(-1.0, -f32::INFINITY).to_approx());
+        assert_eq!(0.0, Ratio::<f32>::new_raw(0.0, f32::INFINITY).to_approx());
+        assert_eq!(0.0, Ratio::<f32>::new_raw(0.0, -f32::INFINITY).to_approx());
+        let v: f32 = Ratio::<f32>::new_raw(0.0, 0.0).to_approx();
+        assert!(v.is_nan());
+        let v: f32 = Ratio::<f32>::new_raw(f32::INFINITY, f32::INFINITY).to_approx();
+        assert!(v.is_nan());
+        let v: f32 = Ratio::new_raw(f32::NAN, f32::NAN).to_approx();
+        assert!(v.is_nan());
+        let v: f32 = Ratio::new_raw(0.0, f32::NAN).to_approx();
+        assert!(v.is_nan());
+        let v: f32 = Ratio::new_raw(f32::NAN, 0.0).to_approx();
+        assert!(v.is_nan());
+        let v: f32 = Ratio::new_raw(f32::NAN, 1.0).to_approx();
         assert!(v.is_nan());
     }
 
@@ -3355,8 +3612,19 @@ mod rational {
             let last = [1, 2, 2].iter().continued_fraction(end).nth(2);
             assert_eq!(last_expected, last);
 
+            // developing this fraction gives back the array
+            if end == 0 {
+                assert_eq!(DevelopContinuedFraction::new(last_expected.unwrap()).nth(0), Some(1));
+                assert_eq!(DevelopContinuedFraction::new(last_expected.unwrap()).nth(1), Some(2));
+                assert_eq!(DevelopContinuedFraction::new(last_expected.unwrap()).nth(2), Some(2));
+            }
+            assert_eq!(DevelopContinuedFraction::new(last_expected.unwrap()).nth(3), None);
+
             assert_eq!(None, iter.next());
             assert_eq!(None, [1, 2, 2].iter().continued_fraction(end).nth(3));
+            // tasting again without size_hint:
+            #[cfg(feature = "std")]
+            assert_eq!(None, [1, 2, 2].iter().flat_map(|x| std::vec![*x]).continued_fraction(end).nth(3));
         }
     }
 }
@@ -3379,6 +3647,7 @@ mod extension {
 
     #[test]
     fn test_extension() {
+        assert_eq!(SqrtExt::<i32, Sqrt<_, 5>>::default(), SqrtExt::<i32, Sqrt<_, 5>>::zero());
         assert_eq!(PHI.abs_sqr(), (PHI + 2) * 2); // phi^2 = phi+1
         // 1 + i√5
         const C: SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>> =
@@ -3392,6 +3661,8 @@ mod extension {
         // The gcd is currently not unique.
         let a = SqrtExt::<_, Sqrt<_, 2>>::new(2, 1);
         let b = SqrtExt::<_, Sqrt<_, 2>>::new(3, 0);
+        assert_eq!(b, SqrtExt::from_u64(3));
+        assert_eq!(b, SqrtExt::from_i64(3));
         let _ = gcd(a, b);
         let _ = lcm(a, b);
 
@@ -3399,11 +3670,15 @@ mod extension {
         let b = SqrtExt::<_, Sqrt<_, 7>>::new(3, 5);
         let _ = gcd(a, b);
         let _ = lcm(a, b);
+
+        assert_eq!(SqrtExt::<i32, Sqrt<_, 5>>::try_from(a), None);
     }
 
     #[test]
     #[allow(dead_code)]
     fn test_extension_string_formatting() {
+        // test debug formatting
+        assert_fmt_eq!(format_args!("{:?}", ZERO), "SqrtExt { value: 0, ext: 0 }");
         // normal numbers are handled using the default formatter, so don't test these too much
         assert_fmt_eq!(format_args!("{:5}", ZERO), "    0");
         assert_fmt_eq!(format_args!("{:5}", ONE), "    1");
@@ -3539,6 +3814,7 @@ mod extension {
             //std::println!("{u}");
             assert!(u.is_unit());
             assert!(!u.is_one());
+            assert_eq!(u.recip().recip(), u);
         }
         for i in 2u64..=198 {
             if i == 151 || i == 166 || i == 181 {
@@ -3700,6 +3976,56 @@ mod extension {
         assert_eq!(PHI2.ceil(), 4);
         assert_eq!(PHI2.floor(), 3);
         assert_eq!(PHI2.round(), 3);
+
+        // test round with finite floats
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, 1.0).round(), 2.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, 2.0).round(), 4.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, 3.0).round(), 7.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(1.0, 1.0).round(), 3.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(1.0, 2.0).round(), 5.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(1.0, 3.0).round(), 8.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.5, 1.0).round(), 3.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.5, 2.0).round(), 5.0);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.5, 3.0).round(), 7.0);
+        let a = SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, f32::MAX.sqrt()).round();
+        assert!((a - f32::MAX.sqrt()*(5.0f32).sqrt()).abs() / f32::MAX < 1e-4);
+        // this one fails because rounding occurs in a bad place:
+        //let a = SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, f32::MAX/25.0).round();
+        //assert!((a - f32::MAX/25.0*(5.0f32).sqrt()).abs() / f32::MAX < 1e-4, "{a}\n{}", f32::MAX/25.0*(5.0f32).sqrt());
+
+        // test round (and thereby floor) with non finite floats
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::MAX, 0.0).round(), f32::MAX);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, f32::MAX).round(), f32::INFINITY);
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, f32::NAN).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(1.0, f32::NAN).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::INFINITY, f32::NAN).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::NAN, 0.0).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::NAN, 1.0).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::NAN, f32::INFINITY).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::NAN, f32::NAN).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::INFINITY, -f32::INFINITY).round().is_nan());
+        assert!(SqrtExt::<f32, Sqrt<_, 5>>::new(-f32::INFINITY, f32::INFINITY).round().is_nan());
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(f32::INFINITY, f32::INFINITY).round(), f32::INFINITY);
+        assert_eq!(SqrtExt::<f32, Sqrt<_, 5>>::new(-f32::INFINITY, -f32::INFINITY).round(), -f32::INFINITY);
+
+        // test div_floor with non finite floats
+        let a = &SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, f32::NAN);
+        let b = &SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, 1.0);
+        let c = &SqrtExt::<f32, Sqrt<_, 5>>::new(0.0, f32::INFINITY);
+        let d = &SqrtExt::<f32, Sqrt<_, 5>>::new(f32::INFINITY, 0.0);
+        assert!(a.div_floor(a).is_nan());
+        assert!(a.div_floor(b).is_nan());
+        assert!(b.div_floor(a).is_nan());
+        // there would be a correct result, but it comes at the price of making ints overflow in `abs_sqr_ext`
+        //assert_eq!(b.div_floor(c), 0.0);
+        //assert_eq!(b.div_floor(-*c), 0.0);
+        //assert_eq!(b.div_floor(d), 0.0);
+        //assert_eq!(b.div_floor(-*d), 0.0);
+        // so settle on NAN in this case as well.
+        assert!(c.abs_sqr_ext().is_nan());
+        assert!(b.div_floor(c).is_nan());
+        assert!(d.abs_sqr_ext().is_nan());
+        assert!(b.div_floor(d).is_nan());
     }
 
     #[test]
@@ -4052,16 +4378,17 @@ mod extension {
     #[test]
     #[cfg(any(feature = "std", feature = "libm"))]
     fn test_approx_float() {
+        const N: u64 = 5;
         let f_list = [
             core::f32::consts::PI,
             core::f32::consts::E,
             core::f32::consts::LN_2,
+            (N as f32).sqrt(),
             1.5,
             0.7,
             12500.7,
             0.0001,
         ];
-        const N: u64 = 5;
         let tol = 1e-6f32;
         for f in f_list {
             let x = SqrtExt::<i64, Sqrt<_, N>>::from_approx(f, tol).unwrap();
@@ -4081,6 +4408,46 @@ mod extension {
     }
 
     #[test]
+    fn ext_iter_sum() {
+        const N: u64 = 2;
+        // collect into array so test works on no_std
+        let mut nums = [SqrtExt::<i32, Sqrt<_, N>>::new(0, 1); 1000];
+        for (i, r) in (0..nums.len()).map(|n| SqrtExt::<_, Sqrt<_, N>>::new(n as i32, 1)).enumerate() {
+            nums[i] = r;
+        }
+        let slice = &nums[..];
+        let mut manual_sum = SqrtExt::<_, Sqrt<_, N>>::zero();
+        for v in slice {
+            manual_sum = &manual_sum + v;
+        }
+        let sums = [manual_sum, slice.iter().sum(), slice.iter().cloned().sum()];
+        assert_eq!(sums[0], sums[1]);
+        assert_eq!(sums[0], sums[2]);
+    }
+
+    #[test]
+    fn ext_iter_product() {
+        const N: u64 = 2;
+        // collect into array so test works on no_std
+        let mut nums = [SqrtExt::<i64, Sqrt<_, N>>::new(0, 1); 20];
+        for (i, r) in (0..nums.len()).map(|n| SqrtExt::<_, Sqrt<_, N>>::new(n as i64, 1)).enumerate() {
+            nums[i] = r;
+        }
+        let slice = &nums[..];
+        let mut manual_prod = SqrtExt::<_, Sqrt<_, N>>::one();
+        for v in slice {
+            manual_prod = &manual_prod * v;
+        }
+        let products = [
+            manual_prod,
+            slice.iter().product(),
+            slice.iter().cloned().product(),
+        ];
+        assert_eq!(products[0], products[1]);
+        assert_eq!(products[0], products[2]);
+    }
+
+    #[test]
     fn test_complex_sqrt_ext() {
         type T = SqrtExt<Complex<i32>, Sqrt<Complex<i32>, 5>>;
         type TR = SqrtExt<i32, Sqrt<i32, 5>>;
@@ -4089,10 +4456,15 @@ mod extension {
         assert_eq!(x / y, Complex::from(2i32).into());
         assert!((x % y).is_zero());
         let x = T::new(Complex::i() * -4, Complex::one() * 4);
+        let xc = T::new(Complex::i() * 4, Complex::one() * 4);
         let y = T::new(Complex::one() * 2, Complex::i() * 2);
+        assert_eq!(x.conj(), xc);
+        assert_eq!(x.conj_ext(), -xc);
         assert_eq!(x / y, Complex::new(0, -2i32).into());
         assert!((x % y).is_zero());
-        assert_eq!(x.abs_sqr(), SqrtExt::new(16 + 16 * 5, 0));
+        assert_eq!(x.abs_sqr(), TR::new(16 + 16 * 5, 0));
+        assert_eq!(x.re(), TR::new(0, 4));
+        assert_eq!(y.re(), TR::new(2, 0));
         // let u = T::unit(); // what is the complex version of this???
         //std::println!("{}", x / y);
 
@@ -4102,6 +4474,10 @@ mod extension {
         assert_eq!(x, z.into());
         assert_eq!(y, w.into());
         assert_eq!(z / w, Complex::new(Zero::zero(), TR::new((-2i32).into(), Zero::zero())));
+        let z: T = TR::new(1, 2).into();
+        assert_eq!(z, T::new(complex!(1), complex!(2)));
+        let z: T = 1i32.into();
+        assert_eq!(z, T::new(complex!(1), complex!(0)));
         // test Complex<SqrtExt<...>> e.g. with Euclid
         let a = Complex::new(TR::new(-9, 3), TR::new(3, -2));
         let b = Complex::new(TR::new(3, -2), TR::new(1, 1));

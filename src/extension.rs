@@ -452,11 +452,11 @@ where
             (if denom < T::zero() { b } else { a }).into()
         }
     }
-    // TODO test on float NaN, as Ord is not specified above. If necessary panic and document that this method can panic for non Ord types.
     fn floor(&self) -> Self::Output {
         let value = T::from(self.value.floor());
-        if self.ext.is_zero() || self.ext.is_one() {
-            self.ext.clone() * E::floor() + value
+        let simple_floor = self.ext.clone() * E::floor() + value.clone();
+        if self.ext.is_zero() || self.ext.is_one() || simple_floor != simple_floor {
+            simple_floor
         } else {
             // 1. split the integral part off
             // 2. floor(|x|√N) = floor(|x|)*floor(√N) + n with integer 0 <= n < |x| (+ floor(√N) for non integer types)
@@ -466,7 +466,10 @@ where
             let abs_ext = if positive { self.ext.clone() } else { T::zero() - self.ext.clone() };
             let v = abs_ext.clone() * E::floor();
             let w = Self::new(T::zero(), abs_ext.clone());
-            assert!(w > v.clone().into(), "{w:?} > {v:?} failed");
+            if !(w > v.clone().into()) {
+                // infinities.
+                return simple_floor;
+            }
             let mut a = v.clone().floor();
             // Note, if ext is a non finite float, this will result in an endless loop!
             let mut b = (v + abs_ext.clone() + E::floor() - T::one()).floor();
@@ -672,6 +675,7 @@ impl<T: Num + One + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> SqrtExt<
         // overflows easily
         //self.value.clone() * self.value.clone() - self.ext.clone() * self.ext.clone() * E::sqr()
         // less overflows (but slower) with rearranged form (value - ext)(value + ext*N) - (N-1)*value*ext
+        // doesn't work for infinities (e.g. in float or rational types).
         (self.value.clone() - self.ext.clone()) * (self.value.clone() + self.ext.clone() * E::sqr())
             - (E::sqr() - T::one()) * self.value.clone() * self.ext.clone()
     }
@@ -685,6 +689,7 @@ where
         // overflows easily
         //&(&self.value * &self.value) - &(&(&self.ext * &self.ext) * &E::sqr())
         // less overflows (but slower) with rearranged form (value - ext)(value + ext*N) - (N-1)*value*ext
+        // doesn't work for infinities (e.g. in float or rational types).
         &((&self.value - &self.ext) * (&self.value + &(&self.ext * &E::sqr())))
             - &((&E::sqr() - &T::one()) * (&self.value * &self.ext))
     }
@@ -1105,9 +1110,6 @@ where
             q.value = q.value + q.ext.clone() * E::floor();
             let rf = c.sqrt() - E::floor().to_approx();
             let mut f = rf * q.ext.to_approx() + q.value.to_approx();
-            if self.value.is_zero() || self.value.is_valid_euclid() == self.ext.is_valid_euclid() {
-                return f;
-            }
             // to remove the remaining cancelation error use Newton iteration:
             // x-y√N = f -> N y^2 = (x - f)^2 = x^2 - 2xf + f^2
             // -> F(f) = f^2 - 2xf + (x^2 - N y^2)

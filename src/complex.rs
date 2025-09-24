@@ -675,28 +675,35 @@ where
 
     fn exp(&self) -> Self {
         let r = self.re.exp();
-        if r.is_zero() {
-            return Self::zero();
+        if self.im.is_zero() { // very common case
+            return Self::new(r, self.im.clone()); // copy zero sign
         }
-        if self.im.is_zero() {
-            return Self::real(r);
+        let c = Complex::cis(&self.im);
+        if r.is_zero() {
+            // correct zero signs for non finite cases!
+            return Complex::new(T::zero().copysign(&c.re), T::zero().copysign(&c.im));
         }
         Self {
-            re: &r * &self.im.cos(),
-            im: &r * &self.im.sin(),
+            re: &r * &c.re,
+            im: &r * &c.im,
         }
     }
 
     fn exp_m1(&self) -> Self {
         let r = self.re.exp_m1();
+        let rr = &r + &T::one();
+        if rr.is_zero() {
+            // correct zero signs
+            return Complex::new(-T::one(), T::zero().copysign(&self.im.sin()));
+        }
         let two = T::one() + T::one();
         let s = (&self.im / &two).sin();
         let s = &s * &s * two;
         // (r + 1) * cos - 1 = r * cos + (cos - 1) // lossy at im~0
         // cos - 1 = -2sin(im/2)^2 // precise at im~0
         Self {
-            re: &r * &(&T::one() - &s) - s,
-            im: (r + T::one()) * self.im.sin(),
+            re: r * (&T::one() - &s) - s,
+            im: rr * self.im.sin(),
         }
     }
 
@@ -725,7 +732,8 @@ where
     /// The branch satisfies `-π ≤ arg(ln(z+1)) ≤ π`.
     #[inline(always)]
     fn ln_1p(&self) -> Self {
-        // no good way to write this without conditionals...
+        // To use the Taylor series, a known precision is required.
+        // The best one could do is to make a branch for real numbers.
         (self + &T::one()).ln()
     }
 

@@ -357,7 +357,7 @@ macro_rules! impl_rem_euclid_float {
             }
             #[inline(always)]
             fn is_valid_euclid(&self) -> bool {
-                self >= &0.0 && self.is_finite()
+                self.is_sign_positive() && !self.is_nan()
             }
         })+
     };

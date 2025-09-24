@@ -18,7 +18,8 @@ fn end<T: Cancel>(accum: (T, T, T, T), end: T) -> Ratio<T> {
 }
 
 /// Trait extension to iterators to allow evaluating them as continued fractions.
-/// This is done forward, so `[1, 2, 2]` turns into `[1+end, 1+1/(2+end), 1+1/(2+1/(2+end))]`
+/// This is done forward, so `[1, 2, 2]` turns into `[1+end, 1+1/(2+end), 1+1/(2+1/(2+end))]`.
+/// Note, that rationals have a finite continued fraction expansion and can be recovered with `end = 0`.
 /// ```rust
 /// use snum::*;
 /// use snum::rational::*;
@@ -45,7 +46,7 @@ impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFract
         })
     }
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        if let Some(max_len) = self.iter.size_hint().1 && n > max_len {
+        if let Some(max_len) = self.iter.size_hint().1 && n >= max_len {
             return None;
         }
         // doing multiple steps at once, makes the computation of the outputs in between unecessary.

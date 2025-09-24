@@ -50,10 +50,12 @@ impl<T: One> Ratio<T> {
     }
 }
 impl<T: Zero + PartialEq> Ratio<T> {
+    /// Check if the rational represents a finite value. This check fails for infinite floats, but works to detect float NaNs.
     #[must_use]
     pub fn is_finite(&self) -> bool {
         !self.denom.is_zero() && self.numer == self.numer && self.denom == self.denom
     }
+    /// Check if the rational is a representation of the NaN state.
     #[must_use]
     pub fn is_nan(&self) -> bool {
         (self.denom.is_zero() && self.numer.is_zero())
@@ -99,24 +101,20 @@ where <T as IntoDiscrete>::Output: Add<Output = <T as IntoDiscrete>::Output> + D
     ///
     /// Panics if the rational is non finite.
     fn div_floor(&self, div: &Self) -> T {
-        if !self.is_finite() {
-            if self.numer != self.numer {
-                return self.numer.clone(); // NaN
-            }
-            if self.denom != self.denom {
-                return self.denom.clone(); // NaN
-            }
-            panic!("called div_floor on non finite rational");
+        // check for NaNs and return it, if found.
+        if self.numer != self.numer {
+            return self.numer.clone();
         }
-        if !div.is_finite() {
-            if div.numer != div.numer {
-                return div.numer.clone(); // NaN
-            }
-            if div.denom != div.denom {
-                return div.denom.clone(); // NaN
-            }
-            panic!("called div_floor on non finite rational");
+        if self.denom != self.denom {
+            return self.denom.clone();
         }
+        if div.numer != div.numer {
+            return div.numer.clone();
+        }
+        if div.denom != div.denom {
+            return div.denom.clone();
+        }
+        assert!(!self.denom.is_zero() && !div.denom.is_zero(), "called div_floor on non finite rational");
         let x = self / div;
         x.numer.div_floor(&x.denom).into()
     }
@@ -124,7 +122,14 @@ where <T as IntoDiscrete>::Output: Add<Output = <T as IntoDiscrete>::Output> + D
     ///
     /// Panics if the rational is not finite.
     fn round(&self) -> T {
-        assert!(self.is_finite(), "called round on non finite rational");
+        // check for NaNs and return it, if found.
+        if self.numer != self.numer {
+            return self.numer.clone();
+        }
+        if self.denom != self.denom {
+            return self.denom.clone();
+        }
+        assert!(!self.denom.is_zero(), "called round on non finite rational");
         let mut t1 = self.floor();
         let mut t2 = t1.clone() + T::one();
         let mut denom_abs = self.denom.clone();
@@ -231,27 +236,33 @@ where
 impl<T: Clone + Zero + PartialEq + Sub<Output = T> + Euclid> PartialEq for Ratio<T> {
     fn eq(&self, other: &Self) -> bool {
         // detect nan to avoid endless loops
-        if self.numer != self.numer
-            || self.denom != self.denom
-            || other.numer != other.numer
-            || other.denom != other.denom
-        {
-            return false;
+        let snan = self.is_nan();
+        let onan = other.is_nan();
+        if snan || onan {
+            return snan == onan; // I have decided to allow NaN comparison for rationals.
         }
         if self.denom == other.denom {
             return if self.numer == other.numer {
                 true
             } else if self.denom.is_zero() {
                 // classify the 3 states +oo, 0, -oo for both
-                let s = self.numer.is_valid_euclid() as u8 + self.numer.is_zero() as u8;
-                let o = other.numer.is_valid_euclid() as u8 + other.numer.is_zero() as u8;
+                let s = (self.numer.is_valid_euclid() == self.denom.is_valid_euclid()) as u8 + self.numer.is_zero() as u8;
+                let o = (other.numer.is_valid_euclid() == other.denom.is_valid_euclid()) as u8 + other.numer.is_zero() as u8;
                 s == o
             } else {
                 false
             };
         }
+        let zero = T::zero();
         if self.denom.is_zero() || other.denom.is_zero() {
-            return false;
+            if self.numer.is_zero() || other.numer.is_zero() {
+                //return false; // NaNs can't be compared
+                unreachable!(); // since NaNs are correctly detected above.
+            }
+            // compare infinities based on sign only
+            let s = self.numer.is_valid_euclid() == self.denom.is_valid_euclid();
+            let o = other.numer.is_valid_euclid() == other.denom.is_valid_euclid();
+            return s == o;
         }
         if self.numer == other.numer {
             // +0 and -0 are considered equal
@@ -266,12 +277,12 @@ impl<T: Clone + Zero + PartialEq + Sub<Output = T> + Euclid> PartialEq for Ratio
             let a = if s.denom.is_valid_euclid() {
                 s
             } else {
-                Ratio::new_raw(T::zero() - s.numer, T::zero() - s.denom)
+                Ratio::new_raw(zero.clone() - s.numer, zero.clone() - s.denom)
             };
             let b = if o.denom.is_valid_euclid() {
                 o
             } else {
-                Ratio::new_raw(T::zero() - o.numer, T::zero() - o.denom)
+                Ratio::new_raw(zero.clone() - o.numer, zero.clone() - o.denom)
             };
             // after flipping signs, the denominators might have become equal.
             if a.denom == b.denom {
@@ -306,10 +317,10 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
             }
             let mut s = self.numer.partial_cmp(&zero)?;
             let mut o = other.numer.partial_cmp(&zero)?;
-            if self.denom < zero {
+            if !self.denom.is_valid_euclid() {
                 s = s.reverse();
             }
-            if other.denom < zero {
+            if !other.denom.is_valid_euclid() {
                 o = o.reverse();
             }
             // compare infinities
@@ -334,22 +345,23 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
                     // -0 and 0 are equal
                     return Some(Ordering::Equal);
                 }
-                let ord = s.denom.partial_cmp(&o.denom);
-                return if s.numer < zero {
+                // first compare only the sign, then if they are the same, compare the value.
+                let ord = (o.denom > zero).cmp(&(s.denom > zero)).then(s.denom.partial_cmp(&o.denom)?);
+                return Some(if s.numer < zero {
                     ord
                 } else {
-                    ord.map(Ordering::reverse)
-                };
+                    ord.reverse()
+                });
             }
             // Compare as floored integers and remainders
             // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
             // when negative denominators are used, so the denominators have to be checked.
-            let a = if s.denom >= zero {
+            let a = if s.denom.is_valid_euclid() {
                 s
             } else {
                 Ratio::new_raw(T::zero() - s.numer, T::zero() - s.denom)
             };
-            let b = if o.denom >= zero {
+            let b = if o.denom.is_valid_euclid() {
                 o
             } else {
                 Ratio::new_raw(T::zero() - o.numer, T::zero() - o.denom)
@@ -900,7 +912,7 @@ where
             return F::zero() / F::zero();
         }
         let mut d = denom.to_approx();
-        if !n.is_zero() && !d.is_finite() {
+        if !n.is_zero() && n.is_finite() && !d.is_finite() {
             let mut v16 = T::one() + T::one();
             v16 = v16.clone() * v16;
             v16 = v16.clone() * v16;

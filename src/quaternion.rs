@@ -72,12 +72,7 @@ where
     for<'a> &'a T: Add<Output = T>,
 {
     fn zero() -> Self {
-        Self {
-            im_i: T::zero(),
-            im_j: T::zero(),
-            im_k: T::zero(),
-            re: T::zero(),
-        }
+        Self::real(T::zero())
     }
     fn is_zero(&self) -> bool {
         self.re.is_zero() && self.im_i.is_zero() && self.im_j.is_zero() && self.im_k.is_zero()
@@ -89,12 +84,7 @@ where
     for<'a> &'a T: Mul<Output = T>,
 {
     fn one() -> Self {
-        Self {
-            im_i: T::zero(),
-            im_j: T::zero(),
-            im_k: T::zero(),
-            re: T::one(),
-        }
+        Self::real(T::one())
     }
     fn is_one(&self) -> bool {
         self.re.is_one() && self.im_i.is_zero() && self.im_j.is_zero() && self.im_k.is_zero()
@@ -128,12 +118,7 @@ impl<T: Neg<Output = T>> Neg for Quaternion<T> {
 
 impl<T: Zero> From<T> for Quaternion<T> {
     fn from(value: T) -> Self {
-        Self {
-            re: value,
-            im_i: T::zero(),
-            im_j: T::zero(),
-            im_k: T::zero(),
-        }
+        Self::real(value)
     }
 }
 // From<Complex<T>> is deliberately not implemented, as the choice of complex unit would be arbitrary.
@@ -471,7 +456,8 @@ where
         let len = (v[0].abs_sqr() + v[1].abs_sqr() + v[2].abs_sqr()).sqrt();
         let one = T::one();
         if len.is_zero() {
-            return Quaternion::new(one, T::zero(), T::zero(), T::zero());
+            // copy zero signs
+            return Quaternion::new(one, v[0].clone(), v[1].clone(), v[2].clone());
         }
         let half = &len / &(&one + &one);
         let (c, s) = (half.cos(), half.sin());
@@ -656,15 +642,17 @@ where
         // the power series of the exponential function.
         let r = self.re.exp();
         if r.is_zero() {
-            return Self::zero();
+            // correct zero signs
+            return Self {
+                re: T::zero(),
+                ..self.clone()
+            }.exp() * T::zero();
         }
         let len = self.im_abs();
         if len.is_zero() {
             return Self {
                 re: r,
-                im_i: T::zero(),
-                im_j: T::zero(),
-                im_k: T::zero(),
+                ..self.clone() // copy all zero signs
             };
         }
         let (c, s) = (len.cos(), len.sin());
@@ -679,13 +667,27 @@ where
 
     fn exp_m1(&self) -> Self {
         let r = self.re.exp_m1();
-        let two = T::one() + T::one();
+        let rr = &r + &T::one();
+        if rr.is_zero() {
+            // correct zero signs
+            return Self {
+                re: T::zero(),
+                ..self.clone()
+            }.exp() * T::zero();
+        }
         let len = self.im_abs();
+        if len.is_zero() {
+            return Self {
+                re: r,
+                ..self.clone() // copy all zero signs
+            };
+        }
         // (r + 1) * cos - 1 = r * cos + (cos - 1) // lossy at im~0
         // cos - 1 = -2sin(im/2)^2 // precise at im~0
+        let two = T::one() + T::one();
         let (s2, s) = ((&len / &two).sin(), len.sin());
         let s2 = &s2 * &s2 * two;
-        let rs = &(&r * &s) / &len;
+        let rs = &(&rr * &s) / &len;
         Self {
             re: &r * &(&T::one() - &s2) - s2,
             im_i: &rs * &self.im_i,
@@ -722,13 +724,12 @@ where
 
     #[inline(always)]
     fn ln_1p(&self) -> Self {
-        // no good way to write this without conditionals...
+        // To use the Taylor series, a known precision is required.
         (self + &T::one()).ln()
     }
 
-    /// Raises `self` to a quaternion power.
+    /// Raises `self` to a quaternion power as defined by `exp(exp * ln(self))`.
     fn pow(&self, exp: &Self) -> Self {
-        // a slight branch here to handle the zero cases
         if exp.is_zero() {
             return Self::one();
         }
