@@ -3536,6 +3536,19 @@ mod rational {
     }
 
     #[test]
+    fn test_wrapping() {
+        // just to show they work. The results are nonsense, especially with Saturating.
+        let x = Ratio::<core::num::Wrapping<i64>>::from_approx(0.3, 0.0).unwrap();
+        let x = x.powu(50);
+        assert!(x.numer.is_valid_euclid());
+        //std::println!("{x:?}");
+        let x = Ratio::<core::num::Saturating<i64>>::from_approx(0.3, 0.0).unwrap();
+        let x = x.powu(50);
+        assert!(x.numer.is_valid_euclid());
+        //std::println!("{x:?}");
+    }
+
+    #[test]
     fn test_ratio_to_approx() {
         assert_eq!(1.0f64, Ratio::<i32>::new(1, 1).to_approx());
         assert_eq!(-2.0f64, Ratio::<i32>::new(-2, 1).to_approx());

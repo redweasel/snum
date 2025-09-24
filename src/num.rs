@@ -798,7 +798,7 @@ int_num_type!(ibig::IBig, {0}; |x: &ibig::IBig| x.is_one() || (-x).is_one());
 #[cfg(feature = "ibig")]
 int_num_type!(ibig::UBig, {0}; One::is_one);
 
-/// Implement [Zero], [One], [Conjugate], [Num], [NumAlgebraic], [FromU64](crate::FromU64), [IntoDiscrete] and [Euclid]
+/// Implement [Zero], [One], [Conjugate], [Num], [NumAlgebraic], [FromU64](crate::FromU64), [ApproxFloat](crate::ApproxFloat), [IntoDiscrete] and [Euclid]
 /// for wrapper types like `struct Wrap<T>(inner: T)` where `T` has those traits implemented already.
 /// If any implementation needs to be changed for some wrapper, the macro can be expanded and used as a starting template.
 #[macro_export]
@@ -836,10 +836,9 @@ macro_rules! impl_num_wrapper {
                 $Wrap(self.0.conj())
             }
         }
-        impl<T: Num> Num for $Wrap<T>
+        impl<T: Num<Real = T>> Num for $Wrap<T>
         where
-            Self: Mul<Output = Self> + From<$Wrap<T::Real>>,
-            $Wrap<T::Real>: Num<Real = $Wrap<T::Real>>,
+            Self: Mul<Output = Self>,
         {
             type Real = $Wrap<T::Real>;
             const CHAR: u64 = T::CHAR;
@@ -856,10 +855,9 @@ macro_rules! impl_num_wrapper {
                 self.0.is_unit()
             }
         }
-        impl<T: NumAlgebraic> NumAlgebraic for $Wrap<T>
+        impl<T: NumAlgebraic<Real = T>> NumAlgebraic for $Wrap<T>
         where
-            Self: Mul<Output = Self> + From<$Wrap<T::Real>>,
-            $Wrap<T::Real>: NumAlgebraic<Real = $Wrap<T::Real>>,
+            Self: Mul<Output = Self>,
         {
             #[inline(always)]
             fn sqrt(&self) -> Self {
@@ -893,15 +891,15 @@ macro_rules! impl_num_wrapper {
             }
             #[inline(always)]
             fn floor(&self) -> Self::Output {
-                self.clone()
+                $Wrap(self.0.floor())
             }
             #[inline(always)]
             fn ceil(&self) -> Self::Output {
-                self.clone()
+                $Wrap(self.0.ceil())
             }
             #[inline(always)]
             fn round(&self) -> Self::Output {
-                self.clone()
+                $Wrap(self.0.round())
             }
         }
         impl<T: Clone + Zero + Euclid> Euclid for $Wrap<T> {
@@ -919,6 +917,16 @@ macro_rules! impl_num_wrapper {
             #[inline(always)]
             fn from_u64(value: u64) -> Self {
                 $Wrap(T::from_u64(value))
+            }
+        }
+        impl<T: $crate::ApproxFloat<F>, F: $crate::FloatType> $crate::ApproxFloat<F> for $Wrap<T> {
+            #[inline(always)]
+            fn to_approx(&self) -> F {
+                self.0.to_approx()
+            }
+            #[inline(always)]
+            fn from_approx(value: F, tol: F) -> Option<Self> {
+                T::from_approx(value, tol).map(|x| $Wrap(x))
             }
         }
     };

@@ -65,15 +65,17 @@
 //!
 //! Overflows are well avoided in [rational], but no checked functions are implemented.
 //! Other places, like [mod@complex] and [extension] are prone to integer overflow.
-//! Use custom wrappers on the int types. E.g. `enum Checked<T> { Value(T), Overflow }` to manage the overflows.
+//! Use wrappers on the int types, e.g. `Wrapping<T>` or `Saturating<T>` or `enum Checked<T> { Value(T), Overflow }` to manage the overflows.
 //!
+//! The by-reference implementations of math operations need to use the non reference implementations
+//! of the inner type to avoid recursive trait evaluations by SIMD types. This introduces a significant
+//! amount of clones. Clones are kept minimal in most cases. If clones slow down the calculation, consider
+//! wrapping your types in `Rc`.
+//! 
 //! ### TODOs
-//! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
-//! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!] and [impl_euclid_field!].
-//! - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
-//! - Hide approximation from floats for rational and sqrt types behind a feature flag (test if this is beneficial for compile times).
+//! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!], [impl_euclid_field!] and [impl_num_wrapper!].
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
-//! - The reference implementation need to use the non reference implementations to avoid recursive trait evaluations by SIMD types. Make sure to never do clones for nothing and use optimal operations as much as possible!
+//! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
 
 #![no_std]
 
@@ -146,30 +148,3 @@ macro_rules! forward_assign_impl {
     };
 }
 pub(crate) use forward_assign_impl;
-
-// More ideas for useful things:
-/*
-/// trait for numbers, where the N-th power can be represented using terms of order N-1 and less.
-/// E.g. `i^2 = -1` or `sqrt(2)^2 = 2`. More complicated examples are the factor-ring `R[x]/(x^3+1-x)`,
-/// where `x^3=x-1`. To use this, create a custom type and implement this trait on it.
-pub trait Factor<T, const N: usize> {
-    fn factor(x: &T) -> [T; N];
-}
-
-/// trait to compute the squared part of a number.
-pub trait SquareFree: Sized {
-    /// decomposes `self` into a square free part `x` and the rest, such that `self=x*y^2`.
-    /// Returns (x, y)
-    fn square_free_factorisation(&self) -> (Self, Self);
-}
-
-// mostly useful for number theory.
-pub trait PartialSqrt: Sized {
-    /// Computes the square root if possible.
-    fn partial_sqrt(&self) -> Option<Self>;
-}
-
-// type for a*b^N with fixed N? similar to fractions!
-// type for mobius transforms (mostly number theory and complex analysis -> into the polynomial package?)
-// type for polynomial roots: `AlgebraicNum` (addition, multiplication and division are again roots of polynomials -> polynomial package)
-*/
