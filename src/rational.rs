@@ -935,12 +935,10 @@ where
 // `Ratio<T>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
 unsafe impl<T: bytemuck::Zeroable> bytemuck::Zeroable for Ratio<T> {}
-
-// Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
-// can guarantee it contains no *added* padding. Thus, if `T: Pod`,
-// `Ratio<T>` is also `Pod`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: bytemuck::Pod> bytemuck::Pod for Ratio<T> {}
+unsafe impl<T: bytemuck::AnyBitPattern> bytemuck::AnyBitPattern for Ratio<T> {}
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::NoUninit> bytemuck::NoUninit for Ratio<T> {}
 
 // NB: We can't just `#[derive(Hash)]`, because it needs to agree
 // with `Eq` even for non-reduced ratios.

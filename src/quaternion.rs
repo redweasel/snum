@@ -60,12 +60,10 @@ impl<T: Zero> Quaternion<T> {
 // `Quaternion<T>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
 unsafe impl<T: bytemuck::Zeroable> bytemuck::Zeroable for Quaternion<T> {}
-
-// Safety: `Quaternion<T>` is `repr(C)` and contains only instances of `T`, so we
-// can guarantee it contains no *added* padding. Thus, if `T: Pod`,
-// `Quaternion<T>` is also `Pod`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: bytemuck::Pod> bytemuck::Pod for Quaternion<T> {}
+unsafe impl<T: bytemuck::AnyBitPattern> bytemuck::AnyBitPattern for Quaternion<T> {}
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::NoUninit> bytemuck::NoUninit for Quaternion<T> {}
 
 impl<T: Zero> Zero for Quaternion<T>
 where

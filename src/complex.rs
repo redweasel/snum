@@ -92,12 +92,10 @@ impl<T: Neg<Output = T>> Complex<T> {
 // `Complex<T>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
 unsafe impl<T: bytemuck::Zeroable> bytemuck::Zeroable for Complex<T> {}
-
-// Safety: `Complex<T>` is `repr(C)` and contains only instances of `T`, so we
-// can guarantee it contains no *added* padding. Thus, if `T: Pod`,
-// `Complex<T>` is also `Pod`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: bytemuck::Pod> bytemuck::Pod for Complex<T> {}
+unsafe impl<T: bytemuck::AnyBitPattern> bytemuck::AnyBitPattern for Complex<T> {}
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: bytemuck::NoUninit> bytemuck::NoUninit for Complex<T> {}
 
 impl<T: Zero> From<T> for Complex<T> {
     fn from(value: T) -> Self {

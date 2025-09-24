@@ -1141,12 +1141,10 @@ where
 // `SqrtExt<T, E>` is also `Zeroable`
 #[cfg(feature = "bytemuck")]
 unsafe impl<T: Num + bytemuck::Zeroable, E: SqrtConst<T>> bytemuck::Zeroable for SqrtExt<T, E> {}
-
-// Safety: `SqrtExt<T, _>` is `repr(C)` and contains only instances of `T`, so we
-// can guarantee it contains no *added* padding. Thus, if `T: Pod`,
-// `SqrtExt<T, E>` is also `Pod`
 #[cfg(feature = "bytemuck")]
-unsafe impl<T: Num + bytemuck::Pod, E: 'static + SqrtConst<T>> bytemuck::Pod for SqrtExt<T, E> {}
+unsafe impl<T: Num + bytemuck::AnyBitPattern, E: 'static + SqrtConst<T>> bytemuck::AnyBitPattern for SqrtExt<T, E> {}
+#[cfg(feature = "bytemuck")]
+unsafe impl<T: Num + bytemuck::NoUninit, E: 'static + SqrtConst<T>> bytemuck::NoUninit for SqrtExt<T, E> {}
 
 impl<T: Num + fmt::Debug, E: SqrtConst<T>> fmt::Debug for SqrtExt<T, E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
