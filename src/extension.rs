@@ -545,7 +545,7 @@ impl<T: Num + Zero, E: SqrtConst<T>> From<T> for SqrtExt<T, E> {
 impl<T: Num + Zero, E: SqrtConst<Complex<T>>> From<T> for SqrtExt<Complex<T>, E>
 where Complex<T>: Num<Real = T> {
     fn from(value: T) -> Self {
-        SqrtExt::new(value.into(), T::zero().into())
+        SqrtExt::new(value.into(), Complex::real(T::zero()))
     }
 }
 impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<SqrtExt<T, E>>

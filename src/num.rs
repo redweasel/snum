@@ -1,4 +1,4 @@
-use core::{fmt::Debug, num::Wrapping, ops::*};
+use core::{fmt::Debug, num::{Wrapping, Saturating}, ops::*};
 
 /// Defines an additive identity element for `Self`.
 ///
@@ -97,29 +97,6 @@ macro_rules! impl_zero_default {
             }
         })+
     };
-}
-
-impl<T: Zero> Zero for Wrapping<T>
-where
-    Self: Add<Output = Self>,
-{
-    fn zero() -> Self {
-        Wrapping(T::zero())
-    }
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
-impl<T: One> One for Wrapping<T>
-where
-    Self: Mul<Output = Self>,
-{
-    fn one() -> Self {
-        Wrapping(T::one())
-    }
-    fn is_one(&self) -> bool {
-        self.0.is_one()
-    }
 }
 
 /// trait to shorten implementations on references. Don't use this for non reference types.
@@ -232,13 +209,6 @@ impl_conjugate_real!(
 #[cfg(feature = "ibig")]
 impl_conjugate_real!(ibig::IBig, ibig::UBig);
 
-impl<T: Clone> Conjugate for Wrapping<T> {
-    #[inline(always)]
-    fn conj(&self) -> Self {
-        self.clone() // assume wrapping types are real integers.
-    }
-}
-
 /// Represents a number, which can be real or complex, floating point or integer, signed or unsigned.
 /// To differentiate between float and int, use `Num::Real: Ord`, as that is not implemented for floats.
 /// To differentiate between signed and unsigned use `Num::Real: Neg<Output = Num::Real>`.
@@ -342,7 +312,7 @@ pub trait Euclid: Sized {
     /// - If the number implements [PartialOrd], the positive sign solution for the remainder is returned.
     ///
     /// Most implementations should follow the additional rules:
-    /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `d` with `|r| < |d|`. (e.g. complex numbers: `|r|^2 <= |div|^2/2`).
+    /// - If [Num] is implemented for `self`, the remainder is bounded by the denominator `d` with `r.abs_sqr() < d.abs_sqr()`. (e.g. complex numbers: `r.abs_sqr() <= div.abs_sqr()/2`).
     ///
     /// The implementation to always return `(q=0, r=self)` for non unit divisors IS NOT valid for number types, as the chosen norm `|r|` might be larger than `|div|`.
     /// For fields on the other hand, the implementation `(q=self/div, r=0)` IS valid, however fields may also implement a
@@ -413,16 +383,6 @@ macro_rules! impl_euclid_field {
             }
         })+
     };
-}
-
-impl<T: Clone + Zero + Euclid> Euclid for Wrapping<T> {
-    /// Don't cancel Wrapping types, there is no useful norm on these and canceling doesn't extend the range.
-    fn div_rem_euclid(&self, _div: &Self) -> (Self, Self) {
-        (Wrapping(T::zero()), self.clone())
-    }
-    fn is_valid_euclid(&self) -> bool {
-        self.0.is_valid_euclid()
-    }
 }
 
 #[cfg(feature = "ibig")]
@@ -719,29 +679,6 @@ macro_rules! impl_into_discrete_int {
 #[cfg(feature = "ibig")]
 impl_into_discrete_int!(ibig::IBig, ibig::UBig);
 
-impl<T: Clone + PartialEq + IntoDiscrete<Output = T>> IntoDiscrete for Wrapping<T>
-where
-    Self: Zero + One,
-{
-    type Output = Self;
-    #[inline(always)]
-    fn div_floor(&self, div: &Self) -> Self::Output {
-        Wrapping(self.0.div_floor(&div.0))
-    }
-    #[inline(always)]
-    fn floor(&self) -> Self::Output {
-        self.clone()
-    }
-    #[inline(always)]
-    fn ceil(&self) -> Self::Output {
-        self.clone()
-    }
-    #[inline(always)]
-    fn round(&self) -> Self::Output {
-        self.clone()
-    }
-}
-
 macro_rules! int_num_type {
     ($($type:ty),+;$unit:expr) => {
         int_num_type!($($type, {<$type>::MAX as u64}),+;$unit);
@@ -861,19 +798,132 @@ int_num_type!(ibig::IBig, {0}; |x: &ibig::IBig| x.is_one() || (-x).is_one());
 #[cfg(feature = "ibig")]
 int_num_type!(ibig::UBig, {0}; One::is_one);
 
-impl<T: Num> Num for Wrapping<T>
-where
-    Self: Mul<Output = Self>,
-{
-    type Real = Self;
-    const CHAR: u64 = T::CHAR;
-    fn abs_sqr(&self) -> Self::Real {
-        self.clone() * self.clone()
-    }
-    fn re(&self) -> Self::Real {
-        self.clone()
-    }
-    fn is_unit(&self) -> bool {
-        self.0.is_unit()
-    }
+/// Implement [Zero], [One], [Conjugate], [Num], [NumAlgebraic], [FromU64](crate::FromU64), [IntoDiscrete] and [Euclid]
+/// for wrapper types like `struct Wrap<T>(inner: T)` where `T` has those traits implemented already.
+/// If any implementation needs to be changed for some wrapper, the macro can be expanded and used as a starting template.
+#[macro_export]
+macro_rules! impl_num_wrapper {
+    ($Wrap:ident $($p:tt cancel)?) => {
+        impl<T: Zero> Zero for $Wrap<T>
+        where
+            Self: Add<Output = Self>,
+        {
+            #[inline(always)]
+            fn zero() -> Self {
+                $Wrap(T::zero())
+            }
+            #[inline(always)]
+            fn is_zero(&self) -> bool {
+                self.0.is_zero()
+            }
+        }
+        impl<T: One> One for $Wrap<T>
+        where
+            Self: Mul<Output = Self>,
+        {
+            #[inline(always)]
+            fn one() -> Self {
+                $Wrap(T::one())
+            }
+            #[inline(always)]
+            fn is_one(&self) -> bool {
+                self.0.is_one()
+            }
+        }
+        impl<T: Conjugate> Conjugate for $Wrap<T> {
+            #[inline(always)]
+            fn conj(&self) -> Self {
+                $Wrap(self.0.conj())
+            }
+        }
+        impl<T: Num> Num for $Wrap<T>
+        where
+            Self: Mul<Output = Self> + From<$Wrap<T::Real>>,
+            $Wrap<T::Real>: Num<Real = $Wrap<T::Real>>,
+        {
+            type Real = $Wrap<T::Real>;
+            const CHAR: u64 = T::CHAR;
+            #[inline(always)]
+            fn abs_sqr(&self) -> Self::Real {
+                (self.clone() * self.conj()).re()
+            }
+            #[inline(always)]
+            fn re(&self) -> Self::Real {
+                $Wrap(self.0.re())
+            }
+            #[inline(always)]
+            fn is_unit(&self) -> bool {
+                self.0.is_unit()
+            }
+        }
+        impl<T: NumAlgebraic> NumAlgebraic for $Wrap<T>
+        where
+            Self: Mul<Output = Self> + From<$Wrap<T::Real>>,
+            $Wrap<T::Real>: NumAlgebraic<Real = $Wrap<T::Real>>,
+        {
+            #[inline(always)]
+            fn sqrt(&self) -> Self {
+                $Wrap(self.0.sqrt())
+            }
+            #[inline(always)]
+            fn cbrt(&self) -> Self {
+                $Wrap(self.0.cbrt())
+            }
+            #[inline(always)]
+            fn abs(&self) -> Self::Real {
+                $Wrap(self.0.abs())
+            }
+            #[inline(always)]
+            fn sign(&self) -> Self {
+                $Wrap(self.0.sign())
+            }
+            #[inline(always)]
+            fn copysign(&self, sign: &Self) -> Self {
+                $Wrap(self.0.copysign(&sign.0))
+            }
+        }
+        impl<T: Clone + PartialEq + IntoDiscrete<Output = T>> IntoDiscrete for $Wrap<T>
+        where
+            Self: Zero + One,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn div_floor(&self, div: &Self) -> Self::Output {
+                $Wrap(self.0.div_floor(&div.0))
+            }
+            #[inline(always)]
+            fn floor(&self) -> Self::Output {
+                self.clone()
+            }
+            #[inline(always)]
+            fn ceil(&self) -> Self::Output {
+                self.clone()
+            }
+            #[inline(always)]
+            fn round(&self) -> Self::Output {
+                self.clone()
+            }
+        }
+        impl<T: Clone + Zero + Euclid> Euclid for $Wrap<T> {
+            #[allow(unused_variables, unreachable_code)]
+            fn div_rem_euclid(&self, div: &Self) -> (Self, Self) {
+                $(let (q $p r) = self.0.div_rem_euclid(&div.0);
+                return ($Wrap(q), $Wrap(r));)?
+                ($Wrap(T::zero()), self.clone())
+            }
+            fn is_valid_euclid(&self) -> bool {
+                self.0.is_valid_euclid()
+            }
+        }
+        impl<T: $crate::FromU64> $crate::FromU64 for $Wrap<T> {
+            #[inline(always)]
+            fn from_u64(value: u64) -> Self {
+                $Wrap(T::from_u64(value))
+            }
+        }
+    };
 }
+
+// Don't cancel Wrapping types as canceling doesn't extend the range for rationals.
+impl_num_wrapper!(Wrapping);
+impl_num_wrapper!(Saturating, cancel);

@@ -39,7 +39,7 @@ pub trait FromI64: FromU64 + Neg<Output = Self> {
     /// Convert a signed integer into `Self`. This is meant for small efficient constants.
     /// 
     /// # Panics
-    /// If this integer is considered out of range.
+    /// If this integer (or its negative value) is considered out of range.
     fn from_i64(value: i64) -> Self;
 }
 

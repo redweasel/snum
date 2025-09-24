@@ -54,6 +54,7 @@ macro_rules! for_integers {
     }; // isize and usize are one of those and don't need to be tested separately.};
 }
 
+use core::f64;
 #[cfg(not(feature = "std"))]
 use core::fmt::{self, Write};
 #[cfg(not(feature = "std"))]
@@ -159,6 +160,15 @@ fn test_gcd() {
     // gcd always converges, but here the result is tiny:
     assert!(gcd(core::f64::consts::PI, core::f64::consts::E).abs() <= f64::EPSILON * 2.);
     assert!(bezout(core::f64::consts::PI, core::f64::consts::E).1.abs() <= f64::EPSILON * 2.);
+    // gcd handles non finite values without infinite loops
+    let _ = gcd(f64::NAN, 0.0);
+    let _ = gcd(f64::NAN, 1.0);
+    let _ = gcd(f64::NAN, f64::INFINITY);
+    let _ = gcd(0.0, f64::NAN);
+    let _ = gcd(1.0, f64::NAN);
+    let _ = gcd(f64::INFINITY, f64::NAN);
+    let _ = gcd(f64::INFINITY, f64::INFINITY);
+    let _ = gcd(f64::NAN, f64::NAN);
 }
 
 #[cfg(all(feature = "rand", feature = "quaternion"))]
