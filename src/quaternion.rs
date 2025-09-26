@@ -12,7 +12,7 @@ use take_mut::take;
 /// The quaternion group is defined by the rules `i^2=j^2=k^2=-1, ij=k`.
 /// All three variables i,j,k are considered the complex part, which change
 /// sign under conjugation.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Quaternion<T> {
     pub im_i: T,
@@ -770,6 +770,31 @@ macro_rules! quaternion {
     ($x:expr) => {
         $x.into()
     };
+}
+
+impl<T: core::fmt::Debug> core::fmt::Debug for Quaternion<T> {
+     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+         if f.alternate() {
+            // pretty print quaternions matching the macro. (the output can be parsed by the quaternion! macro)
+            self.re.fmt(f)?;
+            write!(f, "+i ")?;
+            self.im_i.fmt(f)?;
+            write!(f, "+j ")?;
+            self.im_j.fmt(f)?;
+            write!(f, "+k ")?;
+            self.im_k.fmt(f)
+         } else {
+            #[derive(Debug)]
+            #[allow(dead_code)]
+            struct Quaternion<'a, T> {
+                re: &'a T,
+                im_i: &'a T,
+                im_j: &'a T,
+                im_k: &'a T,
+            }
+            Quaternion { re: &self.re, im_i: &self.im_i, im_j: &self.im_j, im_k: &self.im_k }.fmt(f)
+         }
+     }
 }
 
 #[cfg(feature = "serde")]

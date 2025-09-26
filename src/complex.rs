@@ -5,7 +5,7 @@ use core::iter::{Product, Sum};
 use core::ops::*;
 use take_mut::take;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Complex<T> {
     pub re: T,
@@ -892,6 +892,26 @@ macro_rules! complex {
     ($x:expr) => {
         $x.into()
     };
+}
+
+impl<T: core::fmt::Debug> core::fmt::Debug for Complex<T> {
+     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+         if f.alternate() {
+            // pretty print complex numbers matching the macro. (the output can be parsed by the complex! macro)
+            self.re.fmt(f)?;
+            write!(f, "+")?;
+            self.im.fmt(f)?;
+            write!(f, " i")
+         } else {
+            #[derive(Debug)]
+            #[allow(dead_code)]
+            struct Complex<'a, T> {
+                re: &'a T,
+                im: &'a T,
+            }
+            Complex { re: &self.re, im: &self.im }.fmt(f)
+         }
+     }
 }
 
 #[cfg(feature = "serde")]

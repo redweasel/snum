@@ -1285,6 +1285,11 @@ mod complex {
 
     #[test]
     fn test_string_formatting() {
+        assert_fmt_eq!(format_args!("{:?}", _0_0i), "Complex { re: 0.0, im: 0.0 }");
+        assert_fmt_eq!(format_args!("{:#?}", _0_0i), "0.0+0.0 i");
+        assert_fmt_eq!(format_args!("{:?}", _0_1i), "Complex { re: 0.0, im: 1.0 }");
+        assert_fmt_eq!(format_args!("{:#?}", _0_1i), "0.0+1.0 i");
+
         assert_fmt_eq!(format_args!("{}", _0_0i), "0+0i");
         assert_fmt_eq!(format_args!("{}", _1_0i), "1+0i");
         assert_fmt_eq!(format_args!("{}", _0_1i), "0+1i");
@@ -2112,6 +2117,13 @@ mod quaternion {
 
     #[test]
     fn test_string_formatting() {
+        // reordered fields for debug printing -> print real part first
+        assert_fmt_eq!(format_args!("{:?}", -_1i), "Quaternion { re: -1.0, im_i: -1.0, im_j: -0.0, im_k: -0.0 }");
+        assert_fmt_eq!(format_args!("{:#?}", -_1i), "-1.0+i -1.0+j -0.0+k -0.0");
+        //let q = quaternion!(-1.0+i -1.0+j -0.0+k -0.0); // this is valid!
+        assert_fmt_eq!(format_args!("{:?}", _neg1), "Quaternion { re: -1.0, im_i: 0.0, im_j: 0.0, im_k: 0.0 }");
+        assert_fmt_eq!(format_args!("{:#?}", _neg1), "-1.0+i 0.0+j 0.0+k 0.0");
+
         assert_fmt_eq!(format_args!("{}", _0), "0+0i+0j+0k");
         assert_fmt_eq!(format_args!("{}", _1), "1+0i+0j+0k");
         assert_fmt_eq!(format_args!("{}", _i), "0+1i+0j+0k");
