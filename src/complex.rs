@@ -22,17 +22,11 @@ impl<T> Complex<T> {
 impl<T: Zero> Complex<T> {
     #[must_use]
     pub fn real(re: T) -> Self {
-        Self {
-            re,
-            im: Zero::zero(),
-        }
+        Self { re, im: Zero::zero() }
     }
     #[must_use]
     pub fn imag(im: T) -> Self {
-        Self {
-            re: Zero::zero(),
-            im,
-        }
+        Self { re: Zero::zero(), im }
     }
 }
 
@@ -80,10 +74,7 @@ impl<T: Neg<Output = T>> Complex<T> {
     /// Multiply with i with correct handling of infinities.
     #[must_use]
     pub fn mul_i(self) -> Self {
-        Self {
-            re: -self.im,
-            im: self.re,
-        }
+        Self { re: -self.im, im: self.re }
     }
 }
 
@@ -99,10 +90,7 @@ unsafe impl<T: bytemuck::NoUninit> bytemuck::NoUninit for Complex<T> {}
 
 impl<T: Zero> From<T> for Complex<T> {
     fn from(value: T) -> Self {
-        Self {
-            re: value,
-            im: Zero::zero(),
-        }
+        Self { re: value, im: Zero::zero() }
     }
 }
 
@@ -116,10 +104,7 @@ impl<T: FromU64 + Zero> FromU64 for Complex<T> {
 impl<T: Neg<Output = T>> Neg for Complex<T> {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        Self {
-            re: -self.re,
-            im: -self.im,
-        }
+        Self { re: -self.re, im: -self.im }
     }
 }
 
@@ -163,9 +148,7 @@ where
         }
     }
 }
-impl<'a, T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>>
-    Mul<&'a Complex<T>> for &'a Complex<T>
-{
+impl<'a, T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>> Mul<&'a Complex<T>> for &'a Complex<T> {
     type Output = Complex<T>;
     fn mul(self, rhs: &'a Complex<T>) -> Self::Output {
         Complex {
@@ -246,15 +229,12 @@ where
         }
     }
 }
-impl<'a, T: Clone + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T>> Div
-    for &'a Complex<T>
-{
+impl<'a, T: Clone + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T>> Div for &'a Complex<T> {
     type Output = Complex<T>;
     fn div(self, rhs: &'a Complex<T>) -> Self::Output {
         let abs_sqr = rhs.re.clone() * rhs.re.clone() + rhs.im.clone() * rhs.im.clone();
         Complex {
-            re: (self.re.clone() * rhs.re.clone() + self.im.clone() * rhs.im.clone())
-                / abs_sqr.clone(),
+            re: (self.re.clone() * rhs.re.clone() + self.im.clone() * rhs.im.clone()) / abs_sqr.clone(),
             im: (self.im.clone() * rhs.re.clone() - self.re.clone() * rhs.im.clone()) / abs_sqr,
         }
     }
@@ -271,8 +251,7 @@ impl<T: Clone + Neg<Output = T> + Add<Output = T> + Mul<Output = T> + Div<Output
     }
 }
 
-impl<T: Clone + One + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T>> Rem
-    for Complex<T>
+impl<T: Clone + One + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T>> Rem for Complex<T>
 where
     for<'a> &'a T: Rem<Output = T>,
 {
@@ -285,16 +264,7 @@ where
     }
 }
 
-impl<
-    T: Clone
-        + One
-        + Add<Output = T>
-        + Mul<Output = T>
-        + Sub<Output = T>
-        + Div<Output = T>
-        + Rem<Output = T>,
-> Rem for &Complex<T>
-{
+impl<T: Clone + One + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<Output = T> + Rem<Output = T>> Rem for &Complex<T> {
     type Output = Complex<T>;
     fn rem(self, rhs: Self) -> Self::Output {
         let Complex { re, im } = self / rhs;
@@ -303,9 +273,7 @@ impl<
     }
 }
 
-impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>>
-    Euclid for Complex<T>
-{
+impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>> Euclid for Complex<T> {
     /// Euclidean division of complex numbers, such that `|r|^2 <= |b|^2/2`
     /// is satisfied for the remainder `r` with non negative real part.
     fn div_rem_euclid(&self, b: &Self) -> (Self, Self) {
@@ -323,11 +291,7 @@ impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T
         // https://stackoverflow.com/a/18067292
         let rounded_div = |a: T, b: T| {
             let b2 = b.clone() / two.clone();
-            (if a.is_valid_euclid() == b.is_valid_euclid() {
-                a + b2
-            } else {
-                a - b2
-            }) / b
+            (if a.is_valid_euclid() == b.is_valid_euclid() { a + b2 } else { a - b2 }) / b
         };
         let ab = a * &b.conj();
         let m = rounded_div(ab.re, b_sqr.clone()); // = (a/b).re().round() (round(1/2) == 1)
@@ -557,11 +521,7 @@ where
     #[inline(always)]
     fn copysign(&self, sign: &Self) -> Self {
         let (a, b) = (self.abs_sqr(), sign.abs_sqr());
-        if b.is_zero() {
-            a.sqrt().into()
-        } else {
-            sign.clone() * (a / b).sqrt()
-        }
+        if b.is_zero() { a.sqrt().into() } else { sign.clone() * (a / b).sqrt() }
     }
 }
 
@@ -603,9 +563,7 @@ where
     /// The branch satisfies `-π/2 ≤ Re(asin(z)) ≤ π/2`.
     fn asin(&self) -> Self {
         // formula: arcsin(z) = -i ln(sqrt(1-z^2) + iz)
-        -(self.clone().mul_i() + (-(self * self - T::one())).sqrt())
-            .ln()
-            .mul_i()
+        -(self.clone().mul_i() + (-(self * self - T::one())).sqrt()).ln().mul_i()
     }
 
     /// Computes the principal value of the inverse cosine of `self`.
@@ -618,9 +576,7 @@ where
     /// The branch satisfies `0 ≤ Re(acos(z)) ≤ π`.
     fn acos(&self) -> Self {
         // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
-        -(self + &(-(self * self - T::one())).sqrt().mul_i())
-            .ln()
-            .mul_i()
+        -(self + &(-(self * self - T::one())).sqrt().mul_i()).ln().mul_i()
     }
 
     /// Computes the principal value of the inverse tangent of `self`.
@@ -641,10 +597,7 @@ where
         let one = &T::one();
         let two = (one + one).copysign(&self.im);
         let s = (self.clone().mul_i() - self.im.sign()).abs_sqr();
-        (Complex::new(one - &self.abs_sqr(), &self.re * &two) / s)
-            .ln()
-            .mul_i()
-            / -two
+        (Complex::new(one - &self.abs_sqr(), &self.re * &two) / s).ln().mul_i() / -two
     }
 
     /// Compute the principal value of the extended inverse tangent.
@@ -673,7 +626,8 @@ where
 
     fn exp(&self) -> Self {
         let r = self.re.exp();
-        if self.im.is_zero() { // very common case
+        if self.im.is_zero() {
+            // very common case
             return Self::new(r, self.im.clone()); // copy zero sign
         }
         let c = Complex::cis(&self.im);
@@ -715,10 +669,7 @@ where
     #[inline(always)]
     fn ln(&self) -> Self {
         let (r, phi) = self.to_polar();
-        Self {
-            re: r.ln(),
-            im: phi,
-        }
+        Self { re: r.ln(), im: phi }
     }
 
     /// Computes the principal value of natural logarithm of `self + 1`.
@@ -895,14 +846,14 @@ macro_rules! complex {
 }
 
 impl<T: core::fmt::Debug> core::fmt::Debug for Complex<T> {
-     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-         if f.alternate() {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if f.alternate() {
             // pretty print complex numbers matching the macro. (the output can be parsed by the complex! macro)
             self.re.fmt(f)?;
             write!(f, "+")?;
             self.im.fmt(f)?;
             write!(f, " i")
-         } else {
+        } else {
             #[derive(Debug)]
             #[allow(dead_code)]
             struct Complex<'a, T> {
@@ -910,8 +861,8 @@ impl<T: core::fmt::Debug> core::fmt::Debug for Complex<T> {
                 im: &'a T,
             }
             Complex { re: &self.re, im: &self.im }.fmt(f)
-         }
-     }
+        }
+    }
 }
 
 #[cfg(feature = "serde")]

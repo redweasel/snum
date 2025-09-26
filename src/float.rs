@@ -1,39 +1,33 @@
 use core::ops::*;
 
-use crate::*;
 #[cfg(feature = "rational")]
 use crate::rational::Ratio;
-
+use crate::*;
 
 /// Type for floats used with [ApproxFloat]. Otherwise it is never explicitly required.
 #[cfg(any(feature = "std", feature = "libm"))]
-pub trait FloatType: Clone
-+ Zero
-+ One
-+ FromU64
-+ PartialOrd
-+ Cancel
-+ Num<Real = Self>
-+ IntoDiscrete<Output = Self>
-+ Div<Output = Self>
-+ Neg<Output = Self>
-+ NumElementary {
+pub trait FloatType:
+    Clone
+    + Zero
+    + One
+    + FromU64
+    + PartialOrd
+    + Cancel
+    + Num<Real = Self>
+    + IntoDiscrete<Output = Self>
+    + Div<Output = Self>
+    + Neg<Output = Self>
+    + NumElementary
+{
     /// check if the number is finite. This can often also be done by checking `self == self`.
     fn is_finite(&self) -> bool;
     /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
 #[cfg(not(any(feature = "std", feature = "libm")))]
-pub trait FloatType: Clone
-+ Zero
-+ One
-+ FromU64
-+ PartialOrd
-+ Cancel
-+ Num<Real = Self>
-+ IntoDiscrete<Output = Self>
-+ Div<Output = Self>
-+ Neg<Output = Self> {
+pub trait FloatType:
+    Clone + Zero + One + FromU64 + PartialOrd + Cancel + Num<Real = Self> + IntoDiscrete<Output = Self> + Div<Output = Self> + Neg<Output = Self>
+{
     /// check if the number is finite. This can often also be done by checking `self == self`.
     fn is_finite(&self) -> bool;
     /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
@@ -134,11 +128,7 @@ fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
     }
     // Exponent bias + mantissa shift
     exponent -= 127 + 23;
-    let mut mantissa = if bits >> 31 == 0 {
-        mantissa as i32
-    } else {
-        -(mantissa as i32)
-    };
+    let mut mantissa = if bits >> 31 == 0 { mantissa as i32 } else { -(mantissa as i32) };
     // cancel the mantissa
     let c = mantissa.trailing_zeros();
     mantissa >>= c;
@@ -161,11 +151,7 @@ fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
     }
     // Exponent bias + mantissa shift
     exponent -= 1023 + 52;
-    let mut mantissa = if bits >> 63 == 0 {
-        mantissa as i64
-    } else {
-        -(mantissa as i64)
-    };
+    let mut mantissa = if bits >> 63 == 0 { mantissa as i64 } else { -(mantissa as i64) };
     // cancel the mantissa
     let c = mantissa.trailing_zeros();
     mantissa >>= c;

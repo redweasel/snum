@@ -1,7 +1,7 @@
 //! Traits for evaluating the continued fraction with iterators
 
-use core::borrow::Borrow;
 use crate::{Cancel, IntoDiscrete, rational::Ratio};
+use core::borrow::Borrow;
 
 // forward evaluation of continued fractions is a bit harder than backwards evaluation, as one has to use Möbius transformations.
 fn start<T: Cancel>() -> (T, T, T, T) {
@@ -23,7 +23,7 @@ fn end<T: Cancel>(accum: (T, T, T, T), end: T) -> Ratio<T> {
 /// ```rust
 /// use snum::*;
 /// use snum::rational::*;
-/// 
+///
 /// let end = 2;
 /// let mut iter = [1, 2, 2].iter().continued_fraction(end);
 /// let _1 = Ratio::new(1, 1);
@@ -46,7 +46,9 @@ impl<T: Cancel, J: Borrow<T>, I: Iterator<Item = J>> Iterator for ContinuedFract
         })
     }
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        if let Some(max_len) = self.iter.size_hint().1 && n >= max_len {
+        if let Some(max_len) = self.iter.size_hint().1
+            && n >= max_len
+        {
             return None;
         }
         // doing multiple steps at once, makes the computation of the outputs in between unecessary.

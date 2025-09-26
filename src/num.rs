@@ -1,4 +1,8 @@
-use core::{fmt::Debug, num::{Wrapping, Saturating}, ops::*};
+use core::{
+    fmt::Debug,
+    num::{Saturating, Wrapping},
+    ops::*,
+};
 
 /// Defines an additive identity element for `Self`.
 ///
@@ -100,9 +104,7 @@ macro_rules! impl_zero_default {
 }
 
 /// trait to shorten implementations on references. Don't use this for non reference types.
-pub trait AddMul:
-    Sized + Add<Output = <Self as AddMul>::Output> + Mul<Output = <Self as AddMul>::Output>
-{
+pub trait AddMul: Sized + Add<Output = <Self as AddMul>::Output> + Mul<Output = <Self as AddMul>::Output> {
     type Output;
 }
 impl<'a, T: Sized> AddMul for &'a T
@@ -113,9 +115,7 @@ where
 }
 
 /// trait to shorten implementations on references. Don't use this for non reference types.
-pub trait AddMulSub:
-    AddMul<Output = <Self as AddMulSub>::Output> + Sub<Output = <Self as AddMulSub>::Output>
-{
+pub trait AddMulSub: AddMul<Output = <Self as AddMulSub>::Output> + Sub<Output = <Self as AddMulSub>::Output> {
     type Output;
 }
 impl<'a, T: Sized> AddMulSub for &'a T
@@ -125,9 +125,7 @@ where
     type Output = T;
 }
 /// trait to shorten implementations on references. Don't use this for non reference types.
-pub trait AddMulSubDiv:
-    AddMulSub<Output = <Self as AddMulSubDiv>::Output> + Div<Output = <Self as AddMulSubDiv>::Output>
-{
+pub trait AddMulSubDiv: AddMulSub<Output = <Self as AddMulSubDiv>::Output> + Div<Output = <Self as AddMulSubDiv>::Output> {
     type Output;
 }
 impl<'a, T: Sized> AddMulSubDiv for &'a T
@@ -203,9 +201,7 @@ macro_rules! impl_conjugate_real {
         })+
     };
 }
-impl_conjugate_real!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
-);
+impl_conjugate_real!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
 #[cfg(feature = "ibig")]
 impl_conjugate_real!(ibig::IBig, ibig::UBig);
 
@@ -231,8 +227,8 @@ pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
     fn is_unit(&self) -> bool;
 }
 
-pub trait RealNum: Num<Real = Self> + PartialOrd { }
-impl<T: Num<Real = T> + PartialOrd> RealNum for T { }
+pub trait RealNum: Num<Real = Self> + PartialOrd {}
+impl<T: Num<Real = T> + PartialOrd> RealNum for T {}
 
 /// A number that supports sqrt and cbrt (E.g. a float).
 /// Integers should not implement this, as their sqrt and cbrt are approx.
@@ -341,9 +337,7 @@ macro_rules! impl_rem_euclid {
         })+
     };
 }
-impl_rem_euclid!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
-);
+impl_rem_euclid!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);
 
 macro_rules! impl_rem_euclid_float {
     ($($T:ty),+) => {
@@ -435,20 +429,13 @@ pub fn gcd<T: Zero + One + PartialEq + Sub<Output = T> + Euclid>(mut a: T, mut b
         }
         (b, a) = (r, b);
     }
-    if a.is_valid_euclid() {
-        a
-    } else {
-        T::zero() - a
-    }
+    if a.is_valid_euclid() { a } else { T::zero() - a }
 }
 
 /// Calculates the Least Common Multiple (LCM) of the number and
 /// `other`. The result is always `result.is_valid_euclid() == true` (usually that means >= 0).
 #[must_use]
-pub fn lcm<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Div<T, Output = T> + Euclid>(
-    mut a: T,
-    mut b: T,
-) -> T {
+pub fn lcm<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Div<T, Output = T> + Euclid>(mut a: T, mut b: T) -> T {
     if !a.is_valid_euclid() {
         a = T::zero() - a;
     }
@@ -462,10 +449,7 @@ pub fn lcm<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Div<T, Output =
 /// Returns `((x, y), d)`.
 /// Note that `d` differs from the gcd if both arguments are zero.
 #[must_use]
-pub fn bezout<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Mul<Output = T> + Euclid>(
-    mut a: T,
-    mut b: T,
-) -> ((T, T), T) {
+pub fn bezout<T: Clone + Zero + One + PartialEq + Sub<Output = T> + Mul<Output = T> + Euclid>(mut a: T, mut b: T) -> ((T, T), T) {
     if a.is_zero() {
         return if b.is_zero() {
             ((T::zero(), T::zero()), T::zero())
@@ -561,11 +545,7 @@ pub trait IntoDiscrete: PartialEq + From<Self::Output> {
     #[must_use]
     fn ceil(&self) -> Self::Output {
         let x = self.floor();
-        if self == &Self::from(x.clone()) {
-            x
-        } else {
-            x + One::one()
-        }
+        if self == &Self::from(x.clone()) { x } else { x + One::one() }
     }
     /// Round to the closest integer, breaking ties by rounding away from zero.
     #[must_use]
@@ -642,9 +622,7 @@ macro_rules! impl_into_discrete_int {
         })+
     };
 }
-impl_into_discrete_int!(
-    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
-);
+impl_into_discrete_int!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);
 #[cfg(feature = "ibig")]
 macro_rules! impl_into_discrete_int {
     ($($t:ty),+) => {

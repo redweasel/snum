@@ -27,12 +27,7 @@ where
     StandardUniform: Distribution<T>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Quaternion<T> {
-        Quaternion::new(
-            rng.sample(self),
-            rng.sample(self),
-            rng.sample(self),
-            rng.sample(self),
-        )
+        Quaternion::new(rng.sample(self), rng.sample(self), rng.sample(self), rng.sample(self))
     }
 }
 
@@ -46,8 +41,7 @@ where
     }
 }
 
-impl<T: NumAlgebraic<Real = T> + Zero + One + Sub<Output = T> + Div<Output = T> + PartialOrd>
-    Distribution<Complex<T>> for StandardUnitary
+impl<T: NumAlgebraic<Real = T> + Zero + One + Sub<Output = T> + Div<Output = T> + PartialOrd> Distribution<Complex<T>> for StandardUnitary
 where
     StandardUniform: Distribution<T>,
 {
@@ -103,8 +97,7 @@ where
 }
 
 #[cfg(feature = "quaternion")]
-impl<T: NumAlgebraic<Real = T> + Zero + One + Sub<Output = T> + Div<Output = T> + PartialOrd>
-    Distribution<Quaternion<T>> for StandardUnitary
+impl<T: NumAlgebraic<Real = T> + Zero + One + Sub<Output = T> + Div<Output = T> + PartialOrd> Distribution<Quaternion<T>> for StandardUnitary
 where
     StandardUniform: Distribution<T>,
 {
@@ -118,8 +111,8 @@ where
     }
 }
 
-impl<T: NumElementary<Real = T> + Neg<Output = T> + Zero + One + Sub<Output = T> + Div<Output = T> + PartialOrd>
-    Distribution<Complex<T>> for StandardNormal
+impl<T: NumElementary<Real = T> + Neg<Output = T> + Zero + One + Sub<Output = T> + Div<Output = T> + PartialOrd> Distribution<Complex<T>>
+    for StandardNormal
 where
     StandardUniform: Distribution<T>,
 {

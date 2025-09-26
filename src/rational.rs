@@ -9,10 +9,7 @@ use core::{
 use take_mut::take;
 
 use crate::{Complex, FromU64};
-use crate::{
-    DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete, float::ApproxFloat,
-    num::*,
-};
+use crate::{DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete, float::ApproxFloat, num::*};
 
 /// A fraction, or rational number `p/q`.
 /// For anything useful, it requires the [Zero], [One] and [Euclid] traits
@@ -58,9 +55,7 @@ impl<T: Zero + PartialEq> Ratio<T> {
     /// Check if the rational is a representation of the NaN state.
     #[must_use]
     pub fn is_nan(&self) -> bool {
-        (self.denom.is_zero() && self.numer.is_zero())
-            || self.numer != self.numer
-            || self.denom != self.denom
+        (self.denom.is_zero() && self.numer.is_zero()) || self.numer != self.numer || self.denom != self.denom
     }
 }
 impl<T: Zero + One + PartialEq> Ratio<T>
@@ -71,11 +66,7 @@ where
     /// by the denominator and setting the new denominator to one.
     #[must_use]
     pub fn trunc(self) -> Self {
-        if self.is_finite() {
-            Self::from(&self.numer / &self.denom)
-        } else {
-            self
-        }
+        if self.is_finite() { Self::from(&self.numer / &self.denom) } else { self }
     }
 }
 impl<T: Zero + One + PartialEq> Ratio<T>
@@ -95,7 +86,9 @@ where
     }
 }
 impl<T: Cancel + IntoDiscrete + PartialOrd> IntoDiscrete for Ratio<T>
-where <T as IntoDiscrete>::Output: Add<Output = <T as IntoDiscrete>::Output> + Div<Output = <T as IntoDiscrete>::Output> {
+where
+    <T as IntoDiscrete>::Output: Add<Output = <T as IntoDiscrete>::Output> + Div<Output = <T as IntoDiscrete>::Output>,
+{
     type Output = T;
     /// rounds to an integer by rounding towards -∞
     ///
@@ -334,11 +327,7 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
             if s.denom == o.denom {
                 // With equal denominators, the numerators can be compared
                 let ord = s.numer.partial_cmp(&o.numer);
-                return if s.denom < zero {
-                    ord.map(Ordering::reverse)
-                } else {
-                    ord
-                };
+                return if s.denom < zero { ord.map(Ordering::reverse) } else { ord };
             } else if s.numer == o.numer {
                 // With equal numerators, the denominators can be inversely compared
                 if s.numer.is_zero() {
@@ -347,11 +336,7 @@ impl<T: Cancel + PartialOrd> PartialOrd for Ratio<T> {
                 }
                 // first compare only the sign, then if they are the same, compare the value.
                 let ord = (o.denom > zero).cmp(&(s.denom > zero)).then(s.denom.partial_cmp(&o.denom)?);
-                return Some(if s.numer < zero {
-                    ord
-                } else {
-                    ord.reverse()
-                });
+                return Some(if s.numer < zero { ord } else { ord.reverse() });
             }
             // Compare as floored integers and remainders
             // Note, that div_rem_euclid doesn't have the same behavior as div_mod_floor,
@@ -825,10 +810,7 @@ where
         if self.denom.is_valid_euclid() {
             Ratio::new_raw(self.numer.sqrt(), self.denom.sqrt())
         } else {
-            Ratio::new_raw(
-                (T::zero() - self.numer.clone()).sqrt(),
-                (T::zero() - self.denom.clone()).sqrt(),
-            )
+            Ratio::new_raw((T::zero() - self.numer.clone()).sqrt(), (T::zero() - self.denom.clone()).sqrt())
         }
     }
     fn cbrt(&self) -> Self {
@@ -852,14 +834,7 @@ where
     fn from_approx(value: F, tol: F) -> Option<Self> {
         if !value.is_finite() {
             if value.is_infinite() {
-                return Some(Ratio::new_raw(
-                    if value > F::zero() {
-                        T::one()
-                    } else {
-                        -T::one()
-                    },
-                    T::zero(),
-                ));
+                return Some(Ratio::new_raw(if value > F::zero() { T::one() } else { -T::one() }, T::zero()));
             }
             return Some(Ratio::new_raw(T::zero(), T::zero()));
         }

@@ -58,8 +58,7 @@ pub trait IntMul {
     fn mulu(&self, n: u64) -> Self;
 }
 
-impl<T: Clone + Zero> IntMul for T
-{
+impl<T: Clone + Zero> IntMul for T {
     fn mulu(&self, n: u64) -> Self {
         if n == 0 {
             return Self::zero();

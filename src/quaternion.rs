@@ -24,12 +24,7 @@ pub struct Quaternion<T> {
 impl<T> Quaternion<T> {
     #[must_use]
     pub const fn new(re: T, im_i: T, im_j: T, im_k: T) -> Self {
-        Self {
-            im_i,
-            im_j,
-            im_k,
-            re,
-        }
+        Self { im_i, im_j, im_k, re }
     }
 }
 
@@ -219,16 +214,10 @@ where
     type Output = Quaternion<T>;
     fn mul(self, rhs: Self) -> Self::Output {
         Quaternion {
-            im_i: &self.re * &rhs.im_i + &self.im_i * &rhs.re + &self.im_j * &rhs.im_k
-                - &self.im_k * &rhs.im_j,
-            im_j: &self.re * &rhs.im_j + &self.im_j * &rhs.re + &self.im_k * &rhs.im_i
-                - &self.im_i * &rhs.im_k,
-            im_k: &self.re * &rhs.im_k + &self.im_k * &rhs.re + &self.im_i * &rhs.im_j
-                - &self.im_j * &rhs.im_i,
-            re: &self.re * &rhs.re
-                - &self.im_i * &rhs.im_i
-                - &self.im_j * &rhs.im_j
-                - &self.im_k * &rhs.im_k,
+            im_i: &self.re * &rhs.im_i + &self.im_i * &rhs.re + &self.im_j * &rhs.im_k - &self.im_k * &rhs.im_j,
+            im_j: &self.re * &rhs.im_j + &self.im_j * &rhs.re + &self.im_k * &rhs.im_i - &self.im_i * &rhs.im_k,
+            im_k: &self.re * &rhs.im_k + &self.im_k * &rhs.re + &self.im_i * &rhs.im_j - &self.im_j * &rhs.im_i,
+            re: &self.re * &rhs.re - &self.im_i * &rhs.im_i - &self.im_j * &rhs.im_j - &self.im_k * &rhs.im_k,
         }
     }
 }
@@ -236,17 +225,11 @@ impl<T: Clone + Add<Output = T> + Sub<Output = T> + Mul<Output = T>> Mul for &Qu
     type Output = Quaternion<T>;
     fn mul(self, rhs: Self) -> Self::Output {
         Quaternion {
-            im_i: self.re.clone() * rhs.im_i.clone()
-                + self.im_i.clone() * rhs.re.clone()
-                + self.im_j.clone() * rhs.im_k.clone()
+            im_i: self.re.clone() * rhs.im_i.clone() + self.im_i.clone() * rhs.re.clone() + self.im_j.clone() * rhs.im_k.clone()
                 - self.im_k.clone() * rhs.im_j.clone(),
-            im_j: self.re.clone() * rhs.im_j.clone()
-                + self.im_j.clone() * rhs.re.clone()
-                + self.im_k.clone() * rhs.im_i.clone()
+            im_j: self.re.clone() * rhs.im_j.clone() + self.im_j.clone() * rhs.re.clone() + self.im_k.clone() * rhs.im_i.clone()
                 - self.im_i.clone() * rhs.im_k.clone(),
-            im_k: self.re.clone() * rhs.im_k.clone()
-                + self.im_k.clone() * rhs.re.clone()
-                + self.im_i.clone() * rhs.im_j.clone()
+            im_k: self.re.clone() * rhs.im_k.clone() + self.im_k.clone() * rhs.re.clone() + self.im_i.clone() * rhs.im_j.clone()
                 - self.im_j.clone() * rhs.im_i.clone(),
             re: self.re.clone() * rhs.re.clone()
                 - self.im_i.clone() * rhs.im_i.clone()
@@ -263,10 +246,7 @@ where
     const CHAR: u64 = T::CHAR;
     type Real = T;
     fn abs_sqr(&self) -> Self::Real {
-        &self.im_i * &self.im_i
-            + &self.im_j * &self.im_j
-            + &self.im_k * &self.im_k
-            + &self.re * &self.re
+        &self.im_i * &self.im_i + &self.im_j * &self.im_j + &self.im_k * &self.im_k + &self.re * &self.re
     }
     #[inline(always)]
     fn re(&self) -> Self::Real {
@@ -284,24 +264,17 @@ where
 {
     type Output = Quaternion<T>;
     fn div(self, rhs: Self) -> Self::Output {
-        let abs_sqr = &rhs.im_i * &rhs.im_i
-            + &rhs.im_j * &rhs.im_j
-            + &rhs.im_k * &rhs.im_k
-            + &rhs.re * &rhs.re;
+        let abs_sqr = &rhs.im_i * &rhs.im_i + &rhs.im_j * &rhs.im_j + &rhs.im_k * &rhs.im_k + &rhs.re * &rhs.re;
         &(self * rhs.conj()) / &abs_sqr
     }
 }
-impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>> Div
-    for &Quaternion<T>
+impl<T: Clone + Neg<Output = T> + Add<Output = T> + Sub<Output = T> + Div<Output = T>> Div for &Quaternion<T>
 where
     for<'a> &'a T: Mul<Output = T>,
 {
     type Output = Quaternion<T>;
     fn div(self, rhs: Self) -> Self::Output {
-        let abs_sqr = &rhs.im_i * &rhs.im_i
-            + &rhs.im_j * &rhs.im_j
-            + &rhs.im_k * &rhs.im_k
-            + &rhs.re * &rhs.re;
+        let abs_sqr = &rhs.im_i * &rhs.im_i + &rhs.im_j * &rhs.im_j + &rhs.im_k * &rhs.im_k + &rhs.re * &rhs.re;
         self.clone() * rhs.conj() / abs_sqr
     }
 }
@@ -311,10 +284,7 @@ where
 {
     #[must_use]
     pub fn recip(self) -> Self {
-        let abs_sqr = &self.im_i * &self.im_i
-            + &self.im_j * &self.im_j
-            + &self.im_k * &self.im_k
-            + &self.re * &self.re;
+        let abs_sqr = &self.im_i * &self.im_i + &self.im_j * &self.im_j + &self.im_k * &self.im_k + &self.re * &self.re;
         &self.conj() / &abs_sqr
     }
 }
@@ -333,15 +303,12 @@ impl<T: Zero> Sum for Quaternion<T> {
     where
         I: Iterator<Item = Self>,
     {
-        iter.fold(
-            Self::new(T::zero(), T::zero(), T::zero(), T::zero()),
-            |acc, c| Self {
-                re: acc.re.add(c.re),
-                im_i: acc.im_i.add(c.im_i),
-                im_j: acc.im_j.add(c.im_j),
-                im_k: acc.im_k.add(c.im_k),
-            },
-        )
+        iter.fold(Self::new(T::zero(), T::zero(), T::zero(), T::zero()), |acc, c| Self {
+            re: acc.re.add(c.re),
+            im_i: acc.im_i.add(c.im_i),
+            im_j: acc.im_j.add(c.im_j),
+            im_k: acc.im_k.add(c.im_k),
+        })
     }
 }
 impl<'a, T: Zero> Sum<&'a Quaternion<T>> for Quaternion<T>
@@ -352,15 +319,12 @@ where
     where
         I: Iterator<Item = &'a Quaternion<T>>,
     {
-        iter.fold(
-            Self::new(T::zero(), T::zero(), T::zero(), T::zero()),
-            |acc, c| Self {
-                re: (&acc.re).add(&c.re),
-                im_i: (&acc.im_i).add(&c.im_i),
-                im_j: (&acc.im_j).add(&c.im_j),
-                im_k: (&acc.im_k).add(&c.im_k),
-            },
-        )
+        iter.fold(Self::new(T::zero(), T::zero(), T::zero(), T::zero()), |acc, c| Self {
+            re: (&acc.re).add(&c.re),
+            im_i: (&acc.im_i).add(&c.im_i),
+            im_j: (&acc.im_j).add(&c.im_j),
+            im_k: (&acc.im_k).add(&c.im_k),
+        })
     }
 }
 
@@ -372,10 +336,7 @@ where
     where
         I: Iterator<Item = Self>,
     {
-        iter.fold(
-            Self::new(T::one(), T::zero(), T::zero(), T::zero()),
-            |acc, c| acc * c,
-        )
+        iter.fold(Self::new(T::one(), T::zero(), T::zero(), T::zero()), |acc, c| acc * c)
     }
 }
 impl<'a, T: Clone + Zero + One + Sub<Output = T>> Product<&'a Quaternion<T>> for Quaternion<T>
@@ -386,10 +347,7 @@ where
     where
         I: Iterator<Item = &'a Quaternion<T>>,
     {
-        iter.fold(
-            Self::new(T::one(), T::zero(), T::zero(), T::zero()),
-            |acc, c| acc * c.clone(),
-        )
+        iter.fold(Self::new(T::one(), T::zero(), T::zero(), T::zero()), |acc, c| acc * c.clone())
     }
 }
 
@@ -425,21 +383,9 @@ where
         let i = &c.im / &im_abs;
         // handle infinity correctly using branches
         Self {
-            im_i: if self.im_i.is_zero() {
-                T::zero()
-            } else {
-                &i * &self.im_i
-            },
-            im_j: if self.im_j.is_zero() {
-                T::zero()
-            } else {
-                &i * &self.im_j
-            },
-            im_k: if self.im_k.is_zero() {
-                T::zero()
-            } else {
-                &i * &self.im_k
-            },
+            im_i: if self.im_i.is_zero() { T::zero() } else { &i * &self.im_i },
+            im_j: if self.im_j.is_zero() { T::zero() } else { &i * &self.im_j },
+            im_k: if self.im_k.is_zero() { T::zero() } else { &i * &self.im_k },
             re: c.re,
         }
     }
@@ -613,13 +559,11 @@ where
                     im_k: T::zero(),
                 };
             }
-            let c = Complex::new(self.re.clone(), len.clone())
-                .atan2(&Complex::new(x.re.clone(), T::zero()));
+            let c = Complex::new(self.re.clone(), len.clone()).atan2(&Complex::new(x.re.clone(), T::zero()));
             return self.from_complex(len, c);
         }
         if len.is_zero() {
-            let c = Complex::new(self.re.clone(), T::zero())
-                .atan2(&Complex::new(x.re.clone(), lenx.clone()));
+            let c = Complex::new(self.re.clone(), T::zero()).atan2(&Complex::new(x.re.clone(), lenx.clone()));
             return self.from_complex(lenx, c);
         }
         // to get this without conditionals, implement it as
@@ -644,7 +588,9 @@ where
             return Self {
                 re: T::zero(),
                 ..self.clone()
-            }.exp() * T::zero();
+            }
+            .exp()
+                * T::zero();
         }
         let len = self.im_abs();
         if len.is_zero() {
@@ -671,7 +617,9 @@ where
             return Self {
                 re: T::zero(),
                 ..self.clone()
-            }.exp() * T::zero();
+            }
+            .exp()
+                * T::zero();
         }
         let len = self.im_abs();
         if len.is_zero() {
@@ -773,8 +721,8 @@ macro_rules! quaternion {
 }
 
 impl<T: core::fmt::Debug> core::fmt::Debug for Quaternion<T> {
-     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-         if f.alternate() {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if f.alternate() {
             // pretty print quaternions matching the macro. (the output can be parsed by the quaternion! macro)
             self.re.fmt(f)?;
             write!(f, "+i ")?;
@@ -783,7 +731,7 @@ impl<T: core::fmt::Debug> core::fmt::Debug for Quaternion<T> {
             self.im_j.fmt(f)?;
             write!(f, "+k ")?;
             self.im_k.fmt(f)
-         } else {
+        } else {
             #[derive(Debug)]
             #[allow(dead_code)]
             struct Quaternion<'a, T> {
@@ -792,9 +740,15 @@ impl<T: core::fmt::Debug> core::fmt::Debug for Quaternion<T> {
                 im_j: &'a T,
                 im_k: &'a T,
             }
-            Quaternion { re: &self.re, im_i: &self.im_i, im_j: &self.im_j, im_k: &self.im_k }.fmt(f)
-         }
-     }
+            Quaternion {
+                re: &self.re,
+                im_i: &self.im_i,
+                im_j: &self.im_j,
+                im_k: &self.im_k,
+            }
+            .fmt(f)
+        }
+    }
 }
 
 #[cfg(feature = "serde")]

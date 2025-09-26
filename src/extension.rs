@@ -44,14 +44,8 @@ where
 {
     type Real = Sqrt<T::Real, N>;
     const _TEST_SQRT: () = {
-        assert!(
-            N.isqrt() * N.isqrt() != N,
-            "N is not allowed to be a perfect square"
-        );
-        assert!(
-            T::CHAR == 0 || N <= T::CHAR,
-            "N is not allowed to be larger than the ring characteristic"
-        );
+        assert!(N.isqrt() * N.isqrt() != N, "N is not allowed to be a perfect square");
+        assert!(T::CHAR == 0 || N <= T::CHAR, "N is not allowed to be larger than the ring characteristic");
     };
     #[inline(always)]
     fn sqr() -> T {
@@ -197,8 +191,7 @@ where
     }
 }
 
-impl<T: RealNum + Cancel + Neg<Output = T> + Div<Output = T>, E: SqrtConst<T>>
-    SqrtExt<T, E>
+impl<T: RealNum + Cancel + Neg<Output = T> + Div<Output = T>, E: SqrtConst<T>> SqrtExt<T, E>
 where
     for<'a> &'a T: AddMulSub<Output = T>,
 {
@@ -237,11 +230,7 @@ impl<T: Num + Copy, E: SqrtConst<T>> Copy for SqrtExt<T, E> {}
 
 impl<T: Num, E: SqrtConst<T>> SqrtExt<T, E> {
     pub const fn new(value: T, ext: T) -> Self {
-        SqrtExt {
-            value,
-            ext,
-            _e: PhantomData,
-        }
+        SqrtExt { value, ext, _e: PhantomData }
     }
 }
 
@@ -268,9 +257,9 @@ where
     /// See <https://en.wikipedia.org/wiki/Dirichlet%27s_unit_theorem> for more information.
     ///
     /// This (non const) function is computing it, so avoid calling it multiple times and precompute it, if possible.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// - If the unit can not be found.
     /// - If overflow detection is on and the smallest unit is too large.
     #[must_use]
@@ -346,9 +335,7 @@ impl<T: Hash + Num, E: SqrtConst<T>> Hash for SqrtExt<T, E> {
     }
 }
 
-impl<T: RealNum + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> PartialOrd
-    for SqrtExt<T, E>
-{
+impl<T: RealNum + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> PartialOrd for SqrtExt<T, E> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // x = a+b√N > 0 <=> a > -b√N <=> b > -a/√N
         // and for a >= 0: <=> a^2 > b^2 N
@@ -374,8 +361,7 @@ impl<T: RealNum + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> PartialOrd
         }
     }
 }
-impl<T: RealNum + Ord + Neg<Output = T> + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Ord
-    for SqrtExt<T, E>
+impl<T: RealNum + Ord + Neg<Output = T> + Sub<Output = T> + Mul<Output = T>, E: SqrtConst<T>> Ord for SqrtExt<T, E>
 where
     for<'a> &'a T: Mul<Output = T>,
 {
@@ -384,12 +370,9 @@ where
     }
 }
 
-impl<T: RealNum + Zero + One + IntoDiscrete + Sub<Output = T>, E: SqrtConst<T>> IntoDiscrete
-    for SqrtExt<T, E>
+impl<T: RealNum + Zero + One + IntoDiscrete + Sub<Output = T>, E: SqrtConst<T>> IntoDiscrete for SqrtExt<T, E>
 where
-    <T as IntoDiscrete>::Output: fmt::Debug
-        + IntoDiscrete<Output = <T as IntoDiscrete>::Output>
-        + Zero + Div<Output = <T as IntoDiscrete>::Output>,
+    <T as IntoDiscrete>::Output: fmt::Debug + IntoDiscrete<Output = <T as IntoDiscrete>::Output> + Zero + Div<Output = <T as IntoDiscrete>::Output>,
     T: Cancel,
 {
     type Output = T;
@@ -418,7 +401,8 @@ where
             let ratio = numer.ext.div_floor(&denom);
             let ext_positive = T::zero() <= ratio.clone().into();
             let mut a = value.clone() + (E::floor() + if ext_positive { T::zero() } else { T::one() }).floor() * ratio.clone();
-            let mut b = value + One::one() + (E::floor() + if !ext_positive { T::zero() } else { T::one() }).floor() * (ratio.clone() + T::one().floor());
+            let mut b =
+                value + One::one() + (E::floor() + if !ext_positive { T::zero() } else { T::one() }).floor() * (ratio.clone() + T::one().floor());
             // NaN checks
             if a != a {
                 return a.into();
@@ -489,11 +473,7 @@ where
                 }
             }
             // now we have v+a < |x|√N < v+b, so v+a is the floor of |x|√N
-            if positive {
-                value + a.into()
-            } else {
-                value - b.into()
-            }
+            if positive { value + a.into() } else { value - b.into() }
         }
     }
     fn round(&self) -> Self::Output {
@@ -522,7 +502,7 @@ where
                     Some(Ordering::Less) => x1,
                     None => x1, // invalid case
                 }
-            },
+            }
             None => x1, // some kind of NaN or unsortable item. Return the invalid value as is.
         }
     }
@@ -533,10 +513,7 @@ impl<T: Num, E: SqrtConst<T>> SqrtExt<T, E> {
         if E::sqr() != E2::sqr().try_into().ok()? {
             return None;
         }
-        Some(Self::new(
-            value.value.try_into().ok()?,
-            value.ext.try_into().ok()?,
-        ))
+        Some(Self::new(value.value.try_into().ok()?, value.ext.try_into().ok()?))
     }
 }
 
@@ -546,74 +523,50 @@ impl<T: Num + Zero, E: SqrtConst<T>> From<T> for SqrtExt<T, E> {
     }
 }
 impl<T: Num + Zero, E: SqrtConst<Complex<T>>> From<T> for SqrtExt<Complex<T>, E>
-where Complex<T>: Num<Real = T> {
+where
+    Complex<T>: Num<Real = T>,
+{
     fn from(value: T) -> Self {
         SqrtExt::new(value.into(), Complex::real(T::zero()))
     }
 }
-impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<SqrtExt<T, E>>
-    for SqrtExt<Complex<T>, E2>
+impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<SqrtExt<T, E>> for SqrtExt<Complex<T>, E2>
 where
     Complex<T>: Num<Real = T>,
 {
     fn from(value: SqrtExt<T, E>) -> Self {
         // equallity of the constants can not be checked at compile time here.
-        assert_eq!(
-            E2::sqr(),
-            E::sqr().into(),
-            "can not convert between SqrtExt with different constants"
-        );
+        assert_eq!(E2::sqr(), E::sqr().into(), "can not convert between SqrtExt with different constants");
         SqrtExt::new(value.value.into(), value.ext.into())
     }
 }
-impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<Complex<SqrtExt<T, E>>>
-    for SqrtExt<Complex<T>, E2>
+impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<Complex<SqrtExt<T, E>>> for SqrtExt<Complex<T>, E2>
 where
     Complex<T>: Num<Real = T>,
 {
     fn from(value: Complex<SqrtExt<T, E>>) -> Self {
         // equallity of the constants can not be checked at compile time here.
-        assert_eq!(
-            E2::sqr(),
-            E::sqr().into(),
-            "can not convert between SqrtExt with different constants"
-        );
-        SqrtExt::new(
-            Complex::new(value.re.value, value.im.value),
-            Complex::new(value.re.ext, value.im.ext),
-        )
+        assert_eq!(E2::sqr(), E::sqr().into(), "can not convert between SqrtExt with different constants");
+        SqrtExt::new(Complex::new(value.re.value, value.im.value), Complex::new(value.re.ext, value.im.ext))
     }
 }
-impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<SqrtExt<Complex<T>, E2>>
-    for Complex<SqrtExt<T, E>>
+impl<T: Num<Real = T>, E: SqrtConst<T>, E2: SqrtConst<Complex<T>>> From<SqrtExt<Complex<T>, E2>> for Complex<SqrtExt<T, E>>
 where
     Complex<T>: Num<Real = T>,
 {
     fn from(value: SqrtExt<Complex<T>, E2>) -> Self {
         // equallity of the constants can not be checked at compile time here.
-        assert_eq!(
-            E2::sqr(),
-            E::sqr().into(),
-            "can not convert between SqrtExt with different constants"
-        );
-        Complex::new(
-            SqrtExt::new(value.value.re, value.ext.re),
-            SqrtExt::new(value.value.im, value.ext.im),
-        )
+        assert_eq!(E2::sqr(), E::sqr().into(), "can not convert between SqrtExt with different constants");
+        Complex::new(SqrtExt::new(value.value.re, value.ext.re), SqrtExt::new(value.value.im, value.ext.im))
     }
 }
-impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<SqrtExt<Ratio<T>, E2>>
-    for Ratio<SqrtExt<T, E>>
+impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<SqrtExt<Ratio<T>, E2>> for Ratio<SqrtExt<T, E>>
 where
     Ratio<T>: Num,
 {
     fn from(value: SqrtExt<Ratio<T>, E2>) -> Self {
         // equallity of the constants can not be checked at compile time here.
-        assert_eq!(
-            E2::sqr(),
-            E::sqr().into(),
-            "can not convert between SqrtExt with different constants"
-        );
+        assert_eq!(E2::sqr(), E::sqr().into(), "can not convert between SqrtExt with different constants");
         let (a, b) = value.value.denom.clone().cancel(value.ext.denom.clone());
         // TODO check behavior with non finite values
         Ratio {
@@ -622,27 +575,17 @@ where
         }
     }
 }
-impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<Ratio<SqrtExt<T, E>>>
-    for SqrtExt<Ratio<T>, E2>
+impl<T: Num + Cancel, E: SqrtConst<T>, E2: SqrtConst<Ratio<T>>> From<Ratio<SqrtExt<T, E>>> for SqrtExt<Ratio<T>, E2>
 where
     Ratio<T>: Num,
     for<'a> &'a T: Mul<&'a T, Output = T>,
 {
     fn from(value: Ratio<SqrtExt<T, E>>) -> Self {
         // equallity of the constants can not be checked at compile time here.
-        assert_eq!(
-            E2::sqr(),
-            E::sqr().into(),
-            "can not convert between SqrtExt with different constants"
-        );
+        assert_eq!(E2::sqr(), E::sqr().into(), "can not convert between SqrtExt with different constants");
         // this cast ist also possible since all (finite, non zero) rational numbers have an inverse.
-        &SqrtExt::new(
-            Ratio::new_raw(value.numer.value, T::one()),
-            Ratio::new_raw(value.numer.ext, T::one()),
-        ) / &SqrtExt::new(
-            Ratio::new_raw(value.denom.value, T::one()),
-            Ratio::new_raw(value.denom.ext, T::one()),
-        )
+        &SqrtExt::new(Ratio::new_raw(value.numer.value, T::one()), Ratio::new_raw(value.numer.ext, T::one()))
+            / &SqrtExt::new(Ratio::new_raw(value.denom.value, T::one()), Ratio::new_raw(value.denom.ext, T::one()))
     }
 }
 
@@ -690,8 +633,7 @@ where
         //&(&self.value * &self.value) - &(&(&self.ext * &self.ext) * &E::sqr())
         // less overflows (but slower) with rearranged form (value - ext)(value + ext*N) - (N-1)*value*ext
         // doesn't work for infinities (e.g. in float or rational types).
-        &((&self.value - &self.ext) * (&self.value + &(&self.ext * &E::sqr())))
-            - &((&E::sqr() - &T::one()) * (&self.value * &self.ext))
+        &((&self.value - &self.ext) * (&self.value + &(&self.ext * &E::sqr()))) - &((&E::sqr() - &T::one()) * (&self.value * &self.ext))
     }
 }
 
@@ -713,10 +655,7 @@ macro_rules! impl_add {
         impl<'a, T: Num + $Add<T, Output = T>, E: SqrtConst<T>> $Add for &'a SqrtExt<T, E> {
             type Output = SqrtExt<T, E>;
             fn $add(self, rhs: Self) -> Self::Output {
-                SqrtExt::new(
-                    self.value.clone().$add(rhs.value.clone()),
-                    self.ext.clone().$add(rhs.ext.clone()),
-                )
+                SqrtExt::new(self.value.clone().$add(rhs.value.clone()), self.ext.clone().$add(rhs.ext.clone()))
             }
         }
         impl<T: Num, E: SqrtConst<T>> $Add<T> for SqrtExt<T, E>
@@ -774,31 +713,22 @@ where
         )
     }
 }
-impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Div
-    for &'a SqrtExt<T, E>
-{
+impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Div for &'a SqrtExt<T, E> {
     type Output = SqrtExt<T, E>;
     fn div(self, rhs: &'a SqrtExt<T, E>) -> Self::Output {
         let abs_sqr = rhs.abs_sqr_ext();
         SqrtExt::new(
-            (self.value.clone() * rhs.value.clone()
-                - self.ext.clone() * rhs.ext.clone() * E::sqr())
-                / abs_sqr.clone(),
+            (self.value.clone() * rhs.value.clone() - self.ext.clone() * rhs.ext.clone() * E::sqr()) / abs_sqr.clone(),
             (self.ext.clone() * rhs.value.clone() - self.value.clone() * rhs.ext.clone()) / abs_sqr,
         )
     }
 }
 
-impl<T: Num + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>>
-    SqrtExt<T, E>
-{
+impl<T: Num + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> SqrtExt<T, E> {
     #[must_use]
     pub fn recip(self) -> Self {
         let abs_sqr = self.abs_sqr_ext();
-        Self::new(
-            self.value.clone() / abs_sqr.clone(),
-            -self.ext.clone() / abs_sqr,
-        )
+        Self::new(self.value.clone() / abs_sqr.clone(), -self.ext.clone() / abs_sqr)
     }
 }
 
@@ -812,9 +742,7 @@ where
         self - d * rhs
     }
 }
-impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Rem
-    for &'a SqrtExt<T, E>
-{
+impl<'a, T: Num + One + Add<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Rem for &'a SqrtExt<T, E> {
     type Output = SqrtExt<T, E>;
     fn rem(self, rhs: &'a SqrtExt<T, E>) -> Self::Output {
         self - &(&(self / rhs) * rhs)
@@ -845,10 +773,7 @@ macro_rules! impl_mul {
 }
 impl_mul!(Mul, mul; Div, div; Rem, rem);
 
-impl<
-    T: RealNum + Zero + One + Euclid + Neg<Output = T> + Sub<Output = T> + Div<Output = T>,
-    E: SqrtConst<T>,
-> Euclid for SqrtExt<T, E>
+impl<T: RealNum + Zero + One + Euclid + Neg<Output = T> + Sub<Output = T> + Div<Output = T>, E: SqrtConst<T>> Euclid for SqrtExt<T, E>
 where
     Self: PartialOrd,
 {
@@ -916,10 +841,7 @@ where
             denom.clone() / (T::one() + T::one()),
         );
         // round correctly
-        let mut q = SqrtExt::new(
-            if nr > d2 { n + T::one() } else { n },
-            if mr > d2 { m + T::one() } else { m },
-        );
+        let mut q = SqrtExt::new(if nr > d2 { n + T::one() } else { n }, if mr > d2 { m + T::one() } else { m });
         q.value = q.value - q.ext.clone() * E::floor();
         let mut r = self - &(b * &q);
         // The following breaks √2 and √3 as Euclidean domains,
@@ -987,9 +909,7 @@ where
         iter.fold(Self::new(T::zero(), T::zero()), |acc, c| acc + c)
     }
 }
-impl<'a, T: Num + Zero + Add<Output = T>, E: SqrtConst<T>> Sum<&'a SqrtExt<T, E>>
-    for SqrtExt<T, E>
-{
+impl<'a, T: Num + Zero + Add<Output = T>, E: SqrtConst<T>> Sum<&'a SqrtExt<T, E>> for SqrtExt<T, E> {
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = &'a SqrtExt<T, E>>,
@@ -1009,9 +929,7 @@ where
         iter.fold(Self::one(), |acc, c| acc * c)
     }
 }
-impl<'a, T: Num + Zero + One + Add<Output = T>, E: SqrtConst<T>> Product<&'a SqrtExt<T, E>>
-    for SqrtExt<T, E>
-{
+impl<'a, T: Num + Zero + One + Add<Output = T>, E: SqrtConst<T>> Product<&'a SqrtExt<T, E>> for SqrtExt<T, E> {
     fn product<I>(iter: I) -> Self
     where
         I: Iterator<Item = &'a SqrtExt<T, E>>,
@@ -1023,14 +941,9 @@ impl<'a, T: Num + Zero + One + Add<Output = T>, E: SqrtConst<T>> Product<&'a Sqr
 // the following is the most intuitive implementation of Num.
 // However, interpreting the extension as "imaginary unit" and implementing
 // conj etc wrt that would also work and have desirable properties wrt Euclid.
-impl<T: Num + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>, E: SqrtConst<T>> Num
-    for SqrtExt<T, E>
+impl<T: Num + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>, E: SqrtConst<T>> Num for SqrtExt<T, E>
 where
-    T::Real: Num<Real = T::Real>
-        + Add<Output = T::Real>
-        + Mul<Output = T::Real>
-        + Sub<Output = T::Real>
-        + Neg<Output = T::Real>,
+    T::Real: Num<Real = T::Real> + Add<Output = T::Real> + Mul<Output = T::Real> + Sub<Output = T::Real> + Neg<Output = T::Real>,
     Self: From<SqrtExt<T::Real, E::Real>>,
 {
     type Real = SqrtExt<T::Real, E::Real>;
@@ -1038,10 +951,7 @@ where
     #[inline(always)]
     fn abs_sqr(&self) -> Self::Real {
         let x = (self.value.clone() * self.ext.conj()).re();
-        Self::Real::new(
-            self.value.abs_sqr() + self.ext.abs_sqr() * E::sqr().re(),
-            x.clone() + x,
-        )
+        Self::Real::new(self.value.abs_sqr() + self.ext.abs_sqr() * E::sqr().re(), x.clone() + x)
     }
     #[inline(always)]
     fn re(&self) -> Self::Real {
@@ -1049,17 +959,12 @@ where
     }
     #[inline(always)]
     fn is_unit(&self) -> bool {
-        let abs_sqr = self.value.clone() * self.value.clone()
-            - self.ext.clone() * self.ext.clone() * E::sqr();
+        let abs_sqr = self.value.clone() * self.value.clone() - self.ext.clone() * self.ext.clone() * E::sqr();
         abs_sqr.is_unit()
     }
 }
 
-impl<
-    F: FloatType + NumAlgebraic,
-    T: Num + Cancel + PartialOrd + Div<Output = T> + Neg<Output = T>,
-    E: SqrtConst<T>,
-> ApproxFloat<F> for SqrtExt<T, E>
+impl<F: FloatType + NumAlgebraic, T: Num + Cancel + PartialOrd + Div<Output = T> + Neg<Output = T>, E: SqrtConst<T>> ApproxFloat<F> for SqrtExt<T, E>
 where
     T: ApproxFloat<F>,
     for<'a> &'a T: AddMulSub<Output = T>,
@@ -1096,10 +1001,7 @@ where
     fn to_approx(&self) -> F {
         let c: F = E::sqr().to_approx();
         // evaluate to float, but be very careful to avoid cancellation
-        if self.value.is_zero()
-            || self.ext.is_zero()
-            || self.value.is_valid_euclid() == self.ext.is_valid_euclid()
-        {
+        if self.value.is_zero() || self.ext.is_zero() || self.value.is_valid_euclid() == self.ext.is_valid_euclid() {
             // no cancelation, as both have the same sign.
             let a: F = self.value.to_approx();
             let b: F = self.ext.to_approx();
@@ -1170,9 +1072,7 @@ impl<T: Num + serde::Serialize, E: SqrtConst<T>> serde::Serialize for SqrtExt<T,
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T: Num + serde::Deserialize<'de>, E: SqrtConst<T>> serde::Deserialize<'de>
-    for SqrtExt<T, E>
-{
+impl<'de, T: Num + serde::Deserialize<'de>, E: SqrtConst<T>> serde::Deserialize<'de> for SqrtExt<T, E> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,

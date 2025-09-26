@@ -71,7 +71,7 @@
 //! of the inner type to avoid recursive trait evaluations by SIMD types. This introduces a significant
 //! amount of clones. Clones are kept minimal in most cases. If clones slow down the calculation, consider
 //! wrapping your types in `Rc`.
-//! 
+//!
 //! ### TODOs
 //! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!], [impl_euclid_field!] and [impl_num_wrapper!].
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)

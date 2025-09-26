@@ -128,11 +128,7 @@ impl<T: fmt::Display> fmt::Display for Parenthesis<T> {
 }
 
 #[inline(never)]
-pub fn pad_expr(
-    f: &mut fmt::Formatter<'_>,
-    prefix: &str,
-    buf_args: fmt::Arguments<'_>,
-) -> fmt::Result {
+pub fn pad_expr(f: &mut fmt::Formatter<'_>, prefix: &str, buf_args: fmt::Arguments<'_>) -> fmt::Result {
     if f.width().is_none() && !f.sign_plus() {
         return write!(f, "{buf_args}");
     }
@@ -205,12 +201,7 @@ pub fn pad_expr(
 }
 
 #[inline(never)]
-pub fn fmt_poly(
-    f: &mut fmt::Formatter<'_>,
-    prefix: &str,
-    pretty: bool,
-    monoms: &[(fmt::Arguments<'_>, &str)],
-) -> fmt::Result {
+pub fn fmt_poly(f: &mut fmt::Formatter<'_>, prefix: &str, pretty: bool, monoms: &[(fmt::Arguments<'_>, &str)]) -> fmt::Result {
     struct DisplayPoly<'a>(&'a [(fmt::Arguments<'a>, &'a str)], &'a str, bool);
     impl fmt::Display for DisplayPoly<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -222,11 +213,7 @@ pub fn fmt_poly(
                 if !self.2 || !args_dec.is_zero() {
                     let parens = !monom.is_empty() && !args_dec.is_number();
                     let sign = if first && !f.sign_plus() { "" } else { "+" };
-                    let sign_add = if parens {
-                        "+"
-                    } else {
-                        args_dec.sign().map_or(sign, |_| "")
-                    };
+                    let sign_add = if parens { "+" } else { args_dec.sign().map_or(sign, |_| "") };
                     if self.2 && !monom.is_empty() && args_dec.is_one() {
                         write!(f, "{}{monom}", args_dec.sign().unwrap_or(sign))
                     } else {
@@ -241,11 +228,7 @@ pub fn fmt_poly(
             Ok(())
         }
     }
-    pad_expr(
-        f,
-        prefix,
-        format_args!("{}", DisplayPoly(monoms, prefix, pretty)),
-    )
+    pad_expr(f, prefix, format_args!("{}", DisplayPoly(monoms, prefix, pretty)))
 }
 
 mod complex {
@@ -253,13 +236,7 @@ mod complex {
     use crate::Complex;
 
     #[inline(never)]
-    fn fmt_re_im(
-        f: &mut fmt::Formatter<'_>,
-        real: fmt::Arguments<'_>,
-        imag: fmt::Arguments<'_>,
-        pretty: bool,
-        prefix: &str,
-    ) -> fmt::Result {
+    fn fmt_re_im(f: &mut fmt::Formatter<'_>, real: fmt::Arguments<'_>, imag: fmt::Arguments<'_>, pretty: bool, prefix: &str) -> fmt::Result {
         fmt_poly(f, prefix, pretty, &[(real, ""), (imag, "i")])
     }
 
@@ -335,12 +312,7 @@ mod quaternion {
         pretty: bool,
         prefix: &str,
     ) -> fmt::Result {
-        fmt_poly(
-            f,
-            prefix,
-            pretty,
-            &[(real, ""), (imag_i, "i"), (imag_j, "j"), (imag_k, "k")],
-        )
+        fmt_poly(f, prefix, pretty, &[(real, ""), (imag_i, "i"), (imag_j, "j"), (imag_k, "k")])
     }
 
     // string conversions
@@ -430,17 +402,9 @@ mod rational {
             if numer_zero {
                 pad_expr(f, prefix, format_args!("NaN"))
             } else if numer_dec.is_one() {
-                pad_expr(
-                    f,
-                    prefix,
-                    format_args!("{}∞", numer_dec.sign().unwrap_or("")),
-                )
+                pad_expr(f, prefix, format_args!("{}∞", numer_dec.sign().unwrap_or("")))
             } else {
-                pad_expr(
-                    f,
-                    prefix,
-                    format_args!("{}∞", Parenthesis(numer_args, !numer_dec.is_number())),
-                )
+                pad_expr(f, prefix, format_args!("{}∞", Parenthesis(numer_args, !numer_dec.is_number())))
             }
         } else {
             // note, this is missing a lot of annotations like the precision in case of floats.
@@ -473,16 +437,8 @@ mod rational {
                                 f,
                                 self.numer.is_zero(),
                                 self.denom.is_zero(),
-                                format_args!(
-                                    concat!("{:#.prec$", $fmt_str, "}"),
-                                    self.numer,
-                                    prec = prec
-                                ),
-                                format_args!(
-                                    concat!("{:#.prec$", $fmt_str, "}"),
-                                    self.denom,
-                                    prec = prec
-                                ),
+                                format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.numer, prec = prec),
+                                format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.denom, prec = prec),
                                 $prefix,
                             )
                         } else {
@@ -490,16 +446,8 @@ mod rational {
                                 f,
                                 self.numer.is_zero(),
                                 self.denom.is_zero(),
-                                format_args!(
-                                    concat!("{:.prec$", $fmt_str, "}"),
-                                    self.numer,
-                                    prec = prec
-                                ),
-                                format_args!(
-                                    concat!("{:.prec$", $fmt_str, "}"),
-                                    self.denom,
-                                    prec = prec
-                                ),
+                                format_args!(concat!("{:.prec$", $fmt_str, "}"), self.numer, prec = prec),
+                                format_args!(concat!("{:.prec$", $fmt_str, "}"), self.denom, prec = prec),
                                 $prefix,
                             )
                         }
@@ -560,18 +508,10 @@ mod rational {
                 pad_expr(f, prefix, format_args!("{value_args}+√{sqr}"))
             }
         } else if value_zero {
-            pad_expr(
-                f,
-                prefix,
-                format_args!("{}√{sqr}", Parenthesis(ext_args, !ext_dec.is_number())),
-            )
+            pad_expr(f, prefix, format_args!("{}√{sqr}", Parenthesis(ext_args, !ext_dec.is_number())))
         } else if ext_dec.is_number() {
             let add_sign = if ext_dec.sign().is_none() { "+" } else { "" };
-            pad_expr(
-                f,
-                prefix,
-                format_args!("{value_args}{add_sign}{ext_args}√{sqr}"),
-            )
+            pad_expr(f, prefix, format_args!("{value_args}{add_sign}{ext_args}√{sqr}"))
         } else {
             pad_expr(f, prefix, format_args!("{value_args}+({ext_args})√{sqr}"))
         }
@@ -580,9 +520,7 @@ mod rational {
     // String conversions
     macro_rules! impl_formatting {
         ($Display:ident, $prefix:expr, $fmt_str:expr) => {
-            impl<T: Num + fmt::$Display + Clone + Zero + One, E: SqrtConst<T>> fmt::$Display
-                for SqrtExt<T, E>
-            {
+            impl<T: Num + fmt::$Display + Clone + Zero + One, E: SqrtConst<T>> fmt::$Display for SqrtExt<T, E> {
                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                     if self.ext.is_zero() {
                         return <T as fmt::$Display>::fmt(&self.value, f);
@@ -593,16 +531,8 @@ mod rational {
                                 f,
                                 self.value.is_zero(),
                                 self.ext.is_one(),
-                                format_args!(
-                                    concat!("{:#.prec$", $fmt_str, "}"),
-                                    self.value,
-                                    prec = prec
-                                ),
-                                format_args!(
-                                    concat!("{:#.prec$", $fmt_str, "}"),
-                                    self.ext,
-                                    prec = prec
-                                ),
+                                format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.value, prec = prec),
+                                format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.ext, prec = prec),
                                 format_args!(concat!("{:#", $fmt_str, "}"), E::sqr()),
                                 $prefix,
                             )
@@ -611,16 +541,8 @@ mod rational {
                                 f,
                                 self.value.is_zero(),
                                 self.ext.is_one(),
-                                format_args!(
-                                    concat!("{:.prec$", $fmt_str, "}"),
-                                    self.value,
-                                    prec = prec
-                                ),
-                                format_args!(
-                                    concat!("{:.prec$", $fmt_str, "}"),
-                                    self.ext,
-                                    prec = prec
-                                ),
+                                format_args!(concat!("{:.prec$", $fmt_str, "}"), self.value, prec = prec),
+                                format_args!(concat!("{:.prec$", $fmt_str, "}"), self.ext, prec = prec),
                                 format_args!(concat!("{:", $fmt_str, "}"), E::sqr()),
                                 $prefix,
                             )
