@@ -104,46 +104,48 @@ macro_rules! impl_zero_default {
 }
 
 /// trait to shorten implementations on references. Don't use this for non reference types.
-pub trait AddMul: Sized + Add<Output = <Self as AddMul>::Output> + Mul<Output = <Self as AddMul>::Output> {
+pub trait AddMul<T = Self>: Sized + Add<T, Output = <Self as AddMul<T>>::Output> + Mul<T, Output = <Self as AddMul<T>>::Output> {
     type Output;
 }
-impl<'a, T: Sized> AddMul for &'a T
+impl<'a, T: Sized, R> AddMul<R> for &'a T
 where
-    &'a T: Add<Output = T> + Mul<Output = T>,
+    Self: Add<R, Output = T> + Mul<R, Output = T>,
 {
     type Output = T;
 }
 
 /// trait to shorten implementations on references. Don't use this for non reference types.
-pub trait AddMulSub: AddMul<Output = <Self as AddMulSub>::Output> + Sub<Output = <Self as AddMulSub>::Output> {
+pub trait AddMulSub<T = Self>: AddMul<T, Output = <Self as AddMulSub<T>>::Output> + Sub<T, Output = <Self as AddMulSub<T>>::Output> {
     type Output;
 }
-impl<'a, T: Sized> AddMulSub for &'a T
+impl<'a, T: Sized, R> AddMulSub<R> for &'a T
 where
-    &'a T: AddMul<Output = T> + Sub<Output = T>,
+    Self: AddMul<R, Output = T> + Sub<R, Output = T>,
 {
     type Output = T;
 }
 /// trait to shorten implementations on references. Don't use this for non reference types.
-pub trait AddMulSubDiv: AddMulSub<Output = <Self as AddMulSubDiv>::Output> + Div<Output = <Self as AddMulSubDiv>::Output> {
+pub trait AddMulSubDiv<T = Self>:
+    AddMulSub<T, Output = <Self as AddMulSubDiv<T>>::Output> + Div<T, Output = <Self as AddMulSubDiv<T>>::Output>
+{
     type Output;
 }
-impl<'a, T: Sized> AddMulSubDiv for &'a T
+impl<'a, T: Sized, R> AddMulSubDiv<R> for &'a T
 where
-    &'a T: AddMulSub<Output = T> + Div<Output = T>,
+    Self: AddMulSub<R, Output = T> + Div<R, Output = T>,
 {
     type Output = T;
 }
 
 /// Any [Num] with [Zero] and [One] that can be negated, added, subtracted and multiplied
-pub trait Ring: Num + Zero + Neg<Output = Self> + Sub<Output = Self>
+pub trait Ring: Num + Zero + Neg<Output = Self> + Sub<Output = Self> + Add<Self::Real, Output = Self> + Sub<Self::Real, Output = Self>
 where
     for<'a> &'a Self: AddMulSub<Output = Self>,
     for<'a> &'a Self::Real: AddMulSub<Output = Self::Real>,
     Self::Real: Num<Real = Self::Real> + Zero + Neg<Output = Self::Real>,
 {
 }
-impl<T: Num + Zero + Neg<Output = T> + Sub<Output = T>> Ring for T
+impl<T: Num + Zero + Neg<Output = T> + Sub<Output = T> + Add<T::Real, Output = T> + Sub<T::Real, Output = T>> Ring for T
 where
     for<'a> &'a T: AddMulSub<Output = T>,
     for<'a> &'a T::Real: AddMulSub<Output = T::Real>,
@@ -152,14 +154,14 @@ where
 }
 
 /// Any [Ring] with [One] that can be divided
-pub trait Field: Ring + One + Div<Output = Self>
+pub trait Field: Ring + One + Div<Output = Self> + Mul<Self::Real, Output = Self> + Div<Self::Real, Output = Self>
 where
     for<'a> &'a Self: AddMulSubDiv<Output = Self>,
     for<'a> &'a Self::Real: AddMulSubDiv<Output = Self::Real>,
     Self::Real: Ring<Real = Self::Real> + One,
 {
 }
-impl<T: Ring + One + Div<Output = T>> Field for T
+impl<T: Ring + One + Div<Output = T> + Mul<T::Real, Output = T> + Div<T::Real, Output = T>> Field for T
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
     for<'a> &'a T::Real: AddMulSubDiv<Output = T::Real>,
