@@ -24,7 +24,12 @@ pub trait Zero: Sized + Add<Self, Output = Self> {
         *self = Zero::zero();
     }
 
-    /// Returns `true` if `self` is equal to the additive identity.
+    /// Returns `true` if `self` is equal to the additive identity (zero).
+    /// 
+    /// # Caution
+    /// Don't use this to check if a safe division is possible. Even for IEEE floats,
+    /// this is wrong, as denormal floats are non-zero, but their inverse is non finite.
+    /// Use `is_unit` in these cases instead.
     fn is_zero(&self) -> bool;
 }
 
@@ -722,9 +727,19 @@ macro_rules! num_float_type {
             }
             #[inline(always)]
             fn is_unit(&self) -> bool {
-                // every number has an (approx) inverse, except for 0 and non finite values.
-                // inverse in the sense, that x * (1.0 / x) = 1.0
-                self != &0.0 && self.is_finite()
+                // every number has an (approx) inverse, except for 0, non finite values and denormals.
+                // which numbers exactly are not units, depends on the definition of a unit.
+                let a = self.abs();
+                // inverse in the strong sense, that 1.0 / (1.0 / x) ~ x
+                // in my tests the timing is about the same as a single multiplcation. (depends heavily on the processor)
+                a > 1.0 / $type::MAX && a < $type::MAX
+
+                // inverse in the weak sense, that x * (1.0 / x) ~ 1.0
+                //a > 1.0 / $type::MAX && self.is_finite()
+
+                // alternative implementation, which doesn't cover any of the two cases exactly is `is_normal()`.
+                // However, it appears to be much slower if it can't be optimized away at compile time. This may heavily depend on the processor.
+                //self.is_normal()
             }
         }
         #[cfg(any(feature = "std", feature = "libm"))]

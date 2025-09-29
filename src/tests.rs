@@ -105,6 +105,42 @@ macro_rules! assert_fmt_eq {
 }
 
 #[test]
+fn test_unit() {
+    // test if is_unit is working correctly for floats
+    assert!(1.0.is_unit());
+    assert!(!f32::INFINITY.is_unit());
+    assert!(!f32::NEG_INFINITY.is_unit());
+    assert!(!f32::NAN.is_unit());
+    assert!(!0.0.is_unit());
+    assert!(!(-0.0).is_unit());
+    for v in [f32::MIN_POSITIVE, 0.5 * f32::MIN_POSITIVE, 0.25 * f32::MIN_POSITIVE, 0.25 * f32::MIN_POSITIVE, 1.0 / f32::MIN_POSITIVE, f32::MAX, f32::MAX / 2.0001, f32::MAX / 2.0, f32::MAX / 1.9999] {
+        // there is two different ways to define a unit.
+        // the second one is more often true than the first:
+        let v2 = 1.0 / (1.0 / v);
+        let id = v * (1.0 / v);
+        if true {
+            assert_eq!(v2.is_finite() && v2 != 0.0, v.is_unit(), "{v:e} -> {v2:e}");
+            if v2.is_finite() && v2 != 0.0 {
+                assert_eq!((id - 1.0).abs() < 1e-6, v.is_unit(), "{v:e} -> {v2:e}");
+            }
+            assert_eq!(v2.is_unit(), v.is_unit(), "{v:e} -> {v2:e}");
+            assert_eq!(v.is_unit(), (1.0 / v).is_unit(), "{v:e} -> {v2:e}");
+        }
+        else if false {
+            assert_eq!((id - 1.0).abs() < 1e-6, v.is_unit(), "{v:e} -> {id}");
+        }
+        else {
+            // only check implication ->, not equallity.
+            // if is_unit is true, the number must have an inverse.
+            if v.is_unit() {
+                assert!((id - 1.0).abs() < 1e-6, "{v:e} -> {v2:e}");
+                //assert!(v2.is_finite() && v2 != 0.0, "{v:e} -> {v2:e}"); // this still doesn't work
+            }
+        }
+    }
+}
+
+#[test]
 fn test_gcd() {
     assert!(!f32::NAN.is_valid_euclid());
     assert!(!f64::NAN.is_valid_euclid());
