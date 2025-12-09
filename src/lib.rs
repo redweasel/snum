@@ -76,6 +76,7 @@
 //! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!], [impl_euclid_field!] and [impl_num_wrapper!].
 //! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
 //! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
+//! - Add a simple NonNaN type for the basic floats and ratios.
 
 #![no_std]
 

@@ -7,7 +7,7 @@ use ::rand::{
 };
 use core::ops::*;
 
-/// Standard normal distribution
+/// Standard normal distribution, also called gaussian distribution with spread σ=1 and centered at 0.
 pub struct StandardNormal;
 /// Unitary distribution, meaning a uniform distribution on the values where the norm is 1.
 pub struct StandardUnitary;

@@ -25,7 +25,7 @@ pub trait Zero: Sized + Add<Self, Output = Self> {
     }
 
     /// Returns `true` if `self` is equal to the additive identity (zero).
-    /// 
+    ///
     /// # Caution
     /// Don't use this to check if a safe division is possible. Even for IEEE floats,
     /// this is wrong, as denormal floats are non-zero, but their inverse is non finite.
@@ -143,14 +143,24 @@ where
 }
 
 /// Any [Num] with [Zero] and [One] that can be negated, added, subtracted and multiplied
-pub trait Ring: Num + Zero + Neg<Output = Self> + Sub<Output = Self> + Add<Self::Real, Output = Self> + Sub<Self::Real, Output = Self>
+pub trait Ring:
+    Num
+    + Zero
+    + Neg<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Self, Output = Self>
+    + Add<Self::Real, Output = Self>
+    + Sub<Self::Real, Output = Self>
+    + Mul<Self::Real, Output = Self>
 where
     for<'a> &'a Self: AddMulSub<Output = Self>,
     for<'a> &'a Self::Real: AddMulSub<Output = Self::Real>,
     Self::Real: Num<Real = Self::Real> + Zero + Neg<Output = Self::Real>,
 {
 }
-impl<T: Num + Zero + Neg<Output = T> + Sub<Output = T> + Add<T::Real, Output = T> + Sub<T::Real, Output = T>> Ring for T
+impl<
+    T: Num + Zero + Neg<Output = T> + Sub<Output = T> + Mul<Output = T> + Add<T::Real, Output = T> + Sub<T::Real, Output = T> + Mul<T::Real, Output = T>,
+> Ring for T
 where
     for<'a> &'a T: AddMulSub<Output = T>,
     for<'a> &'a T::Real: AddMulSub<Output = T::Real>,
@@ -159,14 +169,14 @@ where
 }
 
 /// Any [Ring] with [One] that can be divided
-pub trait Field: Ring + One + Div<Output = Self> + Mul<Self::Real, Output = Self> + Div<Self::Real, Output = Self>
+pub trait Field: Ring + One + Div<Output = Self> + Div<Self::Real, Output = Self>
 where
     for<'a> &'a Self: AddMulSubDiv<Output = Self>,
     for<'a> &'a Self::Real: AddMulSubDiv<Output = Self::Real>,
     Self::Real: Ring<Real = Self::Real> + One,
 {
 }
-impl<T: Ring + One + Div<Output = T> + Mul<T::Real, Output = T> + Div<T::Real, Output = T>> Field for T
+impl<T: Ring + One + Div<Output = T> + Div<T::Real, Output = T>> Field for T
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
     for<'a> &'a T::Real: AddMulSubDiv<Output = T::Real>,
