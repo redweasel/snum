@@ -371,6 +371,37 @@ fn test_float_approx() {
     assert_eq!(f64::from_approx(f32::MIN_POSITIVE / 256.0, 0.0), Some((f32::MIN_POSITIVE / 256.0) as f64));
 }
 
+#[test]
+fn test_bisect() {
+    // test on polynomials with integer roots
+    assert_eq!(bisect(|x| x, 0, 1, 0), Ok(0));
+    assert_eq!(bisect(|x| x, -1, 0, 0), Ok(0));
+    assert_eq!(bisect(|x| x, -2, -1, 0), Err(-1));
+    assert_eq!(bisect(|x| x, 2, 1, 0), Err(1));
+    assert_eq!(bisect(|x| x*x*x, -100i64, 200, 0), Ok(0));
+    assert_eq!(bisect(|x| x*x*x, 200i64, -100, 0), Ok(0));
+    assert_eq!(bisect(|x| x*x*x - 2, -100i64, 200, 0), Ok(1));
+    assert_eq!(bisect(|x| x*x*x - 4, -100i64, 200, 0), Ok(1));
+    assert_eq!(bisect(|x| x*x*x - 7, -100i64, 200, 0), Ok(1));
+    assert_eq!(bisect(|x| x*x*x + 2, -100i64, 200, 0), Ok(-1)); // usual integer rounding towards 0
+    assert_eq!(bisect(|x| x*x*x + 4, -100i64, 200, 0), Ok(-1));
+    assert_eq!(bisect(|x| x*x*x + 7, -100i64, 200, 0), Ok(-1));
+    assert_eq!(bisect(|x| x*x*x, -100i64, -50, 0), Err(-50));
+    assert_eq!(bisect(|x| x*x*x, -50i64, -100, 0), Err(-50));
+    // float example
+    assert!(bisect(|x| x*x - 2.0f64, 1.0, 2.0, 0).map_or(false, |x| (x*x - 2.0).abs() < 1e-15));
+    let res = trisect(|x| x*x - 2.0f64, 1.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x*x - 2.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x*x*x - 2.0f64, -2.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x*x*x - 2.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x*x*x - 8.0f64, 2.0, 3.0, 0);
+    assert!(res.map_or(false, |x| (x*x*x - 8.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x*x*x - 8.0f64, 1.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x*x*x - 8.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x*x*x*x*x - 2.0f64, -2.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x*x*x*x*x - 2.0).abs() < 2e-15), "{res:?}");
+}
+
 #[allow(non_upper_case_globals)]
 mod complex {
     use super::*;

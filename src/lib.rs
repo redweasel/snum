@@ -93,12 +93,14 @@ mod power;
 pub mod quaternion;
 #[cfg(feature = "rand")]
 pub mod rand;
+mod roots;
 
 pub use complex::*;
 pub use float::*;
 pub use from::*;
 pub use num::*;
 pub use power::*;
+pub use roots::*;
 
 #[cfg(feature = "rational")]
 mod continued_fractions;

@@ -17,6 +17,7 @@ where
     StandardUniform: Distribution<T>,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Complex<T> {
+        // TODO decide if this is good. im = 0 would also be a good solution here, or all points in the unit circle.
         Complex::new(rng.sample(self), rng.sample(self))
     }
 }
