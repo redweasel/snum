@@ -19,8 +19,10 @@ pub trait FloatType:
     + Neg<Output = Self>
     + NumElementary
 {
-    /// check if the number is finite. This can often also be done by checking `self == self`.
+    /// check if the number is finite. This can often also be done by checking `(self - self).is_zero()`.
     fn is_finite(&self) -> bool;
+    /// check if the number is NaN. This can often also be done by checking `self == self`.
+    fn is_nan(&self) -> bool;
     /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
@@ -28,17 +30,15 @@ pub trait FloatType:
 pub trait FloatType:
     Clone + Zero + One + FromU64 + PartialOrd + Cancel + Num<Real = Self> + IntoDiscrete<Output = Self> + Div<Output = Self> + Neg<Output = Self>
 {
-    /// check if the number is finite. This can often also be done by checking `self == self`.
+    /// check if the number is finite. This can often also be done by checking `(self - self).is_zero()`.
     fn is_finite(&self) -> bool;
+    /// check if the number is NaN. This can often also be done by checking `self == self`.
+    fn is_nan(&self) -> bool;
     /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
 
 /// A float type that can approximate `T`, e.g. `f32` can approximate `i64`.
-///
-/// Never panicing, but the results might be wrong if something
-/// is out of range, like `f32::MAX as i32`, so
-/// check the results if exact conversion is required.
 pub trait ApproxFloat<F: FloatType>: Sized {
     /// from `T` to approximation with cutoff. E.g. i64 -> f32
     fn to_approx(&self) -> F;
@@ -54,6 +54,10 @@ macro_rules! impl_approx_float {
             #[inline(always)]
             fn is_finite(&self) -> bool {
                 <$float>::is_finite(*self)
+            }
+            #[inline(always)]
+            fn is_nan(&self) -> bool {
+                <$float>::is_nan(*self)
             }
             #[inline(always)]
             fn is_infinite(&self) -> bool {
