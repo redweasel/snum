@@ -21,10 +21,10 @@ where for<'a> &'a T: AddMulSubDiv<Output = T> {
     if a != a || b != b {
         return Err(a + b); // NaN values detected
     }
-    if a == b {
-        return Ok(a);
-    }
     let mut fa = f(a.clone());
+    if a == b {
+        return if fa.is_zero() { Ok(a) } else { Err(a) };
+    }
     let mut fb = f(b.clone());
     let sign = fa.clone();
     if &sign * &fb > T::zero() || sign != sign {
@@ -58,7 +58,7 @@ where for<'a> &'a T: AddMulSubDiv<Output = T> {
         }
         i += 1;
     }
-    Ok(&(&fa / &(&fa - &fb) * (&b - &a)) + &a)
+    Ok(&(&(&fa * &(&b - &a)) / &(&fa - &fb)) + &a)
 }
 
 /// "Trisection" is a root finding algorithm for analytic monotone or strictly monotone functions,
@@ -79,11 +79,11 @@ where for<'a> &'a T: AddMulSubDiv<Output = T> {
     if a != a || b != b {
         return Err(a + b); // NaN values detected
     }
+    let mut fa = f(a.clone());
     if a == b {
-        return Ok(a);
+        return if fa.is_zero() { Ok(a) } else { Err(a) };
     }
     assert!(a < b);
-    let mut fa = f(a.clone());
     let mut fb = f(b.clone());
     let sign = fa.clone();
     if &sign * &fb > T::zero() || sign != sign {

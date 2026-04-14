@@ -54,7 +54,7 @@ macro_rules! for_integers {
     }; // isize and usize are one of those and don't need to be tested separately.};
 }
 
-use core::f64;
+use core::{f64, i32};
 #[cfg(not(feature = "std"))]
 use core::fmt::{self, Write};
 #[cfg(not(feature = "std"))]
@@ -372,12 +372,130 @@ fn test_float_approx() {
 }
 
 #[test]
+fn test_float_functions() {
+    // just making sure all float functions are correctly forwarded (improve test coverage)
+    fn test_f32(x: f32) {
+        assert_eq!(<f32 as FloatType>::is_nan(&x), x.is_nan());
+        if !x.is_nan() {
+            assert_eq!(<f32 as IntoDiscrete>::ceil(&x), x.ceil());
+            assert_eq!(<f32 as IntoDiscrete>::floor(&x), x.floor());
+            assert_eq!(<f32 as IntoDiscrete>::round(&x), x.round());
+            assert_eq!(<f32 as IntoDiscrete>::div_floor(&x, &0.9), x.div_euclid(0.9));
+            assert_eq!(<f32 as FloatType>::is_finite(&x), x.is_finite());
+            assert_eq!(<f32 as FloatType>::is_infinite(&x), x.is_infinite());
+            #[cfg(any(feature = "std", feature = "libm"))]
+            {
+                let y = <f32 as NumElementary>::pow(&x, &2.0);
+                assert!(y == x * x || (y - x * x).abs() <= x * x * 2e-15);
+            }
+            assert_eq!(x.re(), x);
+            assert_eq!(x.conj(), x);
+        }
+    }
+    fn test_f64(x: f64) {
+        assert_eq!(<f64 as FloatType>::is_nan(&x), x.is_nan());
+        if !x.is_nan() {
+            assert_eq!(<f64 as IntoDiscrete>::ceil(&x), x.ceil());
+            assert_eq!(<f64 as IntoDiscrete>::floor(&x), x.floor());
+            assert_eq!(<f64 as IntoDiscrete>::round(&x), x.round());
+            assert_eq!(<f64 as IntoDiscrete>::div_floor(&x, &0.9), x.div_euclid(0.9));
+            assert_eq!(<f64 as FloatType>::is_finite(&x), x.is_finite());
+            assert_eq!(<f64 as FloatType>::is_infinite(&x), x.is_infinite());
+            #[cfg(any(feature = "std", feature = "libm"))]
+            {
+                let y = <f64 as NumElementary>::pow(&x, &2.0);
+                assert!(y == x * x || (y - x * x).abs() <= x * x * 2e-15);
+            }
+            assert_eq!(x.re(), x);
+            assert_eq!(x.conj(), x);
+        }
+        test_f32(x as f32);
+    }
+    test_f64(0.0);
+    test_f64(1.0);
+    test_f64(1.4);
+    test_f64(1.5);
+    test_f64(1.6);
+    test_f64(-1.4);
+    test_f64(-1.5);
+    test_f64(-1.6);
+    test_f64(f64::INFINITY);
+    test_f64(f64::NEG_INFINITY);
+    test_f64(f64::NAN);
+}
+
+#[test]
+fn test_int_functions() {
+    // just making sure all float functions are correctly forwarded (improve test coverage)
+    fn test<T: IntoDiscrete<Output = T> + ApproxFloat<f64> + Euclid + Num<Real = T> + FromU64 + PartialOrd + Zero + One + core::ops::Sub<Output = T> + core::ops::Div<Output = T>>(x: T) {
+        assert_eq!(<T as IntoDiscrete>::ceil(&x), x);
+        assert_eq!(<T as IntoDiscrete>::floor(&x), x);
+        assert_eq!(<T as IntoDiscrete>::round(&x), x);
+        let two = T::from_u64(2);
+        if x.is_valid_euclid() {
+            assert_eq!(<T as IntoDiscrete>::div_floor(&x, &two), x.clone() / two.clone());
+        }
+        else {
+            assert_eq!(<T as IntoDiscrete>::div_floor(&x, &two), (x.clone() + T::one()) / two.clone() - T::one());
+        }
+        assert_eq!(<T as Euclid>::is_valid_euclid(&x), x >= T::zero());
+        assert_eq!(<T as IntoDiscrete>::floor(&x), x);
+        assert_eq!(<T as IntoDiscrete>::round(&x), x);
+        assert_eq!(x.re(), x);
+        assert_eq!(x.conj(), x);
+        assert_eq!(x.is_unit(), x.is_one() || !x.is_valid_euclid() && x == T::zero() - T::one());
+        assert_eq!(T::from_approx(x.to_approx(), 0.0), Some(x.clone())); // this should work for the integers which get tested below
+        assert_eq!(T::from_approx(x.to_approx() + 0.5, 0.0), None);
+        assert_eq!(T::from_approx(x.to_approx() + 0.25, 0.6), Some(x.clone()));
+    }
+    test(i32::MIN);
+    test(i32::MAX);
+    for i in -5i32..=5i32 {
+        test(i);
+    }
+    test(u32::MIN);
+    test(u32::MAX);
+    for i in 0u32..=5u32 {
+        test(i);
+    }
+    assert_eq!(u32::from_approx(0.4f32, 0.5), Some(0));
+    assert_eq!(u32::from_approx(0.0f32, 0.0), Some(0));
+    assert_eq!(u32::from_approx(-0.4f32, 0.5), Some(0));
+    assert_eq!(u32::from_approx(-1.0f32, 0.0), None);
+    assert_eq!(u32::from_approx(1e32f32, 0.0), None);
+    assert_eq!(i32::from_approx(1e32f32, 0.0), None);
+    test(core::num::Wrapping(i32::MIN));
+    test(core::num::Wrapping(i32::MAX));
+    for i in 0i32..=5i32 {
+        test(core::num::Wrapping(i));
+    }
+    test(core::num::Wrapping(u32::MIN));
+    test(core::num::Wrapping(u32::MAX));
+    for i in 0u32..=5u32 {
+        test(core::num::Wrapping(i));
+    }
+    #[cfg(feature = "ibig")] {
+        for i in 0u32..=5u32 {
+            test(ibig::UBig::from(i));
+            test(ibig::IBig::from(i));
+        }
+        assert_eq!(ibig::UBig::from_approx(0.4f32, 0.5), Some(ibig::UBig::zero()));
+        assert_eq!(ibig::UBig::from_approx(0.0f32, 0.0), Some(ibig::UBig::zero()));
+        assert_eq!(ibig::UBig::from_approx(-0.4f32, 0.5), Some(ibig::UBig::zero()));
+        assert_eq!(ibig::UBig::from_approx(-1.0f32, 0.0), None);
+    }
+}
+
+#[test]
 fn test_bisect() {
     // test on polynomials with integer roots
     assert_eq!(bisect(|x| x, 0, 1, 0), Ok(0));
     assert_eq!(bisect(|x| x, -1, 0, 0), Ok(0));
+    assert_eq!(bisect(|x| x, 0, 0, 0), Ok(0));
     assert_eq!(bisect(|x| x, -2, -1, 0), Err(-1));
     assert_eq!(bisect(|x| x, 2, 1, 0), Err(1));
+    assert_eq!(bisect(|x| x, 1, 1, 0), Err(1));
+    assert_eq!(bisect(|x| x, -10, 17, 1), Ok(0)); // early abort, but linear interpolated
     assert_eq!(bisect(|x| x*x*x, -100i64, 200, 0), Ok(0));
     assert_eq!(bisect(|x| x*x*x, 200i64, -100, 0), Ok(0));
     assert_eq!(bisect(|x| x*x*x - 2, -100i64, 200, 0), Ok(1));
@@ -389,6 +507,16 @@ fn test_bisect() {
     assert_eq!(bisect(|x| x*x*x, -100i64, -50, 0), Err(-50));
     assert_eq!(bisect(|x| x*x*x, -50i64, -100, 0), Err(-50));
     // float example
+    assert!(bisect(|x| x, f64::NAN, 1.0, 0).err().map_or(false, |x| x.is_nan()));
+    assert!(bisect(|x| x, 1.0, f64::NAN, 0).err().map_or(false, |x| x.is_nan()));
+    assert!(trisect(|x| x, f64::NAN, 1.0, 0).err().map_or(false, |x| x.is_nan()));
+    assert!(trisect(|x| x, 1.0, f64::NAN, 0).err().map_or(false, |x| x.is_nan()));
+    assert_eq!(trisect(|x| x, 0.0, 0.0, 0), Ok(0.0));
+    assert_eq!(trisect(|x| x, 1.0, 1.0, 0), Err(1.0));
+    assert_eq!(trisect(|x| x, 1.0, 2.0, 0), Err(1.0));
+    assert_eq!(trisect(|x| x, -2.0, -1.0, 0), Err(-1.0));
+    assert_eq!(trisect(|x| x, -10.0, 17.0, 1), Ok(0.0));
+    assert_eq!(trisect(|x| x, -4.0, 8.0, 2), Ok(0.0));
     assert!(bisect(|x| x*x - 2.0f64, 1.0, 2.0, 0).map_or(false, |x| (x*x - 2.0).abs() < 1e-15));
     let res = trisect(|x| x*x - 2.0f64, 1.0, 2.0, 0);
     assert!(res.map_or(false, |x| (x*x - 2.0).abs() < 1e-15), "{res:?}");
@@ -399,6 +527,8 @@ fn test_bisect() {
     let res = trisect(|x| x*x*x - 8.0f64, 1.0, 2.0, 0);
     assert!(res.map_or(false, |x| (x*x*x - 8.0).abs() < 1e-15), "{res:?}");
     let res = trisect(|x| x*x*x*x*x - 2.0f64, -2.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x*x*x*x*x - 2.0).abs() < 2e-15), "{res:?}");
+    let res = trisect(|x| x*x*x*x*x - 2.0f64, 1.148698354997, 2.0, 0);
     assert!(res.map_or(false, |x| (x*x*x*x*x - 2.0).abs() < 2e-15), "{res:?}");
 }
 
@@ -1238,7 +1368,9 @@ mod complex {
     #[test]
     fn test_string_formatting() {
         assert_fmt_eq!(format_args!("{:?}", _0_0i), "Complex { re: 0.0, im: 0.0 }");
+        assert_fmt_eq!(format_args!("{:.2?}", _0_0i), "Complex { re: 0.00, im: 0.00 }");
         assert_fmt_eq!(format_args!("{:#?}", _0_0i), "0.0+0.0 i");
+        assert_fmt_eq!(format_args!("{:#.2?}", _0_0i), "0.00+0.00 i");
         assert_fmt_eq!(format_args!("{:?}", _0_1i), "Complex { re: 0.0, im: 1.0 }");
         assert_fmt_eq!(format_args!("{:#?}", _0_1i), "0.0+1.0 i");
 
@@ -1261,7 +1393,9 @@ mod complex {
         let a = Complex::new(1.23456, 123.456);
         assert_fmt_eq!(format_args!("{}", a), "1.23456+123.456i");
         assert_fmt_eq!(format_args!("{:.2}", a), "1.23+123.46i");
+        assert_fmt_eq!(format_args!("{:#.2}", a), "1.23+123.46i");
         assert_fmt_eq!(format_args!("{:.2e}", a), "1.23e0+1.23e2i");
+        assert_fmt_eq!(format_args!("{:#.2e}", a), "1.23e0+1.23e2i");
         assert_fmt_eq!(format_args!("{:+.2E}", a), "+1.23E0+1.23E2i");
         assert_fmt_eq!(format_args!("{:+20.2E}", a), "     +1.23E0+1.23E2i");
 
@@ -2031,6 +2165,7 @@ mod quaternion {
         let a = Quaternion::new(1.23456, 123.456, 12., 12.);
         assert_fmt_eq!(format_args!("{}", a), "1.23456+123.456i+12j+12k");
         assert_fmt_eq!(format_args!("{:.2}", a), "1.23+123.46i+12.00j+12.00k");
+        assert_fmt_eq!(format_args!("{:#.2}", a), "1.23+123.46i+12.00j+12.00k");
         assert_fmt_eq!(format_args!("{:.2e}", a), "1.23e0+1.23e2i+1.20e1j+1.20e1k");
         assert_fmt_eq!(format_args!("{:+.2E}", a), "+1.23E0+1.23E2i+1.20E1j+1.20E1k");
         assert_fmt_eq!(format_args!("{:+36.2E}", a), "     +1.23E0+1.23E2i+1.20E1j+1.20E1k");
@@ -2555,6 +2690,7 @@ mod rational {
         assert_fmt_eq!(format_args!("{:e}", _BILLION), "1e9");
         assert_fmt_eq!(format_args!("{:+e}", _BILLION), "+1e9");
         assert_fmt_eq!(format_args!("{:.2e}", _BILLION.recip()), "1.00e0/1.00e9");
+        assert_fmt_eq!(format_args!("{:#.2e}", _BILLION.recip()), "1.00e0/1.00e9");
         assert_fmt_eq!(format_args!("{:+.2e}", _BILLION.recip()), "+1.00e0/1.00e9");
 
         assert_fmt_eq!(format_args!("{:.2E}", -_2), "-2.00E0");
@@ -2563,6 +2699,7 @@ mod rational {
         assert_fmt_eq!(format_args!("{:E}", _BILLION), "1E9");
         assert_fmt_eq!(format_args!("{:+E}", _BILLION), "+1E9");
         assert_fmt_eq!(format_args!("{:E}", _BILLION.recip()), "1E0/1E9");
+        assert_fmt_eq!(format_args!("{:#.2E}", _BILLION.recip()), "1.00E0/1.00E9");
         assert_fmt_eq!(format_args!("{:+.2E}", _BILLION.recip()), "+1.00E0/1.00E9");
         assert_fmt_eq!(format_args!("{}", _NAN), "NaN");
         assert_fmt_eq!(format_args!("{}", _INF), "∞");

@@ -91,8 +91,8 @@ macro_rules! impl_approx_float {
         })+
     };
 }
-impl_approx_float!(f32; i32, i64, i128);
-impl_approx_float!(f64; i32, i64, i128);
+impl_approx_float!(f32; i32, i64, i128, u32, u64, u128);
+impl_approx_float!(f64; i32, i64, i128, u32, u64, u128);
 
 impl ApproxFloat<f32> for f64 {
     #[inline(always)]
@@ -134,9 +134,14 @@ fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
     exponent -= 127 + 23;
     let mut mantissa = if bits >> 31 == 0 { mantissa as i32 } else { -(mantissa as i32) };
     // cancel the mantissa
-    let c = mantissa.trailing_zeros();
-    mantissa >>= c;
-    exponent += c as i16;
+    if mantissa != 0 {
+        let c = mantissa.trailing_zeros();
+        mantissa >>= c;
+        exponent += c as i16;
+    }
+    else {
+        exponent = 0;
+    }
     (mantissa, exponent, finite, zero_mantissa)
 }
 // adapted from num_traits
@@ -157,9 +162,14 @@ fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
     exponent -= 1023 + 52;
     let mut mantissa = if bits >> 63 == 0 { mantissa as i64 } else { -(mantissa as i64) };
     // cancel the mantissa
-    let c = mantissa.trailing_zeros();
-    mantissa >>= c;
-    exponent += c as i16;
+    if mantissa != 0 {
+        let c = mantissa.trailing_zeros();
+        mantissa >>= c;
+        exponent += c as i16;
+    }
+    else {
+        exponent = 0;
+    }
     (mantissa, exponent, finite, zero_mantissa)
 }
 
@@ -254,6 +264,23 @@ mod bigint {
                         return None;
                     }
                     Some(ibig::IBig::from(mantissa) << exponent as usize)
+                }
+            }
+
+            impl ApproxFloat<$float> for ibig::UBig {
+                #[inline(always)]
+                fn to_approx(&self) -> $float {
+                    self.to_f64() as $float
+                }
+                #[inline(always)]
+                fn from_approx(value: $float, tol: $float) -> Option<Self> {
+                    // in contrast to num_bigint, ibig doesn't have this functionallity build in.
+                    let vf = value.round();
+                    let (mantissa, exponent, finite, _) = $integer_decode(vf);
+                    if !finite || mantissa < 0 || exponent < 0 || (vf - value).abs() > tol {
+                        return None;
+                    }
+                    Some(ibig::UBig::from(mantissa as u64) << exponent as usize)
                 }
             }
         };
