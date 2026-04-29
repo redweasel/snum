@@ -54,9 +54,9 @@ macro_rules! for_integers {
     }; // isize and usize are one of those and don't need to be tested separately.};
 }
 
-use core::{f64, i32};
 #[cfg(not(feature = "std"))]
 use core::fmt::{self, Write};
+use core::{f64, i32};
 #[cfg(not(feature = "std"))]
 struct NoStdTester {
     cursor: usize,
@@ -113,7 +113,17 @@ fn test_unit() {
     assert!(!f32::NAN.is_unit());
     assert!(!0.0.is_unit());
     assert!(!(-0.0).is_unit());
-    for v in [f32::MIN_POSITIVE, 0.5 * f32::MIN_POSITIVE, 0.25 * f32::MIN_POSITIVE, 0.25 * f32::MIN_POSITIVE, 1.0 / f32::MIN_POSITIVE, f32::MAX, f32::MAX / 2.0001, f32::MAX / 2.0, f32::MAX / 1.9999] {
+    for v in [
+        f32::MIN_POSITIVE,
+        0.5 * f32::MIN_POSITIVE,
+        0.25 * f32::MIN_POSITIVE,
+        0.25 * f32::MIN_POSITIVE,
+        1.0 / f32::MIN_POSITIVE,
+        f32::MAX,
+        f32::MAX / 2.0001,
+        f32::MAX / 2.0,
+        f32::MAX / 1.9999,
+    ] {
         // there is two different ways to define a unit.
         // the second one is more often true than the first:
         let v2 = 1.0 / (1.0 / v);
@@ -125,11 +135,9 @@ fn test_unit() {
             }
             assert_eq!(v2.is_unit(), v.is_unit(), "{v:e} -> {v2:e}");
             assert_eq!(v.is_unit(), (1.0 / v).is_unit(), "{v:e} -> {v2:e}");
-        }
-        else if false {
+        } else if false {
             assert_eq!((id - 1.0).abs() < 1e-6, v.is_unit(), "{v:e} -> {id}");
-        }
-        else {
+        } else {
             // only check implication ->, not equallity.
             // if is_unit is true, the number must have an inverse.
             if v.is_unit() {
@@ -427,15 +435,27 @@ fn test_float_functions() {
 #[test]
 fn test_int_functions() {
     // just making sure all float functions are correctly forwarded (improve test coverage)
-    fn test<T: IntoDiscrete<Output = T> + ApproxFloat<f64> + Euclid + Num<Real = T> + FromU64 + PartialOrd + Zero + One + core::ops::Sub<Output = T> + core::ops::Div<Output = T>>(x: T) {
+    fn test<
+        T: IntoDiscrete<Output = T>
+            + ApproxFloat<f64>
+            + Euclid
+            + Num<Real = T>
+            + FromU64
+            + PartialOrd
+            + Zero
+            + One
+            + core::ops::Sub<Output = T>
+            + core::ops::Div<Output = T>,
+    >(
+        x: T,
+    ) {
         assert_eq!(<T as IntoDiscrete>::ceil(&x), x);
         assert_eq!(<T as IntoDiscrete>::floor(&x), x);
         assert_eq!(<T as IntoDiscrete>::round(&x), x);
         let two = T::from_u64(2);
         if x.is_valid_euclid() {
             assert_eq!(<T as IntoDiscrete>::div_floor(&x, &two), x.clone() / two.clone());
-        }
-        else {
+        } else {
             assert_eq!(<T as IntoDiscrete>::div_floor(&x, &two), (x.clone() + T::one()) / two.clone() - T::one());
         }
         assert_eq!(<T as Euclid>::is_valid_euclid(&x), x >= T::zero());
@@ -474,7 +494,8 @@ fn test_int_functions() {
     for i in 0u32..=5u32 {
         test(core::num::Wrapping(i));
     }
-    #[cfg(feature = "ibig")] {
+    #[cfg(feature = "ibig")]
+    {
         for i in 0u32..=5u32 {
             test(ibig::UBig::from(i));
             test(ibig::IBig::from(i));
@@ -496,16 +517,16 @@ fn test_bisect() {
     assert_eq!(bisect(|x| x, 2, 1, 0), Err(1));
     assert_eq!(bisect(|x| x, 1, 1, 0), Err(1));
     assert_eq!(bisect(|x| x, -10, 17, 1), Ok(0)); // early abort, but linear interpolated
-    assert_eq!(bisect(|x| x*x*x, -100i64, 200, 0), Ok(0));
-    assert_eq!(bisect(|x| x*x*x, 200i64, -100, 0), Ok(0));
-    assert_eq!(bisect(|x| x*x*x - 2, -100i64, 200, 0), Ok(1));
-    assert_eq!(bisect(|x| x*x*x - 4, -100i64, 200, 0), Ok(1));
-    assert_eq!(bisect(|x| x*x*x - 7, -100i64, 200, 0), Ok(1));
-    assert_eq!(bisect(|x| x*x*x + 2, -100i64, 200, 0), Ok(-1)); // usual integer rounding towards 0
-    assert_eq!(bisect(|x| x*x*x + 4, -100i64, 200, 0), Ok(-1));
-    assert_eq!(bisect(|x| x*x*x + 7, -100i64, 200, 0), Ok(-1));
-    assert_eq!(bisect(|x| x*x*x, -100i64, -50, 0), Err(-50));
-    assert_eq!(bisect(|x| x*x*x, -50i64, -100, 0), Err(-50));
+    assert_eq!(bisect(|x| x * x * x, -100i64, 200, 0), Ok(0));
+    assert_eq!(bisect(|x| x * x * x, 200i64, -100, 0), Ok(0));
+    assert_eq!(bisect(|x| x * x * x - 2, -100i64, 200, 0), Ok(1));
+    assert_eq!(bisect(|x| x * x * x - 4, -100i64, 200, 0), Ok(1));
+    assert_eq!(bisect(|x| x * x * x - 7, -100i64, 200, 0), Ok(1));
+    assert_eq!(bisect(|x| x * x * x + 2, -100i64, 200, 0), Ok(-1)); // usual integer rounding towards 0
+    assert_eq!(bisect(|x| x * x * x + 4, -100i64, 200, 0), Ok(-1));
+    assert_eq!(bisect(|x| x * x * x + 7, -100i64, 200, 0), Ok(-1));
+    assert_eq!(bisect(|x| x * x * x, -100i64, -50, 0), Err(-50));
+    assert_eq!(bisect(|x| x * x * x, -50i64, -100, 0), Err(-50));
     // float example
     assert!(bisect(|x| x, f64::NAN, 1.0, 0).err().map_or(false, |x| x.is_nan()));
     assert!(bisect(|x| x, 1.0, f64::NAN, 0).err().map_or(false, |x| x.is_nan()));
@@ -517,19 +538,19 @@ fn test_bisect() {
     assert_eq!(trisect(|x| x, -2.0, -1.0, 0), Err(-1.0));
     assert_eq!(trisect(|x| x, -10.0, 17.0, 1), Ok(0.0));
     assert_eq!(trisect(|x| x, -4.0, 8.0, 2), Ok(0.0));
-    assert!(bisect(|x| x*x - 2.0f64, 1.0, 2.0, 0).map_or(false, |x| (x*x - 2.0).abs() < 1e-15));
-    let res = trisect(|x| x*x - 2.0f64, 1.0, 2.0, 0);
-    assert!(res.map_or(false, |x| (x*x - 2.0).abs() < 1e-15), "{res:?}");
-    let res = trisect(|x| x*x*x - 2.0f64, -2.0, 2.0, 0);
-    assert!(res.map_or(false, |x| (x*x*x - 2.0).abs() < 1e-15), "{res:?}");
-    let res = trisect(|x| x*x*x - 8.0f64, 2.0, 3.0, 0);
-    assert!(res.map_or(false, |x| (x*x*x - 8.0).abs() < 1e-15), "{res:?}");
-    let res = trisect(|x| x*x*x - 8.0f64, 1.0, 2.0, 0);
-    assert!(res.map_or(false, |x| (x*x*x - 8.0).abs() < 1e-15), "{res:?}");
-    let res = trisect(|x| x*x*x*x*x - 2.0f64, -2.0, 2.0, 0);
-    assert!(res.map_or(false, |x| (x*x*x*x*x - 2.0).abs() < 2e-15), "{res:?}");
-    let res = trisect(|x| x*x*x*x*x - 2.0f64, 1.148698354997, 2.0, 0);
-    assert!(res.map_or(false, |x| (x*x*x*x*x - 2.0).abs() < 2e-15), "{res:?}");
+    assert!(bisect(|x| x * x - 2.0f64, 1.0, 2.0, 0).map_or(false, |x| (x * x - 2.0).abs() < 1e-15));
+    let res = trisect(|x| x * x - 2.0f64, 1.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x * x - 2.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x * x * x - 2.0f64, -2.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x * x * x - 2.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x * x * x - 8.0f64, 2.0, 3.0, 0);
+    assert!(res.map_or(false, |x| (x * x * x - 8.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x * x * x - 8.0f64, 1.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x * x * x - 8.0).abs() < 1e-15), "{res:?}");
+    let res = trisect(|x| x * x * x * x * x - 2.0f64, -2.0, 2.0, 0);
+    assert!(res.map_or(false, |x| (x * x * x * x * x - 2.0).abs() < 2e-15), "{res:?}");
+    let res = trisect(|x| x * x * x * x * x - 2.0f64, 1.148698354997, 2.0, 0);
+    assert!(res.map_or(false, |x| (x * x * x * x * x - 2.0).abs() < 2e-15), "{res:?}");
 }
 
 #[allow(non_upper_case_globals)]
@@ -700,6 +721,49 @@ mod complex {
         let _ = complex![(2+3) i];
         let _ = complex![(2+3) j];
         let _: i32 = complex![2 + 3]; // uses .into() so a type is needed
+    }
+
+    #[test]
+    fn test_complex_mul_add() {
+        for i in -26..26 {
+            for j in 0..4 {
+                for b in [-1.0f32, 0.001, 1.0, 2.0, 2.1, core::f32::consts::PI, core::f32::consts::E] {
+                    let x1 = 1.0f32 + 2.0.powi(-i);
+                    let x2 = b + 2.0.powi(-i - 1);
+                    for (s1, s2) in [(x1, x2), (x2, x1)] {
+                        let mut a = Complex::new(x1, s2);
+                        let mut b = Complex::new(x2, -s1);
+                        let mut a2 = Complex::new(x1 as f64, s2 as f64);
+                        let mut b2 = Complex::new(x2 as f64, -s1 as f64);
+                        for _ in 0..j {
+                            a = a.mul_i();
+                            b = b.mul_i();
+                            a2 = a2.mul_i();
+                            b2 = b2.mul_i();
+                        }
+                        for k in -64..64 {
+                            let mut add = Complex::imag(k as f32 / 3.0);
+                            for _ in 0..j {
+                                add = add.mul_i();
+                            }
+                            let add2 = Complex::new(add.re as f64, add.im as f64);
+                            let m2 = a2 * b2 + add2;
+                            let m = complex![(m2.re as f32) + (m2.im as f32) i];
+                            let pad = m * if k != 0 { 8.0 } else { 3.0 };
+                            assert!(
+                                a.mul_add(b, add) - m + pad == pad,
+                                "failed at {i}\n  left: {}\n right: {m}",
+                                a.mul_add(b, add)
+                            );
+                        }
+                        let m2 = a2 * b2;
+                        let m = complex![(m2.re as f32) + (m2.im as f32) i];
+                        let pad = m * 3.0;
+                        assert!(a.mul_exact(b) - m + pad == pad, "failed at {i}\n  left: {}\n right: {m}", a.mul_exact(b));
+                    }
+                }
+            }
+        }
     }
 
     #[cfg(any(feature = "std", feature = "libm"))]

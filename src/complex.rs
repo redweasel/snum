@@ -273,6 +273,55 @@ impl<T: Clone + One + Add<Output = T> + Mul<Output = T> + Sub<Output = T> + Div<
     }
 }
 
+macro_rules! impl_mul_add {
+    ($($T:ty),+) => {
+        $(impl Complex<$T> {
+            /// Best effort precision complex multiplication (max 1 ulp error).
+            /// 
+            /// Note, this can only be done for the float types `f32` and `f64` as
+            /// they have the exactly defined rounding behavior of `mul_add`.
+            pub fn mul_exact(self: Complex<$T>, rhs: Complex<$T>) -> Complex<$T> {
+                let a = self.re * rhs.re;
+                let roundoff_a = self.re.mul_add(rhs.re, -a);
+                let b = self.im * rhs.re;
+                let roundoff_b = self.im.mul_add(rhs.re, -b);
+                Complex {
+                    re: roundoff_a - self.im.mul_add(rhs.im, -a),
+                    im: self.re.mul_add(rhs.im, b) + roundoff_b,
+                }
+            }
+            /// Best effort precision complex multiplication and addition (max 4 ulp error, 1 ulp error without "add").
+            /// 
+            /// Note, this can only be done for the float types `f32` and `f64` as
+            /// they have the exactly defined rounding behavior of `mul_add`.
+            pub fn mul_add(
+                self: Complex<$T>,
+                mul: Complex<$T>,
+                add: Complex<$T>,
+            ) -> Complex<$T> {
+                let a = self.re * mul.re;
+                let roundoff_a = self.re.mul_add(mul.re, -a);
+                let b = self.im * mul.re;
+                let roundoff_b = self.im.mul_add(mul.re, -b);
+                let c = add.re + a;
+                let roundoff_c = if a.abs() > add.re.abs() { a - c + add.re } else { add.re - c + a };
+                let d = add.im + b;
+                let roundoff_d = if b.abs() > add.im.abs() { b - d + add.im } else { add.im - d + b };
+                // this procedure isn't exact due to the multiple points where rounding can occur.
+                // It also just assumes that the roundoff will be small compared to the remaining numbers.
+                Complex {
+                    re: (roundoff_a + roundoff_c) - self.im.mul_add(mul.im, -c),
+                    im: self.re.mul_add(mul.im, d) + (roundoff_d + roundoff_b),
+                }
+            }
+        })+
+    };
+}
+
+// MulAdd is not a special trait for the MulAdd functionallity of
+// floating point numbers, as that is quite a niche function.
+impl_mul_add!(f32, f64);
+
 impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>> Euclid for Complex<T> {
     /// Euclidean division of complex numbers, such that `|r|^2 <= |b|^2/2`
     /// is satisfied for the remainder `r` with non negative real part.

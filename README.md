@@ -24,9 +24,9 @@ Similarly the assign operators like `AssignAdd` are implemented based on the ref
 This is done without cloning thanks to `take_mut`.
 
 Whenever deciding between precision and performance, the question of *what is required more frequently*
-and *what can be implemented outside of this library* is asked. E.g. the `Ratio` type does expensive
+and *what should be implemented outside of this library* is asked. E.g. the `Ratio` type does expensive
 canceling to get the most range out of its integers, whereas `Complex` doesn't do that, as it's usually
-used with floats.
+used with floats. On the other hand `Complex` has expensive `mul_add` and `mul_exact` functions if used with floats.
 
 The resulting `Complex` and `Ratio` types are slightly different in some places, but largely compatible with `num`.
 E.g. The multiplicative inverse on these commutative fields is called `recip` instead of `inv`, as some type might be an invertible
