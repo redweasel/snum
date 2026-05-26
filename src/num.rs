@@ -248,13 +248,10 @@ pub trait RealNum: Num<Real = Self> + PartialOrd {}
 impl<T: Num<Real = T> + PartialOrd> RealNum for T {}
 
 /// A number that supports sqrt and cbrt (E.g. a float).
-/// Integers should not implement this, as their sqrt and cbrt are approx.
-// sqrt and cbrt are enough to get all analytic polynomial solutions working, which was the goal with this type.
+/// Integers should not implement this, as their sqrt is approx.
 pub trait NumAlgebraic: Num {
     #[must_use]
     fn sqrt(&self) -> Self;
-    #[must_use]
-    fn cbrt(&self) -> Self;
     /// absolute value/magnitude of the number.
     /// Note, that it's possible that `x.abs_sqr().sqrt() != x.abs()`, but `x.abs() * x.abs() = x.abs_sqr()` should always hold.
     #[must_use]
@@ -271,6 +268,8 @@ pub trait NumAlgebraic: Num {
 
 /// A number that supports trigonometric and exponential functions.
 pub trait NumElementary: NumAlgebraic {
+    #[must_use]
+    fn cbrt(&self) -> Self;
     #[must_use]
     fn sin(&self) -> Self;
     #[must_use]
@@ -755,7 +754,6 @@ macro_rules! num_float_type {
         #[cfg(any(feature = "std", feature = "libm"))]
         impl NumAlgebraic for $type {
             forward_math_impl!($type, sqrt, sqrtf);
-            forward_math_impl!($type, cbrt, cbrtf);
             #[inline(always)]
             fn abs(&self) -> Self::Real {
                 <$type>::abs(*self)
@@ -768,6 +766,7 @@ macro_rules! num_float_type {
         }
         #[cfg(any(feature = "std", feature = "libm"))]
         impl NumElementary for $type {
+            forward_math_impl!($type, cbrt, cbrtf);
             forward_math_impl!($type, sin, sinf);
             forward_math_impl!($type, cos, cosf);
             forward_math_impl!($type, tan, tanf);
@@ -867,10 +866,6 @@ macro_rules! impl_num_wrapper {
             #[inline(always)]
             fn sqrt(&self) -> Self {
                 $Wrap(self.0.sqrt())
-            }
-            #[inline(always)]
-            fn cbrt(&self) -> Self {
-                $Wrap(self.0.cbrt())
             }
             #[inline(always)]
             fn abs(&self) -> Self::Real {

@@ -426,7 +426,7 @@ where
     }
 }
 
-impl<T: NumElementary<Real = T> + AlgebraicField + PartialOrd> NumAlgebraic for Quaternion<T>
+impl<T: AlgebraicField<Real = T> + PartialOrd> NumAlgebraic for Quaternion<T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
@@ -476,24 +476,6 @@ where
         let fac = (&len / &half.abs_sqr()).sqrt(); // sqrt eval 2
         half * fac
     }
-    fn cbrt(&self) -> Self {
-        // use polar form
-        let im_len = self.im_abs();
-        if im_len.is_zero() {
-            return Self {
-                re: self.re.cbrt(),
-                ..self.clone()
-            }; // clone the zero signs
-        }
-        let Complex { re, im } = Complex::new(self.re.clone(), im_len.clone()).cbrt();
-        let f = &im / &im_len;
-        Self {
-            re,
-            im_i: &f * &self.im_i,
-            im_j: &f * &self.im_j,
-            im_k: &f * &self.im_k,
-        }
-    }
 }
 
 macro_rules! forward_function {
@@ -534,6 +516,7 @@ impl<T: NumElementary + AlgebraicField<Real = T> + PartialOrd> NumElementary for
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
+    forward_function!(cbrt);
     forward_function!(sin);
     forward_function!(cos);
     forward_function!(tan);

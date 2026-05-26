@@ -277,7 +277,7 @@ macro_rules! impl_mul_add {
     ($($T:ty),+) => {
         $(impl Complex<$T> {
             /// Best effort precision complex multiplication (max 1 ulp error).
-            /// 
+            ///
             /// Note, this can only be done for the float types `f32` and `f64` as
             /// they have the exactly defined rounding behavior of `mul_add`.
             pub fn mul_exact(self: Complex<$T>, rhs: Complex<$T>) -> Complex<$T> {
@@ -291,7 +291,7 @@ macro_rules! impl_mul_add {
                 }
             }
             /// Best effort precision complex multiplication and addition (max 4 ulp error, 1 ulp error without "add").
-            /// 
+            ///
             /// Note, this can only be done for the float types `f32` and `f64` as
             /// they have the exactly defined rounding behavior of `mul_add`.
             pub fn mul_add(
@@ -472,7 +472,7 @@ where
     }
 }
 
-impl<T: AlgebraicField<Real = T> + NumElementary + PartialOrd> NumAlgebraic for Complex<T>
+impl<T: AlgebraicField<Real = T> + PartialOrd> NumAlgebraic for Complex<T>
 where
     Complex<T>: Num<Real = T>,
     for<'a> &'a T: AddMulSubDiv<Output = T>,
@@ -504,6 +504,35 @@ where
         let fac = (len / half.abs_sqr()).sqrt(); // sqrt eval 2
         half * fac
     }
+    #[inline(always)]
+    fn abs(&self) -> Self::Real {
+        // `ComplexFloat` in `num_complex` uses hypot.
+        // Due to the trait bounds, I have to do it by sqrt(), which has slightly worse behavior.
+        // This is 2x as fast as hypot. In most cases abs_sqr() should be sufficient though.
+        self.abs_sqr().sqrt()
+    }
+    #[inline(always)]
+    fn sign(&self) -> Self {
+        let a = self.abs_sqr();
+        if a.is_zero() {
+            // assume it's a "real 0"
+            Complex::new(self.re.sign(), self.im.clone())
+        } else {
+            self.clone() / a.sqrt()
+        }
+    }
+    #[inline(always)]
+    fn copysign(&self, sign: &Self) -> Self {
+        let (a, b) = (self.abs_sqr(), sign.abs_sqr());
+        if b.is_zero() { a.sqrt().into() } else { sign.clone() * (a / b).sqrt() }
+    }
+}
+
+// NumElementary implementation with very few conditionals (only based on zero check)
+impl<T: NumElementary + AlgebraicField<Real = T> + PartialOrd> NumElementary for Complex<T>
+where
+    for<'a> &'a T: AddMulSubDiv<Output = T>,
+{
     /// Computes the principal value of the cube root of `self`.
     ///
     /// This function has one branch cut:
@@ -550,35 +579,6 @@ where
             Self::from_polar(r.cbrt(), theta / three)
         }
     }
-    #[inline(always)]
-    fn abs(&self) -> Self::Real {
-        // `ComplexFloat` in `num_complex` uses hypot.
-        // Due to the trait bounds, I have to do it by sqrt(), which has slightly worse behavior.
-        // This is 2x as fast as hypot. In most cases abs_sqr() should be sufficient though.
-        self.abs_sqr().sqrt()
-    }
-    #[inline(always)]
-    fn sign(&self) -> Self {
-        let a = self.abs_sqr();
-        if a.is_zero() {
-            // assume it's a "real 0"
-            Complex::new(self.re.sign(), self.im.clone())
-        } else {
-            self.clone() / a.sqrt()
-        }
-    }
-    #[inline(always)]
-    fn copysign(&self, sign: &Self) -> Self {
-        let (a, b) = (self.abs_sqr(), sign.abs_sqr());
-        if b.is_zero() { a.sqrt().into() } else { sign.clone() * (a / b).sqrt() }
-    }
-}
-
-// NumElementary implementation with very few conditionals (only based on zero check)
-impl<T: NumElementary + AlgebraicField<Real = T> + PartialOrd> NumElementary for Complex<T>
-where
-    for<'a> &'a T: AddMulSubDiv<Output = T>,
-{
     fn sin(&self) -> Self {
         Self {
             re: self.re.sin() * self.im.cosh(),

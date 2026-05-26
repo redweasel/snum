@@ -494,6 +494,8 @@ fn test_int_functions() {
     for i in 0u32..=5u32 {
         test(core::num::Wrapping(i));
     }
+    let x = core::num::Wrapping(821048u32);
+    assert_eq!(x.abs_sqr().0, x.0.wrapping_mul(x.0));
     #[cfg(feature = "ibig")]
     {
         for i in 0u32..=5u32 {
@@ -998,6 +1000,9 @@ mod complex {
                 assert_eq!(c.pow(&_0_0i), _1_0i);
             }
             assert_eq!(_nan_nani.pow(&_0_0i), _1_0i);
+            // Gelfonds constant (isn't computed exactly, but instead as exp(pi) where pi is the best
+            // f64 representation, which is one bit too little for the correct result of e^pi)
+            assert_eq!(23.140692632779267, _0_1i.pow(&(-_0_1i * 2.0)).re);
         }
 
         #[test]
@@ -1439,17 +1444,24 @@ mod complex {
         assert_fmt_eq!(format_args!("{:#?}", _0_1i), "0.0+1.0 i");
 
         assert_fmt_eq!(format_args!("{}", _0_0i), "0+0i");
+        assert_fmt_eq!(format_args!("{}", -_0_0i), "-0-0i");
         assert_fmt_eq!(format_args!("{}", _1_0i), "1+0i");
+        assert_fmt_eq!(format_args!("{}", -_1_0i), "-1-0i");
         assert_fmt_eq!(format_args!("{}", _0_1i), "0+1i");
+        assert_fmt_eq!(format_args!("{}", -_0_1i), "-0-1i");
         assert_fmt_eq!(format_args!("{}", _1_1i), "1+1i");
         assert_fmt_eq!(format_args!("{}", _neg1_1i), "-1+1i");
         assert_fmt_eq!(format_args!("{}", -_neg1_1i), "1-1i");
         assert_fmt_eq!(format_args!("{}", _05_05i), "0.5+0.5i");
         // pretty printing
         assert_fmt_eq!(format_args!("{:#}", _0_0i), "0");
+        assert_fmt_eq!(format_args!("{:#}", -_0_0i), "0"); // pretty printing omits the zero sign, as it also omits i
         assert_fmt_eq!(format_args!("{:#}", _1_0i), "1");
+        assert_fmt_eq!(format_args!("{:#}", -_1_0i), "-1");
         assert_fmt_eq!(format_args!("{:#}", _0_1i), "i");
+        assert_fmt_eq!(format_args!("{:#}", -_0_1i), "-i");
         assert_fmt_eq!(format_args!("{:#}", _1_1i), "1+i");
+        assert_fmt_eq!(format_args!("{:#}", -_1_1i), "-1-i");
         assert_fmt_eq!(format_args!("{:#}", _neg1_1i), "-1+i");
         assert_fmt_eq!(format_args!("{:#}", -_neg1_1i), "1-i");
         assert_fmt_eq!(format_args!("{:#}", _05_05i), "0.5+0.5i");
@@ -2207,6 +2219,7 @@ mod quaternion {
         assert_fmt_eq!(format_args!("{:#?}", _neg1), "-1.0+i 0.0+j 0.0+k 0.0");
 
         assert_fmt_eq!(format_args!("{}", _0), "0+0i+0j+0k");
+        assert_fmt_eq!(format_args!("{}", -_0), "-0-0i-0j-0k");
         assert_fmt_eq!(format_args!("{}", _1), "1+0i+0j+0k");
         assert_fmt_eq!(format_args!("{}", _i), "0+1i+0j+0k");
         assert_fmt_eq!(format_args!("{}", _1i), "1+1i+0j+0k");
@@ -2217,7 +2230,9 @@ mod quaternion {
         assert_fmt_eq!(format_args!("{}", _ik / 2.0), "0+0.5i+0j+0.5k");
         // pretty printing
         assert_fmt_eq!(format_args!("{:#}", _0), "0");
+        assert_fmt_eq!(format_args!("{:#}", -_0), "0"); // pretty printing omits the zero sign, as it also omits ijk
         assert_fmt_eq!(format_args!("{:#}", _1), "1");
+        assert_fmt_eq!(format_args!("{:#}", -_1), "-1");
         assert_fmt_eq!(format_args!("{:#}", _i), "i");
         assert_fmt_eq!(format_args!("{:#}", _1i), "1+i");
         assert_fmt_eq!(format_args!("{:#}", _neg1), "-1");
@@ -3288,16 +3303,12 @@ mod rational {
         let vr = Ratio::new_raw(6.0f64, 3.0);
         let err: f64 = (vr.sqrt() - v.sqrt()).to_approx();
         assert!(err.abs() < 1e-15f64, "error {err}");
-        let err: f64 = (vr.cbrt() - v.cbrt()).to_approx();
-        assert!(err.abs() < 1e-15f64, "error {err}");
         let err: f64 = (vr.abs() - v.abs()).to_approx();
         assert!(err.abs() < 1e-15f64, "error {err}");
         assert_eq!(vr.sign(), Ratio::new_raw(1., 1.));
         // test with different representation
         let vr = Ratio::new_raw(-6.0f64, -3.0);
         let err: f64 = (vr.sqrt() - v.sqrt()).to_approx();
-        assert!(err.abs() < 1e-15f64, "error {err}");
-        let err: f64 = (vr.cbrt() - v.cbrt()).to_approx();
         assert!(err.abs() < 1e-15f64, "error {err}");
         let err: f64 = (vr.abs() - v.abs()).to_approx();
         assert!(err.abs() < 1e-15f64, "error {err}");
@@ -3306,8 +3317,6 @@ mod rational {
         let vr = Ratio::new_raw(-6.0f64, 3.0);
         let err: f64 = vr.sqrt().to_approx();
         assert!(err.is_nan(), "error {err}");
-        let err: f64 = (vr.cbrt() + v.cbrt()).to_approx();
-        assert!(err.abs() < 1e-15f64, "error {err}");
         let err: f64 = (vr.abs() - v.abs()).to_approx();
         assert!(err.abs() < 1e-15f64, "error {err}");
         assert_eq!(vr.sign(), Ratio::new_raw(-1., 1.));

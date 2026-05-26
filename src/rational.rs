@@ -813,9 +813,6 @@ where
             Ratio::new_raw((T::zero() - self.numer.clone()).sqrt(), (T::zero() - self.denom.clone()).sqrt())
         }
     }
-    fn cbrt(&self) -> Self {
-        Ratio::new_raw(self.numer.cbrt(), self.denom.cbrt())
-    }
     fn sign(&self) -> Self {
         Ratio::new(self.numer.sign(), self.denom.sign())
     }
