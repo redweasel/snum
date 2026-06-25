@@ -226,7 +226,7 @@ impl_conjugate_real!(ibig::IBig, ibig::UBig);
 /// To differentiate between float and int, use `Num::Real: Ord`, as that is not implemented for floats.
 /// To differentiate between signed and unsigned use `Num::Real: Neg<Output = Num::Real>`.
 /// To differentiate between real and complex, use `T: Num<Real = T>` and/or `Num: PartialOrd`.
-pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate {
+pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate + 'static {
     type Real: Num;
     /// characteristic of a number ring. Limited to u64. If it is bigger, or not known at compile time, it's considered 0.
     const CHAR: u64;

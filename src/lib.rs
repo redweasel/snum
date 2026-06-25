@@ -1,6 +1,6 @@
 //! This crate is a replacement for the popular `num` ecosystem.
 //! It allows much more (almost maximal) flexibility with the defined algebraic structures.
-//! Due to it's more general type handling, this crate doesn't add much weight, even though it
+//! Due to its more general type handling, this crate doesn't add much weight, even though it
 //! contains both [mod@complex] numbers and [rational] numbers. In particular there is only a few places,
 //! where things had to be defined for all available integer types and the implementations are trivially small.
 //! There is no dependence on [Copy] anywhere and nothing is limited to buildin types.
@@ -93,14 +93,14 @@ mod power;
 pub mod quaternion;
 #[cfg(feature = "rand")]
 pub mod rand;
-mod roots;
+mod solver;
 
 pub use complex::*;
 pub use float::*;
 pub use from::*;
 pub use num::*;
 pub use power::*;
-pub use roots::*;
+pub use solver::*;
 
 #[cfg(feature = "rational")]
 mod continued_fractions;

@@ -555,6 +555,31 @@ fn test_bisect() {
     assert!(res.map_or(false, |x| (x * x * x * x * x - 2.0).abs() < 2e-15), "{res:?}");
 }
 
+#[test]
+fn test_minimize() {
+    assert_eq!(minimize_golden(|x| x * x * x - x * x, -1., 1.5, 40), Ok(-1.0));
+    assert_eq!(minimize_brent(|x| x * x * x - x * x, -1., 1.5, 11, true), Ok(-1.0));
+    assert_eq!(minimize_golden(|x| (1. - x) * x * x * x - x * x, -1., 1.2, 40), Ok(-1.0));
+    assert_eq!(minimize_brent(|x| (1. - x) * x * x * x - x * x, -1., 1.2, 11, true), Ok(-1.0));
+    assert_eq!(minimize_golden(|x| (x + 1.).powi(2), -2., 1.5, 80), Ok(-1.0));
+    assert_eq!(minimize_brent(|x| (x + 1.).powi(2), -2., 1.5, 1, true), Ok(-1.0));
+    assert!((minimize_golden(|x| x * x * x - x * x, -0.1, 1.2, 40).unwrap() - 2. / 3.).abs() < 1e-8);
+    assert!((minimize_brent(|x| x * x * x - x * x, -0.1, 1.2, 13, true).unwrap() - 2. / 3.).abs() < 1e-8);
+    assert!((minimize_brent(|x| x * x * x - x * x, 0.5, 1.0, 12, true).unwrap() - 2. / 3.).abs() < 1e-8);
+    assert!((minimize_golden(|x| -1. / (0.1 + (x + 1.).powi(2)), -2., 1.5, 100).unwrap() + 1.0).abs() < 1e-9); // limited by rounding error plateu
+    assert!((minimize_brent(|x| -1. / (0.1 + (x + 1.).powi(2)), -2., 1.5, 13, true).unwrap() + 1.0).abs() < 1e-9); // slightly higher precision due to interpolation
+    // test non parabolic case (brent is much slower here)
+    assert_eq!(minimize_golden(|x| (x + 1.).powi(4), -2., 1.5, 80), Ok(-1.0));
+    assert!((minimize_brent(|x| (x + 1.).powi(4), -2., 1.5, 19, true).unwrap() + 1.).abs() < 1e-14);
+    // Test the cases where floating point precision gets high
+    assert_eq!(minimize_golden(|x| x * x, -1., 1.5, 800).map(|x| x * x), Ok(0.0));
+    assert_eq!(minimize_brent(|x| x * x, -1., 1.5, 1, true), Ok(0.0));
+    assert_eq!(minimize_brent(|x| x * x, -1.1, 1.5, 50, true), Ok(0.0));
+    assert_eq!(minimize_brent(|x| x * x, -1.2, 1.5, 50, true), Ok(0.0));
+    assert_eq!(minimize_golden(|x| x * x * x * x, -1., 1.5, 500).map(|x| x * x * x * x), Ok(0.0));
+    assert_eq!(minimize_brent(|x| x * x * x * x, -1., 1.5, 800, true).map(|x| x * x * x * x), Ok(0.0));
+}
+
 #[allow(non_upper_case_globals)]
 mod complex {
     use super::*;

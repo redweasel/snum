@@ -941,7 +941,7 @@ impl<'a, T: Num + Zero + One + Add<Output = T>, E: SqrtConst<T>> Product<&'a Sqr
 // the following is the most intuitive implementation of Num.
 // However, interpreting the extension as "imaginary unit" and implementing
 // conj etc wrt that would also work and have desirable properties wrt Euclid.
-impl<T: Num + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>, E: SqrtConst<T>> Num for SqrtExt<T, E>
+impl<T: Num + Sub<Output = T> + Mul<Output = T> + Neg<Output = T>, E: SqrtConst<T> + 'static> Num for SqrtExt<T, E>
 where
     T::Real: Num<Real = T::Real> + Add<Output = T::Real> + Mul<Output = T::Real> + Sub<Output = T::Real> + Neg<Output = T::Real>,
     Self: From<SqrtExt<T::Real, E::Real>>,
