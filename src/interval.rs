@@ -46,6 +46,25 @@ impl<T: RealNum> From<T> for Bounded<T> {
     }
 }
 
+impl<T: RealNum> From<&[T]> for Bounded<T> {
+    fn from(value: &[T]) -> Self {
+        let mut res = Self::from(value[0].clone());
+        for v in &value[1..] {
+            res = res.extend(v.clone());
+        }
+        res
+    }
+}
+impl<T: RealNum, const N: usize> From<&[T; N]> for Bounded<T> {
+    fn from(value: &[T; N]) -> Self {
+        let mut res = Self::from(value[0].clone());
+        for v in &value[1..] {
+            res = res.extend(v.clone());
+        }
+        res
+    }
+}
+
 impl<T> Bounded<T> {
     pub fn lower(&self) -> &T {
         &self.min
@@ -110,24 +129,31 @@ impl<T: RealNum> Bounded<T> {
             max: if self.max < other { self.max } else { other.clone() },
         }
     }
-    // TODO powi or fix the already existing powi to make correct bounds!
 }
-impl<T: RealNum + Sub<Output = T>> Bounded<T> {
+impl<T: RealNum> Bounded<T>
+where
+    for<'a> &'a T: Sub<Output = T>,
+{
     /// Get the width of the interval computed as *upper bound - lower bound*.
-    pub fn width(self) -> T {
-        self.max - self.min
+    pub fn width(&self) -> T {
+        &self.max - &self.min
+    }
+}
+impl<T: RealNum + One + Div<Output = T>> Bounded<T>
+where
+    for<'a> &'a T: Add<Output = T>,
+{
+    /// Get the center of the interval computed as *(upper bound + lower bound)/2*.
+    pub fn mid(&self) -> T {
+        if T::CHAR == 2 {
+            // can not divide by 2, as 1+1=0
+            self.min.clone() // as good as any really
+        } else {
+            (&self.max + &self.min) / (&T::one() + &T::one())
+        }
     }
 }
 impl<T: RealNum + Zero + Sub<Output = T> + One + Div<Output = T>> Bounded<T> {
-    /// Get the center of the interval computed as *(upper bound + lower bound)/2*.
-    pub fn mid(self) -> T {
-        if T::CHAR == 2 {
-            // can not divide by 2, as 1+1=0
-            self.min // as good as any really
-        } else {
-            (self.max + self.min) / (T::one() + T::one())
-        }
-    }
     /// Try to split the interval in the middle.
     /// Fails if one of the split intervals contains only one numeric value.
     /// If the interval is infinite, it works with the following rules:
@@ -230,7 +256,7 @@ impl<T: RealNum + Mul<Output = T>> Mul for Bounded<T> {
         ];
         // their order is unclear due to sign differences -> compute all and sort.
         // NaN values ain't allowed per construction, so the type is actually Ord.
-        corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        corners.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
         let [min, _, _, max] = corners;
         Self { min, max }
     }
@@ -262,7 +288,7 @@ impl<T: RealNum + Div<Output = T> + Zero + One + Neg<Output = T>> Div for Bounde
         ];
         // their order is unclear due to sign differences -> compute all and sort.
         // NaN values ain't allowed per construction, so the type is actually Ord.
-        corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        corners.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
         let [min, _, _, max] = corners;
         Self { min, max }
     }
@@ -315,35 +341,34 @@ impl<T: RealNum + Div<Output = T> + Zero> Div<T> for Bounded<T> {
 }
 
 macro_rules! forward_binary_impl {
-    ($mul:ident, $Mul:ident, ($($rhs:tt)+), $($deps:tt)*) => {
-        impl<'a, T: RealNum + $Mul<Output = T> $($deps)*> $Mul<$($rhs)+> for &'a Bounded<T> {
+    ($mul:ident, $Mul:ident, $mul_assign:ident, $MulAssign:ident, ($rhs:ty, $rhs2:ty), $($deps:tt)*) => {
+        impl<'a, T: RealNum + $Mul<Output = T> $($deps)*> $Mul<$rhs> for &'a Bounded<T> {
             type Output = Bounded<T>;
-            fn $mul(self, rhs: $($rhs)+) -> Self::Output {
+            fn $mul(self, rhs: $rhs) -> Self::Output {
                 self.clone().$mul(rhs.clone())
+            }
+        }
+        impl<'a, T: RealNum + $Mul<Output = T> $($deps)*> $MulAssign<$rhs> for Bounded<T> {
+            fn $mul_assign(&mut self, rhs: $rhs) {
+                take_mut::take(self, |x| x.$mul(rhs.clone()));
+            }
+        }
+        impl<'a, T: RealNum + $Mul<Output = T> $($deps)*> $MulAssign<$rhs2> for Bounded<T> {
+            fn $mul_assign(&mut self, rhs: $rhs2) {
+                take_mut::take(self, |x| x.$mul(rhs));
             }
         }
     };
 }
 
-forward_binary_impl!(add, Add, (Self),);
-forward_binary_impl!(sub, Sub, (Self),);
-forward_binary_impl!(mul, Mul, (Self),);
-forward_binary_impl!(div, Div, (Self), + Zero + One + Neg<Output = T>);
-forward_binary_impl!(add, Add, (&'a T),);
-forward_binary_impl!(sub, Sub, (&'a T),);
-forward_binary_impl!(mul, Mul, (&'a T),);
-forward_binary_impl!(div, Div, (&'a T), + Zero + Neg<Output = T>);
-
-// TODO currently Add is implemented based on Add, not &'a T: Add, so the forward doesn't work.
-// However that may cause issues with SIMD? Test in sarrays!
-/*forward_assign_impl!(
-    Bounded;
-    AddAssign, (Add), (), add_assign, add;
-    SubAssign, (Sub), (), sub_assign, sub;
-    MulAssign, (Mul), (Add, Sub), mul_assign, mul;
-    DivAssign, (Div, Add, Mul, Sub), (), div_assign, div;
-    RemAssign, (Rem), (Add, Mul, Sub, Div), (One), rem_assign, rem;
-);*/
+forward_binary_impl!(add, Add, add_assign, AddAssign, (&'a Bounded<T>, Bounded<T>),);
+forward_binary_impl!(sub, Sub, sub_assign, SubAssign, (&'a Bounded<T>, Bounded<T>),);
+forward_binary_impl!(mul, Mul, mul_assign, MulAssign, (&'a Bounded<T>, Bounded<T>),);
+forward_binary_impl!(div, Div, div_assign, DivAssign, (&'a Bounded<T>, Bounded<T>), + Zero + One + Neg<Output = T>);
+forward_binary_impl!(add, Add, add_assign, AddAssign, (&'a T, T),);
+forward_binary_impl!(sub, Sub, sub_assign, SubAssign, (&'a T, T),);
+forward_binary_impl!(mul, Mul, mul_assign, MulAssign, (&'a T, T),);
+forward_binary_impl!(div, Div, div_assign, DivAssign, (&'a T, T), + Zero + Neg<Output = T>);
 
 impl<T: RealNum + Zero> Zero for Bounded<T> {
     fn zero() -> Self {
@@ -592,7 +617,7 @@ impl<T: NumElementary<Real = T> + Zero + One + PartialOrd + Sub<Output = T> + Ne
         ];
         // their order is unclear due to sign differences -> compute all and sort.
         // NaN values ain't allowed per construction, so the type is actually Ord.
-        corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        corners.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
         let [min, _, _, max] = corners;
         Self { min, max }
     }
@@ -636,7 +661,7 @@ where
         ];
         // their order is unclear due to sign differences -> compute all and sort.
         // NaN values ain't allowed per construction, so the type is actually Ord.
-        corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        corners.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
         let [min, _, _, max] = corners;
         Bounded { min, max }
     }
@@ -687,7 +712,7 @@ impl<T: RealNum + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = 
             self.max.clone().div_rem_euclid(&rmax).0,
         ];
         // their order is unclear due to sign differences -> compute all and sort.
-        corners.sort_by(|a, b| a.partial_cmp(b).unwrap()); // TODO do something with invalid values.
+        corners.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
         let [min, _, _, max] = corners;
         let q = Self { min, max };
         let r;
@@ -798,8 +823,8 @@ where
             .zip(&tol)
             .enumerate()
             .max_by(|a, b| {
-                let aw = a.1.0.clone().width();
-                let bw = b.1.0.clone().width();
+                let aw = a.1.0.width();
+                let bw = b.1.0.width();
                 if a.1.1.is_zero() && b.1.1.is_zero() || !(&aw - &aw).is_zero() || !(&bw - &bw).is_zero() {
                     // both have tolerance zero or one is infinite -> just compare unweighted
                     aw.partial_cmp(&bw).unwrap()
@@ -814,7 +839,7 @@ where
         for _ in 0..N {
             // In here, there is no way to avoid O(N) work, as f(x) is at least O(N).
             // That means any attempt to reduce computation by using trees will not yield a significant improvment.
-            if head.bounds[i].clone().width() >= tol[i]
+            if head.bounds[i].width() >= tol[i]
                 && let Some((l, r)) = head.bounds[i].clone().split_mid()
             {
                 (a[i], b[i]) = (l, r);
@@ -886,17 +911,18 @@ where
 /// If the number type has characteristic 2 or
 /// `a <= b` doesn't hold, e.g. because one of them is NaN.
 #[cfg(feature = "std")]
-pub fn interval_roots<T: RealNum + Zero + One + Neg<Output = T> + Sub<Output = T> + Div<Output = T>>(
+pub fn interval_roots<T: RealNum + Zero + One + Sub<Output = T> + Div<Output = T>>(
     mut f: impl FnMut(&Bounded<T>) -> Bounded<T>,
     a: T,
     b: T,
     max_iter_per_root: usize,
-) -> std::vec::Vec<Bounded<T>> {
+) -> std::vec::Vec<Bounded<T>>
+where
+    for<'a> &'a T: Add<Output = T> + Sub<Output = T>,
+{
     assert!(T::CHAR != 2);
     assert!(a <= b);
-    // TODO rewrite this to use an iterator and work without std.
-    // -> perfect solution to find the first n roots.
-    // -> define max_iter_per_root as const generic, as it usually only depends on the type anyway.
+
     let zero = &T::zero();
     let init = Bounded { min: a, max: b };
     if !f(&init).contains(zero) {
@@ -936,10 +962,10 @@ pub fn interval_roots<T: RealNum + Zero + One + Neg<Output = T> + Sub<Output = T
                 let mut fmin = f(&bmin).mid();
                 let mut fmax = f(&bmax).mid();
                 if fmin < T::zero() {
-                    fmin = -fmin;
+                    fmin = T::zero() - fmin;
                 }
                 if fmax < T::zero() {
-                    fmax = -fmax;
+                    fmax = T::zero() - fmax;
                 }
                 if fmin < fmax {
                     *b = bmin;
@@ -952,7 +978,8 @@ pub fn interval_roots<T: RealNum + Zero + One + Neg<Output = T> + Sub<Output = T
     for i in (1..res.len()).rev() {
         fixup(&mut res[i]);
         if res[i - 1].max == res[i].min {
-            // TODO inefficient...
+            // This is a tradeoff. Either reallocate a new vector or do these removes.
+            // It is expected that this doesn't happen very often for regular parameters.
             res[i - 1].max = res.remove(i).max;
         }
     }
@@ -960,6 +987,54 @@ pub fn interval_roots<T: RealNum + Zero + One + Neg<Output = T> + Sub<Output = T
         fixup(&mut res[0]);
     }
     res
+}
+
+/// Find the first zero/root of a univariate function in a given interval `a <= b`.
+///
+/// Note, that if there is points where the function skips discontinuously over zero,
+/// the jump is also considered a root. This is done this way, because most functions
+/// in floating point arithmetic don't actually hit zero exactly on their roots.
+///
+/// # Panics
+/// If the number type has characteristic 2 or
+/// `a <= b` doesn't hold, e.g. because one of them is NaN.
+///
+/// If `max_iter_per_root` is too large this function can cause stackoverflows.
+/// The recursion depth is less or equal to `max_iter_per_root`.
+pub fn interval_root<T: RealNum + Zero + One + Sub<Output = T> + Div<Output = T>>(
+    mut f: impl FnMut(&Bounded<T>) -> Bounded<T>,
+    a: T,
+    b: T,
+    max_iter_per_root: usize,
+) -> Option<Bounded<T>>
+where
+    for<'a> &'a T: Add<Output = T> + Sub<Output = T>,
+{
+    assert!(T::CHAR != 2);
+    assert!(a <= b);
+    // the algorithm is trivial to implement using recursion and it is implemented using recursion,
+    // because that makes it possible to do this in no_std mode and without const generics.
+    // max_iter_per_root defines the depth of the stack directly.
+    fn rec<T: RealNum + Zero + One + Sub<Output = T> + Div<Output = T>>(
+        bound: Bounded<T>,
+        i: usize,
+        f: &mut impl FnMut(&Bounded<T>) -> Bounded<T>,
+    ) -> Option<Bounded<T>>
+    where
+        for<'a> &'a T: Add<Output = T> + Sub<Output = T>,
+    {
+        if !f(&bound).contains(&T::zero()) {
+            return None;
+        }
+        if i == 0 {
+            Some(bound)
+        } else if let Some((a, b)) = bound.clone().split_mid() {
+            rec(a, i - 1, f).or_else(|| rec(b, i - 1, f))
+        } else {
+            Some(Bounded::from(bound.mid()))
+        }
+    }
+    rec(Bounded { min: a, max: b }, max_iter_per_root, &mut f)
 }
 
 /// Compute an integral in a reliable way. This method can handle any function,
@@ -987,13 +1062,16 @@ where
         bvolume: T,
         volume: T,
     }
-    impl<T: RealNum + Zero + One + Sub<Output = T> + Div<Output = T>, const N: usize> Volume<T, N> {
+    impl<T: RealNum + Zero + One + Div<Output = T>, const N: usize> Volume<T, N>
+    where
+        for<'a> &'a T: AddMulSub<Output = T>,
+    {
         pub fn new(res: Bounded<T>, bounds: [Bounded<T>; N]) -> Self {
             let mut bvolume = T::one();
             for b in &bounds {
-                bvolume = bvolume * b.clone().width();
+                bvolume = bvolume * b.width();
             }
-            let volume = bvolume.clone() * res.clone().width();
+            let volume = &bvolume * &res.width();
             Self {
                 res,
                 bounds,
@@ -1002,14 +1080,14 @@ where
             }
         }
         pub fn mid(&self) -> [T; N] {
-            core::array::from_fn(|i| self.bounds[i].clone().mid())
+            core::array::from_fn(|i| self.bounds[i].mid())
         }
         pub fn integral(&self) -> Bounded<T> {
-            let w = self.bvolume.clone();
-            if (w.clone() - w.clone()).is_zero() {
-                self.res.clone() * w
+            let w = &self.bvolume;
+            if (w - w).is_zero() {
+                &self.res * w
             } else {
-                Bounded::from(w.clone()).extend(T::zero() - w)
+                Bounded::from(&T::zero() - w).extend(w.clone())
             }
         }
     }
@@ -1033,7 +1111,7 @@ where
     heap.push(initial);
     let mut iterations = 0;
     while iterations < max_iter
-        && res.clone().width() > tol
+        && res.width() > tol
         && let Some(vol) = heap.pop()
     {
         // replace vol by the bisected volumes
@@ -1044,7 +1122,7 @@ where
             .max_by(|a, b| {
                 // both have tolerance zero or one is infinite -> just compare unweighted
                 // can't produce new NaNs here, as the subtraction in width is ordered.
-                a.1.clone().width().partial_cmp(&b.1.clone().width()).unwrap()
+                a.1.width().partial_cmp(&b.1.width()).unwrap()
             })
             .unwrap()
             .0;
@@ -1076,7 +1154,7 @@ where
                     }
                 } else {
                     // correct the integration result (avoid infinities!)
-                    let w = res.clone().width();
+                    let w = res.width();
                     if (&w - &w).is_zero() {
                         let vol_int = vol.integral();
                         res.max = res.max - vol_int.max;
@@ -1099,7 +1177,7 @@ where
         // Non-splittable intervals are considered zero size (even though they may contain 1ulp)
         // This is done deliberately to filter out singularities.
         // if res is non finite, recalculate it now.
-        let w = res.clone().width();
+        let w = res.width();
         if !(&w - &w).is_zero() {
             res = Bounded::zero();
             for v in &heap {

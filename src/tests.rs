@@ -4593,6 +4593,10 @@ mod interval {
     fn test_intervals() {
         let x = Bounded::from(-1.01).extend(2.0);
         let y = Bounded::from(0.0).extend(1.0);
+        assert_eq!(x, (&[-1.01, 2.0]).into());
+        assert_eq!(y, (&[0.0, 1.0]).into());
+        assert_eq!(x, (&[-1.01, 2.0, 3.0][..2]).into());
+        assert_eq!(y, (&[0.0, 1.0, 3.0][..2]).into());
         assert_eq!(*x.lower(), -1.01);
         assert_eq!(*x.upper(), 2.0);
         assert_eq!(y.extend(0.5), Bounded::from(0.0).extend(1.0));
@@ -4630,18 +4634,33 @@ mod interval {
         assert!(Bounded::<i32>::one().is_one());
         assert!(!Bounded::<i32>::one().is_zero());
         assert!(!Bounded::<i32>::zero().is_one());
-        assert_eq!(x * x, Bounded::from(-2.02).extend(4.0));
-        assert_eq!(x + y, Bounded::from(-1.01).extend(3.0));
-        assert_eq!(x - y, Bounded::from(-2.01).extend(2.0));
-        assert_eq!(x / y, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
-        assert_eq!(Bounded::from(1.0) / y, Bounded::from(1.0).extend(f64::INFINITY));
-        assert_eq!(Bounded::from(-1.0) / y, Bounded::from(-f64::INFINITY).extend(-1.0));
-        assert_eq!(Bounded::from(1.0) / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
-        assert_eq!(Bounded::from(-1.0) / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
-        assert_eq!(Bounded::zero() / Bounded::zero(), Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
-        assert_eq!(Bounded::zero() / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
-        assert_eq!(x / Bounded::zero(), Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
-        assert_eq!(y / y, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+    }
+
+    #[test]
+    fn test_arithmetic() {
+        let x = Bounded::from(0.1).extend(1.0);
+        let y = Bounded::from(-0.5).extend(-0.2);
+        test_op!(x + y, Bounded::from(-0.4).extend(0.8));
+        test_op!(x - y, Bounded::from(0.1 + 0.2).extend(1.5));
+        test_op!(x * y, Bounded::from(-0.5).extend(-0.2 * 0.1));
+        test_op!(x / y, Bounded::from(-5.0).extend(-0.2));
+        let x = Bounded::from(-1.01).extend(2.0);
+        let y = Bounded::from(0.0).extend(1.0);
+        test_op!(x * x, Bounded::from(-2.02).extend(4.0));
+        test_op!(x + y, Bounded::from(-1.01).extend(3.0));
+        test_op!(x - y, Bounded::from(-2.01).extend(2.0));
+        test_op!(x / y, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        let one = Bounded::from(1.0);
+        let mone = Bounded::from(-1.0);
+        test_op!(one / y, Bounded::from(1.0).extend(f64::INFINITY));
+        test_op!(mone / y, Bounded::from(-f64::INFINITY).extend(-1.0));
+        test_op!(one / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        test_op!(mone / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        let zero = Bounded::zero();
+        test_op!(zero / zero, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        test_op!(zero / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        test_op!(x / zero, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        test_op!(y / y, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
     }
 
     #[cfg(any(feature = "std", feature = "libm"))]
@@ -4922,13 +4941,29 @@ mod interval {
     }
 
     #[test]
+    fn interval_test_root() {
+        // test finding the first zero.
+        assert_eq!(interval_root(|x| x.abs_sqr(), 0.0, 10.0, 2100), Some(Bounded::from(0.0)));
+        assert_eq!(interval_root(|x| x.abs_sqr() - 1.0, -1.0, 10.0, 2100), Some(Bounded::from(-1.0)));
+        assert_eq!(interval_root(|x| x.abs_sqr() - 1.0, 0.0, 10.0, 2100), Some(Bounded::from(1.0)));
+        assert_eq!(interval_root(|x| x.abs_sqr() - 1.0, -4.0, 10.0, 100), Some(Bounded::from(-1.0)));
+        assert_eq!(interval_root(|x| x * &(*x + 1.0) + 0.3, -10.0, 10.0, 100), None);
+        assert_eq!(
+            interval_root(|x| (x - &1.0) * (x + &1.0) * (x + &3.0) * (x - &5.0) * *x, -6.0, 6.0, 2000),
+            Some(Bounded::from(-3.0))
+        );
+        // test that zero iterations works as expected
+        assert_eq!(interval_root(|x| x.abs_sqr(), 0.0, 10.0, 0), Some(Bounded::from(0.0).extend(10.0)));
+        assert_eq!(interval_root(|x| x.abs_sqr() + 1.0, 0.0, 10.0, 0), None);
+    }
+
+    #[test]
     #[cfg(feature = "std")]
     fn interval_test_roots() {
         // very high number of iterations on all of these to allow
         // them to converge to zero exactly (and test that!)
         // In practice in some situations one would want to add
         // rounding to the functions using +1-1 to avoid e.g. denormals.
-        use core::f64;
         assert_eq!(
             interval_roots(|x| x.sin(), 0.0, 10.0, 2100),
             std::vec![
