@@ -149,6 +149,7 @@ where
             // can not divide by 2, as 1+1=0
             self.min.clone() // as good as any really
         } else {
+            // Note, this can be NaN, but it's not a Bounded<T> so that is fine here
             (&self.max + &self.min) / (&T::one() + &T::one())
         }
     }
@@ -752,12 +753,26 @@ impl<F: FloatType, T: RealNum + ApproxFloat<F>> ApproxFloat<F> for Bounded<T> {
 ///
 /// The returned value is either a point (`Ok`) or a bounded region in which multiple minima of the same quallity are found (`Err`).
 ///
+/// # Exact Requirements
+/// This function doesn't require exact bounds. It just requires the lower bound to be
+/// exact (less or equal the true lower bound) and the upper bound to be equal to the
+/// lower bound if the input is a point.
+///
 /// # Performance Optimization
-/// The call pattern for the function is `[a, b], [b, b], [b, c]`,
+/// If the bounds returned by `f` are too weak, this function will precisely search a
+/// large space to prove that it has found the global minimum. The first step towards
+/// better performance is therefore to optimize the returned bounds using additional
+/// knowledge about the mathematical function, e.g. that it is positive. A common
+/// approach is to include more inequallities by using McCormick' method to compute the
+/// final bound using linear programming. For simple multilinear functions one may instead
+/// use automatic differentiation and linear programming to compute the exact bounds.
+/// Remember, that only the lower bound is actually needed.
+///
+/// The call pattern for the function with `N=1` is `[a, b], [b, b], [b, c]`,
 /// so for optimal performance one may implement it in a way, which reuses the
 /// last upper bound as new lower bound. That is not possible with regular
 /// interval arithmetic, but when using custom implementations for the bound
-/// estimation, it can become relevant.
+/// estimation, this call pattern can become relevant.
 #[cfg(feature = "std")]
 pub fn interval_minimize<T: Field + RealNum, const N: usize>(
     mut f: impl FnMut(&[Bounded<T>; N]) -> Bounded<T>,
@@ -769,7 +784,6 @@ pub fn interval_minimize<T: Field + RealNum, const N: usize>(
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
-    assert!(ftol >= T::zero());
     assert!(tol.iter().all(|tol| tol >= &T::zero()));
     // check for NaNs in the bounds, as that invalidates the Ord implementation!
     // If there is any, return an error with the unchanged bounds immediately.
@@ -836,6 +850,7 @@ where
             .0;
         let mut a = head.bounds.clone();
         let mut b = head.bounds.clone();
+        let mut found = false;
         for _ in 0..N {
             // In here, there is no way to avoid O(N) work, as f(x) is at least O(N).
             // That means any attempt to reduce computation by using trees will not yield a significant improvment.
@@ -848,19 +863,22 @@ where
                 // ideally these computations would be combined into one as there is quite
                 // some repetition, but that is not what interval arithmetic is made for...
                 let a_res = f(&a);
-                let mid = b.clone().map(|b| Bounded::from(b.min));
+                // Note, this mid may be at some infinity. I don't know why, but choosing a
+                // more reasonable mid using split_mid has not worked for the tests.
+                // Both a.max and b.min work though.
+                let mid = a.clone().map(|b| Bounded::from(b.max));
                 let mid_res = f(&mid);
                 let b_res = f(&b);
                 // since mid is a subset of both a and b, mid_res will be a subset of both
                 // a_res and b_res, so mid_res.max will always be smaller than the other two.
-                if mid_res.upper() < &min_upper {
-                    min_upper = mid_res.upper().clone();
-                    min_upper_bounds = mid.clone();
+                if mid_res.max < min_upper {
+                    min_upper = mid_res.max;
+                    min_upper_bounds = mid;
                 }
                 // add the two parts back to the heap.
                 heap.push(Head { res: a_res, bounds: a });
                 heap.push(Head { res: b_res, bounds: b });
-                iterations += 1;
+                found = true;
                 break;
             } else {
                 // try another coordinate. Due to missing type information we can't know
@@ -872,10 +890,13 @@ where
                 }
             }
         }
-        // regularly filter the heap to remove garbage. Don't do this too often!
-        // this is only meant to reduce the memory footprint of the algorithm.
-        if iterations & 0x3FFF == 0 {
-            heap.retain(|h| h.res.lower() + &ftol < min_upper);
+        if found {
+            iterations += 1;
+            // regularly filter the heap to remove garbage. Don't do this too often!
+            // this is only meant to reduce the memory footprint of the algorithm.
+            if iterations & 0x3FFF == 0 {
+                heap.retain(|h| h.res.lower() + &ftol < min_upper);
+            }
         }
     }
     if heap.is_empty() {

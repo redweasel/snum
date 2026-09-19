@@ -109,15 +109,12 @@ impl<T: Neg<Output = T>> Neg for Complex<T> {
 
 macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
-        impl<T> $Add<Complex<T>> for Complex<T>
-        where
-            for<'a> &'a T: $Add<Output = T>, // TODO maybe shift this to be by value?
-        {
+        impl<T: $Add<Output = T>> $Add for Complex<T> {
             type Output = Complex<T>;
             fn $add(self, rhs: Complex<T>) -> Self::Output {
                 Self {
-                    re: self.re.$add(&rhs.re),
-                    im: self.im.$add(&rhs.im),
+                    re: self.re.$add(rhs.re),
+                    im: self.im.$add(rhs.im),
                 }
             }
         }
@@ -147,10 +144,10 @@ where
         }
     }
 }
-// TODO maybe use references here!
 impl<'a, T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>> Mul<&'a Complex<T>> for &'a Complex<T> {
     type Output = Complex<T>;
     fn mul(self, rhs: &'a Complex<T>) -> Self::Output {
+        // This can not be implemented using references, as that causes overflowing type recursion with SIMD.
         Complex {
             re: self.re.clone() * rhs.re.clone() - self.im.clone() * rhs.im.clone(),
             im: self.im.clone() * rhs.re.clone() + self.re.clone() * rhs.im.clone(),

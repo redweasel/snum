@@ -234,6 +234,8 @@ pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate + 'stati
     // TODO decouple characteristic from MAX value (u128). If they are different, that means the type will panic on overflow! -> optimize Rational numbers for BigInt! -> all unsigned int types have CHAR = 0
     //      -> MAX: u128 would work for types like u128 and Rational<u128>, but wouldn't work for u256 or similar.
     //      -> maybe a flag SAFE_ADD would be appropriate to indicate, that the type can not overflow, either because it wraps, or because it uses big ints.
+    /// The characteristic of the number field is the smallest positive number of copies of [One], that will sum to [Zero], or zero if it doesn't exist.
+    /// Due to this, [FromU64](crate::FromU64) doesn't work with this constant, as it becomes 0, but it does work for `CHAR - 1`.
     const CHAR: u64;
     /// real part of the number
     #[must_use]

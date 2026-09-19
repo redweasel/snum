@@ -14,13 +14,13 @@ A central objective of this crate is to only have traits which are essential, or
 
 After implementing ring and field traits, one might ask for a commutative marker trait for multiplication and addition,
 however that is explicitly not implemented, as it's not essential to a functioning type system in Rust. Algorithms
-should tell in their description if they work for commutative types only, if not obvious.
+should tell in their description whether they work for commutative types only, if not obvious.
 
 All operator implementations, which mix references and owned structs are considered bloat, as the
-real world performance benefit hasn't been demonstrated. Note that any type with expensive clone
+real world performance benefit hasn't been demonstrated. Note, that any type with expensive clone
 could just internally use `Arc` or `Cow` to make it cheap again. Usually one can already write equations
 optimal with non-mixed operations. Moreover, no crates (should) depend on having the mixed operators.
-Similarly the assign operators like `AssignAdd` are implemented based on the reference `Add` operation.
+Similarly the assign operators like `AssignAdd` are implemented based on the `Add` operation.
 This is done without cloning thanks to `take_mut`.
 
 Whenever deciding between precision and performance, the question of *what is required more frequently*
@@ -41,6 +41,7 @@ E.g. a `Ratio` with `SqrtExt` as numerator and denominator can directly be conve
 - `libm` as a replacement for `std` when using floats.
 - `quaternion` for the `Quaternion` type.
 - `rational` for the `Ratio` and `SqrtExt` types.
+- `interval` for the `Bounded` type and related algorithms.
 - `rand` for uniform, normal and unitary random distributions for complex types.
 - `bytemuck`
 - `ibig` to include trait implementations for `ibig`
@@ -49,7 +50,7 @@ E.g. a `Ratio` with `SqrtExt` as numerator and denominator can directly be conve
 ## Testing Status
 The tests from `num_complex` and `num_rational` are copied where applicable.
 In this process, bugs in their testing code have been found. The improved testing code
-is no longer fully succeeding for `num_complex` and `num_rational`.
+is stricter and no longer fully succeeds for `num_complex` and `num_rational`.
 
 Note, that it is impossible to test all combinations, which are allowed in this crate.
 There is many cases in the `rational` part, where the gcd doesn't converge (infinite loop),
@@ -70,11 +71,11 @@ Other places, like `complex` and `extension` are prone to integer overflow.
 Use custom wrappers on the int types. E.g. `enum Checked<T> { Value(T), Overflow }` to manage the overflows.
 
 #### TODOs
-- As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
+- Decide how to handle `Num::CHAR` when it is out of bounds.
 - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is `impl_zero_default!`, `impl_conjugate_real!` and `impl_euclid_field!`.
+- As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
+- Add a simple `NonNaN` type for the basic floats and ratios, which implements `Ord`.
 - Add a macro, which, based on Deref, forwards all arithmetic operations of a wrapper type automatically.
-- Hide approximation from floats for rational and sqrt types behind a feature flag (test if this is beneficial for compile times).
-- Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
 - The reference implementation need to use the non reference implementations to avoid recursive trait evaluations by SIMD types. Make sure to never do clones for nothing and use optimal operations as much as possible!
 
 License: MIT OR Apache-2.0
