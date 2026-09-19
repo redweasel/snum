@@ -14,27 +14,27 @@ pub trait FloatType:
     + PartialOrd
     + Cancel
     + Num<Real = Self>
-    + IntoDiscrete<Output = Self>
+    + IntoDiscrete<Discrete = Self>
     + Div<Output = Self>
     + Neg<Output = Self>
     + NumElementary
 {
-    /// check if the number is finite. This can often also be done by checking `(self - self).is_zero()`.
+    /// check if the number is finite. This can often also be done by checking `(self - self).is_zero()` or `!(self * T::zero()).is_zero()`.
     fn is_finite(&self) -> bool;
     /// check if the number is NaN. This can often also be done by checking `self == self`.
     fn is_nan(&self) -> bool;
-    /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
+    /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()` or `self == self && !(self * T::zero()).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
 #[cfg(not(any(feature = "std", feature = "libm")))]
 pub trait FloatType:
-    Clone + Zero + One + FromU64 + PartialOrd + Cancel + Num<Real = Self> + IntoDiscrete<Output = Self> + Div<Output = Self> + Neg<Output = Self>
+    Clone + Zero + One + FromU64 + PartialOrd + Cancel + Num<Real = Self> + IntoDiscrete<Discrete = Self> + Div<Output = Self> + Neg<Output = Self>
 {
-    /// check if the number is finite. This can often also be done by checking `(self - self).is_zero()`.
+    /// check if the number is finite. This can often also be done by checking `(self - self).is_zero()` or `!(self * T::zero()).is_zero()`.
     fn is_finite(&self) -> bool;
     /// check if the number is NaN. This can often also be done by checking `self == self`.
     fn is_nan(&self) -> bool;
-    /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()`.
+    /// check if the number is finite. This can often also be done by checking `self == self && !(self - self).is_zero()` or `self == self && !(self * T::zero()).is_zero()`.
     fn is_infinite(&self) -> bool;
 }
 
@@ -138,8 +138,7 @@ fn integer_decode_f32(f: f32) -> (i32, i16, bool, bool) {
         let c = mantissa.trailing_zeros();
         mantissa >>= c;
         exponent += c as i16;
-    }
-    else {
+    } else {
         exponent = 0;
     }
     (mantissa, exponent, finite, zero_mantissa)
@@ -166,8 +165,7 @@ fn integer_decode_f64(f: f64) -> (i64, i16, bool, bool) {
         let c = mantissa.trailing_zeros();
         mantissa >>= c;
         exponent += c as i16;
-    }
-    else {
+    } else {
         exponent = 0;
     }
     (mantissa, exponent, finite, zero_mantissa)

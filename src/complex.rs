@@ -3,7 +3,6 @@
 use crate::*;
 use core::iter::{Product, Sum};
 use core::ops::*;
-use take_mut::take;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(C)]
@@ -112,7 +111,7 @@ macro_rules! impl_add {
     ($Add:ident, $add:ident) => {
         impl<T> $Add<Complex<T>> for Complex<T>
         where
-            for<'a> &'a T: $Add<Output = T>,
+            for<'a> &'a T: $Add<Output = T>, // TODO maybe shift this to be by value?
         {
             type Output = Complex<T>;
             fn $add(self, rhs: Complex<T>) -> Self::Output {
@@ -148,6 +147,7 @@ where
         }
     }
 }
+// TODO maybe use references here!
 impl<'a, T: Clone + Add<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>> Mul<&'a Complex<T>> for &'a Complex<T> {
     type Output = Complex<T>;
     fn mul(self, rhs: &'a Complex<T>) -> Self::Output {
@@ -321,6 +321,38 @@ macro_rules! impl_mul_add {
 // MulAdd is not a special trait for the MulAdd functionallity of
 // floating point numbers, as that is quite a niche function.
 impl_mul_add!(f32, f64);
+
+impl<T: IntoDiscrete + Zero + One + Sub<Output = T>> IntoDiscrete for Complex<T>
+where
+    for<'a> &'a T: Mul<Output = T>,
+{
+    type Discrete = Complex<<T as IntoDiscrete>::Discrete>;
+    fn div_floor(&self, div: &Self) -> Self::Discrete {
+        let abs_sqr = &div.re * &div.re + &div.im * &div.im;
+        Complex {
+            re: (&self.re * &div.re + &self.im * &div.im).div_floor(&abs_sqr),
+            im: (&self.im * &div.re - &self.re * &div.im).div_floor(&abs_sqr),
+        }
+    }
+    fn floor(&self) -> Self::Discrete {
+        Complex {
+            re: self.re.floor(),
+            im: self.im.floor(),
+        }
+    }
+    fn ceil(&self) -> Self::Discrete {
+        Complex {
+            re: self.re.ceil(),
+            im: self.im.ceil(),
+        }
+    }
+    fn round(&self) -> Self::Discrete {
+        Complex {
+            re: self.re.round(),
+            im: self.im.round(),
+        }
+    }
+}
 
 impl<T: Num + Euclid + Zero + One + Neg<Output = T> + Sub<T, Output = T> + Div<T, Output = T>> Euclid for Complex<T> {
     /// Euclidean division of complex numbers, such that `|r|^2 <= |b|^2/2`

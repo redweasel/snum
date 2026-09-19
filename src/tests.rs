@@ -436,7 +436,8 @@ fn test_float_functions() {
 fn test_int_functions() {
     // just making sure all float functions are correctly forwarded (improve test coverage)
     fn test<
-        T: IntoDiscrete<Output = T>
+        T: IntoDiscrete<Discrete = T>
+            + PartialEq
             + ApproxFloat<f64>
             + Euclid
             + Num<Real = T>
@@ -449,9 +450,9 @@ fn test_int_functions() {
     >(
         x: T,
     ) {
-        assert_eq!(<T as IntoDiscrete>::ceil(&x), x);
-        assert_eq!(<T as IntoDiscrete>::floor(&x), x);
-        assert_eq!(<T as IntoDiscrete>::round(&x), x);
+        assert_eq!(x.ceil(), x);
+        assert_eq!(x.floor(), x);
+        assert_eq!(x.round(), x);
         let two = T::from_u64(2);
         if x.is_valid_euclid() {
             assert_eq!(<T as IntoDiscrete>::div_floor(&x, &two), x.clone() / two.clone());
@@ -563,14 +564,14 @@ fn test_minimize() {
     assert_eq!(minimize_brent(|x| (1. - x) * x * x * x - x * x, -1., 1.2, 11, true), Ok(-1.0));
     assert_eq!(minimize_golden(|x| (x + 1.).powi(2), -2., 1.5, 80), Ok(-1.0));
     assert_eq!(minimize_brent(|x| (x + 1.).powi(2), -2., 1.5, 1, true), Ok(-1.0));
-    assert!((minimize_golden(|x| x * x * x - x * x, -0.1, 1.2, 40).unwrap() - 2. / 3.).abs() < 1e-8);
-    assert!((minimize_brent(|x| x * x * x - x * x, -0.1, 1.2, 13, true).unwrap() - 2. / 3.).abs() < 1e-8);
-    assert!((minimize_brent(|x| x * x * x - x * x, 0.5, 1.0, 12, true).unwrap() - 2. / 3.).abs() < 1e-8);
-    assert!((minimize_golden(|x| -1. / (0.1 + (x + 1.).powi(2)), -2., 1.5, 100).unwrap() + 1.0).abs() < 1e-9); // limited by rounding error plateu
-    assert!((minimize_brent(|x| -1. / (0.1 + (x + 1.).powi(2)), -2., 1.5, 13, true).unwrap() + 1.0).abs() < 1e-9); // slightly higher precision due to interpolation
+    assert!((minimize_golden(|x| x * x * x - x * x, -0.1, 1.2, 40).unwrap() - 2. / 3f64).abs() < 1e-8);
+    assert!((minimize_brent(|x| x * x * x - x * x, -0.1, 1.2, 13, true).unwrap() - 2. / 3f64).abs() < 1e-8);
+    assert!((minimize_brent(|x| x * x * x - x * x, 0.5, 1.0, 12, true).unwrap() - 2. / 3f64).abs() < 1e-8);
+    assert!((minimize_golden(|x| -1. / (0.1 + (x + 1.).powi(2)), -2., 1.5, 100).unwrap() + 1f64).abs() < 1e-9); // limited by rounding error plateu
+    assert!((minimize_brent(|x| -1. / (0.1 + (x + 1.).powi(2)), -2., 1.5, 13, true).unwrap() + 1f64).abs() < 1e-9); // slightly higher precision due to interpolation
     // test non parabolic case (brent is much slower here)
     assert_eq!(minimize_golden(|x| (x + 1.).powi(4), -2., 1.5, 80), Ok(-1.0));
-    assert!((minimize_brent(|x| (x + 1.).powi(4), -2., 1.5, 19, true).unwrap() + 1.).abs() < 1e-14);
+    assert!((minimize_brent(|x| (x + 1.).powi(4), -2., 1.5, 19, true).unwrap() + 1f64).abs() < 1e-14);
     // Test the cases where floating point precision gets high
     assert_eq!(minimize_golden(|x| x * x, -1., 1.5, 800).map(|x| x * x), Ok(0.0));
     assert_eq!(minimize_brent(|x| x * x, -1., 1.5, 1, true), Ok(0.0));
@@ -701,6 +702,26 @@ mod complex {
 
         assert_eq!(_0_0i, Zero::zero());
         assert_eq!(_1_0i, One::one());
+    }
+
+    #[test]
+    fn test_round() {
+        for i in -5..5 {
+            for j in -5..5 {
+                let c = Complex::new(i as f64 / 4., j as f64 / 4.);
+                assert_eq!(c.floor(), Complex::new(c.re.floor(), c.im.floor()));
+                assert_eq!(c.round(), Complex::new(c.re.round(), c.im.round()));
+                assert_eq!(c.ceil(), Complex::new(c.re.ceil(), c.im.ceil()));
+                for i in -5..5 {
+                    for j in -5..5 {
+                        let d = Complex::new(i as f64 / 4., j as f64 / 4.);
+                        if !d.is_zero() {
+                            assert_eq!(c.div_floor(&d), (c / d).floor());
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1700,6 +1721,16 @@ mod quaternion {
         assert_eq!(_1i, quaternion!(1.0f64 + i 1.0));
         assert_eq!(_1j, quaternion!(1.0f64 + j 1.0));
         assert_eq!(_1k, quaternion!(1.0f64 + k 1.0));
+        assert_eq!(Quaternion::imag([1, 2, 3]), quaternion!(0 + i 1 + j 2 + k 3));
+        assert_eq!(Quaternion::real(3), quaternion!(3 + i 0));
+        assert_eq!(quaternion!(4 + i 1 + j 2 + k 3).re(), 4);
+        assert!(!quaternion!(4 + i 1 + j 2 + k 3).is_unit());
+        assert!(quaternion!(0 + i 1 + j 0 + k 0).is_unit());
+        assert!(quaternion!(4.0 + i 1.0 + j 2.0 + k 3.0).is_unit());
+        assert!(!Quaternion::<f64>::zero().is_unit());
+        assert!(!Quaternion::real(1e-323).is_unit());
+        assert!(!Quaternion::real(1e-161).is_unit()); // can also not be inverted as there appears a division by zero
+        assert!(Quaternion::real(1e-150).is_unit());
     }
 
     #[cfg(any(feature = "std", feature = "libm"))]
@@ -2721,12 +2752,6 @@ mod rational {
         // alternate or not (#)
         // positive and negative
         // padding, alignment, precision
-
-        // Note, that no_std only supports the normal form a/b and
-        // will not (isn't able to) detect, when to add parenthesis.
-        // However especially in a no_std environment, the simple form
-        // is all, that is usually needed. If that isn't clear enough,
-        // one can still use the debug output.
         assert_fmt_eq!(format_args!("{}", _2), "2");
         assert_fmt_eq!(format_args!("{:+}", _2), "+2");
         assert_fmt_eq!(format_args!("{:-}", _2), "2");
@@ -3352,6 +3377,28 @@ mod rational {
         assert_eq!(vr.copysign(&Ratio::new_raw(-1., -1.)), Ratio::new_raw(-6., -3.));
     }
 
+    #[test]
+    fn test_euclid() {
+        for i in -5i64..=5 {
+            for j in -5..=5 {
+                for a in -5..=5 {
+                    for b in -5..=5 {
+                        if j != 0 && b != 0 {
+                            let x = Ratio::new(a, b);
+                            let d = Ratio::new(i, j);
+                            let (q, r) = x.div_rem_euclid(&d);
+                            assert_eq!(q * d + r, x);
+                            if i != 0 {
+                                assert!(r.is_valid_euclid());
+                                assert!(r.abs_sqr() < d.abs_sqr());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /*#[test]
     #[cfg(feature = "std")]
     fn test_to_from_str() {
@@ -3933,11 +3980,6 @@ mod extension {
 
     #[test]
     fn test_round() {
-        //assert_eq!(1i32.div_floor(&2), 0);
-        //assert_eq!((-1i32).div_floor(&2), -1);
-        //assert_eq!(1i32.div_floor(&-2), -1);
-        //assert_eq!((-1i32).div_floor(&-2), 0);
-
         assert_eq!(ZERO.ceil(), 0);
         assert_eq!(ZERO.floor(), 0);
         assert_eq!(ZERO.div_floor(&ONE), 0);
@@ -4159,16 +4201,6 @@ mod extension {
                             assert!(r.abs_sqr() < d.abs_sqr());
                         } else {
                             assert!(q.is_zero());
-                        }
-                        if j != 0 && b != 0 {
-                            let x = Ratio::new(a, b);
-                            let d = Ratio::new(i, j);
-                            let (q, r) = x.div_rem_euclid(&d);
-                            assert_eq!(q * d + r, x);
-                            if i != 0 {
-                                assert!(r.is_valid_euclid());
-                                assert!(r.abs_sqr() < d.abs_sqr());
-                            }
                         }
                     }
                 }
@@ -4549,6 +4581,588 @@ mod serde {
         let s = serde_yaml::to_string(&r).unwrap();
         let r2: SqrtExt<_, Sqrt<_, 5>> = serde_yaml::from_str(&s).unwrap();
         assert_eq!(r, r2);
+    }
+}
+
+#[cfg(feature = "interval")]
+mod interval {
+    use super::*;
+    use core::f64;
+
+    #[test]
+    fn test_intervals() {
+        let x = Bounded::from(-1.01).extend(2.0);
+        let y = Bounded::from(0.0).extend(1.0);
+        assert_eq!(*x.lower(), -1.01);
+        assert_eq!(*x.upper(), 2.0);
+        assert_eq!(y.extend(0.5), Bounded::from(0.0).extend(1.0));
+        assert_eq!(y, Bounded::from(0.0).union(Bounded::from(1.0)));
+        assert_eq!(y, Bounded::from(1.0).union(Bounded::from(0.0)));
+        assert_eq!(y, Bounded::from(0.0).extend(0.6).union(Bounded::from(1.0).extend(0.4)));
+        assert_eq!(y, Bounded::from(1.0).extend(0.0));
+        assert_eq!(x.min_const(0.0), Bounded::from(-1.01).extend(0.0));
+        assert_eq!(x.max_const(0.0), Bounded::from(0.0).extend(2.0));
+        assert_eq!(x.min_const(3.0), x);
+        assert_eq!(x.max_const(3.0), Bounded::from(3.0));
+        assert_eq!(x.min_const(-2.0), Bounded::from(-2.0));
+        assert_eq!(x.max_const(-2.0), x);
+        assert_eq!(x.max(-x), x);
+        assert_eq!(x.min(-x), -x);
+        assert_eq!(x.conj(), x);
+        assert_eq!(x.re(), x);
+        assert_eq!(x.abs_sqr(), y * 4.);
+        assert_eq!((-x).abs_sqr(), y * 4.);
+        assert!(!y.is_unit());
+        assert!(!x.is_unit());
+        assert_eq!(x * x, x * 2.);
+        assert_eq!(-(x * -x), x * 2.);
+        assert_eq!(-x * -x, x * 2.);
+        assert_eq!(-(-x * x), x * 2.);
+        assert!((y + 1.0).is_unit());
+        assert!((y - 2.0).is_unit());
+        assert_eq!(-x, Bounded::from(1.01).extend(-2.0));
+        assert_eq!(Bounded::zero(), x * 0.0);
+        assert_eq!(Bounded::one(), x * 0.0 + 1.0);
+        assert_eq!(-(x / -10.0), x / 10.0);
+        assert_eq!(Bounded::from(1.0).extend(2.0), (y + 2.0) - 1.0);
+        assert_eq!(Bounded::from(-1.0).extend(1.0), &(&(&y * &-2.0) + &2.0) - &1.0);
+        assert!(Bounded::<i32>::zero().is_zero());
+        assert!(Bounded::<i32>::one().is_one());
+        assert!(!Bounded::<i32>::one().is_zero());
+        assert!(!Bounded::<i32>::zero().is_one());
+        assert_eq!(x * x, Bounded::from(-2.02).extend(4.0));
+        assert_eq!(x + y, Bounded::from(-1.01).extend(3.0));
+        assert_eq!(x - y, Bounded::from(-2.01).extend(2.0));
+        assert_eq!(x / y, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        assert_eq!(Bounded::from(1.0) / y, Bounded::from(1.0).extend(f64::INFINITY));
+        assert_eq!(Bounded::from(-1.0) / y, Bounded::from(-f64::INFINITY).extend(-1.0));
+        assert_eq!(Bounded::from(1.0) / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        assert_eq!(Bounded::from(-1.0) / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        assert_eq!(Bounded::zero() / Bounded::zero(), Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        assert_eq!(Bounded::zero() / x, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        assert_eq!(x / Bounded::zero(), Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        assert_eq!(y / y, Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+    }
+
+    #[cfg(any(feature = "std", feature = "libm"))]
+    #[test]
+    fn test_float_intervals() {
+        use core::f64;
+
+        let x = Bounded::from(-1.01).extend(2.0);
+        let y = Bounded::from(0.0).extend(1.0);
+        assert_eq!((x * x).sqrt(), y * 2.);
+        assert_eq!(x.abs_sqr().sqrt(), y * 2.);
+        assert_eq!(x.abs(), y * 2.);
+        assert_eq!((-x).abs(), y * 2.);
+        assert_eq!(x.copysign(&y), x.max_const(0.));
+        assert_eq!((-x).copysign(&y), x.max_const(0.));
+        assert_eq!(x.copysign(&-y), -x.max_const(0.));
+        assert_eq!((-x).copysign(&-y), -x.max_const(0.));
+        assert_eq!(x.copysign(&x), x.union(-x));
+        assert_eq!((-x).copysign(&x), x.union(-x));
+        assert_eq!(x.cbrt(), Bounded::from((-1.01).cbrt()).extend(2.0.cbrt()));
+        assert_eq!(x.asinh(), Bounded::from((-1.01).asinh()).extend(2.0.asinh()));
+        assert_eq!(x.tanh(), Bounded::from((-1.01).tanh()).extend(2.0.tanh()));
+        assert_eq!(x.atan(), Bounded::from((-1.01).atan()).extend(2.0.atan()));
+        assert_eq!(x.sinh(), Bounded::from((-1.01).sinh()).extend(2.0.sinh()));
+        assert_eq!(x.exp(), Bounded::from((-1.01).exp()).extend(2.0.exp()));
+        assert_eq!(x.exp_m1(), Bounded::from((-1.01).exp_m1()).extend(2.0.exp_m1()));
+        assert_eq!(x.cosh(), Bounded::from(1.0).extend(2.0.cosh()));
+        assert_eq!((-x).cosh(), Bounded::from(1.0).extend(2.0.cosh()));
+        assert_eq!(x.sqrt(), Bounded::from(0.0).extend(2.0.sqrt()));
+        assert_eq!(x.ln(), Bounded::from(f64::NEG_INFINITY).extend(2.0.ln()));
+        assert_eq!(y.ln_1p(), Bounded::from(0.0).extend(2.0.ln()));
+        assert_eq!(y.ln(), Bounded::from(f64::NEG_INFINITY).extend(0.0));
+        assert_eq!(
+            x.asin(),
+            Bounded::from(-core::f64::consts::FRAC_PI_2).extend(core::f64::consts::FRAC_PI_2)
+        );
+        assert_eq!(x.acos(), Bounded::from(0.0).extend(core::f64::consts::PI));
+        assert_eq!(y.asin(), Bounded::from(0.0).extend(core::f64::consts::FRAC_PI_2));
+        assert_eq!(y.acos(), Bounded::from(core::f64::consts::FRAC_PI_2).extend(0.0));
+        assert_eq!(x.tan(), Bounded::from(f64::NEG_INFINITY).extend(f64::INFINITY));
+        assert_eq!(y.tan(), Bounded::from(0.0).extend(1.0.tan()));
+        assert_eq!(
+            x.asin(),
+            Bounded::from(-core::f64::consts::FRAC_PI_2).extend(core::f64::consts::FRAC_PI_2)
+        );
+        assert_eq!(x.acos(), Bounded::from(0.0).extend(core::f64::consts::PI));
+        assert_eq!(x.atanh(), Bounded::from(f64::NEG_INFINITY).extend(f64::INFINITY));
+        assert_eq!(
+            x.atan2(&y),
+            Bounded::from(-core::f64::consts::FRAC_PI_2).extend(core::f64::consts::FRAC_PI_2)
+        );
+        assert_eq!(y.atan2(&x), Bounded::from(0.0).extend(core::f64::consts::PI));
+        assert_eq!((-y).atan2(&x), Bounded::from(-core::f64::consts::PI).extend(-0.0));
+        let z = Bounded::from(-1.6).extend(1.7);
+        assert_eq!(z.sin(), Bounded::from(-1.).extend(1.));
+        assert_eq!(z.cos(), Bounded::from((1.7).cos()).extend(1.));
+        let z = Bounded::from(-1.6).extend(1.5);
+        assert_eq!(z.sin(), Bounded::from(-1.).extend((1.5).sin()));
+        assert_eq!(z.cos(), Bounded::from((1.6).cos()).extend(1.));
+        let z = Bounded::from(1.6).extend(4.8);
+        assert_eq!(z.sin(), Bounded::from(-1.).extend((1.6).sin()));
+        assert_eq!(z.cos(), Bounded::from((4.8).cos()).extend(-1.));
+        let z = Bounded::from(-3.).extend(4.);
+        assert_eq!(z.sin(), Bounded::from(-1.).extend(1.));
+        assert_eq!(z.cos(), Bounded::from(-1.).extend(1.));
+        let z = Bounded::from(-3.).extend(1.);
+        assert_eq!(z.tan(), Bounded::from(-f64::INFINITY).extend(f64::INFINITY));
+        // No negative values are allowed in .pow so they are cut off, even if the exponent is an integer!
+        assert_eq!(x.pow(&Bounded::from(1.0)), x.max_const(0.0));
+        assert_eq!(x.pow(&Bounded::from(2.0)), (x * x).max_const(0.0));
+        assert!(
+            (x.pow(&Bounded::from(3.0)).upper() - (x * x * x).max_const(0.0).upper()).abs() < 2e-15,
+            "{} != {}",
+            x.pow(&Bounded::from(3.0)),
+            (x * x * x).max_const(0.0)
+        );
+        assert_eq!(x.pow(&Bounded::from(1.0).extend(2.0)), (x.union(x * x)).max_const(0.0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_nan_panic() {
+        let _ = Bounded::from(f64::NAN);
+    }
+    #[test]
+    fn test_nan() {
+        let a = Bounded::from(0.0);
+        assert_eq!(a, a.extend(f64::NAN));
+    }
+
+    #[test]
+    fn test_round() {
+        use super::rational::*;
+        let __0 = 0i64;
+        let __1 = 1i64;
+        assert_eq!(Bounded::from(_1_3).extend(_NEG1_3).ceil(), Bounded::from(1).extend(0));
+        assert_eq!(Bounded::from(_1_3).extend(_NEG1_3).floor(), Bounded::from(-1).extend(0));
+        assert_eq!(Bounded::from(_1_3).extend(_NEG1_3).round(), Bounded::from(0));
+
+        assert_eq!(Bounded::from(_2_3).extend(_NEG2_3).ceil(), Bounded::from(1).extend(0));
+        assert_eq!(Bounded::from(_2_3).extend(_NEG2_3).floor(), Bounded::from(-1).extend(0));
+        assert_eq!(Bounded::from(_2_3).extend(_NEG2_3).round(), Bounded::from(-1).extend(1));
+
+        assert_eq!(Bounded::from(_1_2).extend(_NEG1_2).ceil(), Bounded::from(1).extend(0));
+        assert_eq!(Bounded::from(_1_2).extend(_NEG1_2).floor(), Bounded::from(-1).extend(0));
+        assert_eq!(Bounded::from(_1_2).extend(_NEG1_2).round(), Bounded::from(-1).extend(1));
+
+        assert_eq!(Bounded::from(1).ceil(), Bounded::from(1));
+        assert_eq!(Bounded::from(1).floor(), Bounded::from(1));
+        assert_eq!(Bounded::from(1).round(), Bounded::from(1));
+
+        for i in -4..4 {
+            for i2 in -2..2 {
+                let i = Bounded::from(i as f64).extend(i2 as f64);
+                for j in -10..10 {
+                    let j = Bounded::from(j as f64);
+                    assert_eq!((i / j).floor(), i.div_floor(&j));
+                    assert_eq!((j / i).floor(), j.div_floor(&i));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_euclid() {
+        assert_eq!(
+            Bounded::from(2).extend(3).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0), Bounded::from(2).extend(3))
+        );
+        assert_eq!(
+            Bounded::from(2).extend(3).div_rem_euclid(&Bounded::from(-7).extend(-8)),
+            (Bounded::from(0), Bounded::from(2).extend(3))
+        );
+        assert_eq!(
+            Bounded::from(4).extend(6).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0), Bounded::from(4).extend(6))
+        );
+        assert_eq!(
+            Bounded::from(-3).extend(-1).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(-1), Bounded::from(4).extend(7))
+        );
+        assert_eq!(
+            Bounded::from(-3).extend(0).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(-1).extend(0), Bounded::from(0).extend(8))
+        );
+        assert_eq!(
+            Bounded::from(4).extend(7).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0).extend(1), Bounded::from(0).extend(7))
+        );
+        assert_eq!(
+            Bounded::from(4).extend(7).div_rem_euclid(&Bounded::from(-7).extend(-8)),
+            (Bounded::from(0).extend(-1), Bounded::from(0).extend(7))
+        );
+        assert_eq!(
+            Bounded::from(9).extend(10).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(1), Bounded::from(9).extend(10) - Bounded::from(7).extend(8))
+        );
+        assert_eq!(
+            Bounded::from(16).extend(18).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(2), Bounded::from(16).extend(18) - Bounded::from(7).extend(8) * 2)
+        );
+        assert_eq!(
+            Bounded::from(0).extend(6).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0), Bounded::from(0).extend(6))
+        );
+        assert_eq!(
+            Bounded::from(0).extend(7).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0).extend(1), Bounded::from(0).extend(7))
+        );
+        assert_eq!(
+            Bounded::from(0).extend(8).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0).extend(1), Bounded::from(0).extend(8))
+        );
+        assert_eq!(
+            Bounded::from(0).extend(9).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0).extend(1), Bounded::from(0).extend(8))
+        );
+        assert_eq!(
+            Bounded::from(6).extend(9).div_rem_euclid(&Bounded::from(7).extend(8)),
+            (Bounded::from(0).extend(1), Bounded::from(0).extend(8))
+        );
+        // test division by zero with floats
+        assert_eq!(
+            Bounded::from(2.).extend(3.).div_rem_euclid(&Bounded::from(-1.).extend(1.)),
+            (Bounded::from(-f64::INFINITY).extend(f64::INFINITY), Bounded::from(0.).extend(1.))
+        );
+        assert_eq!(
+            Bounded::from(2.).extend(3.).div_rem_euclid(&Bounded::from(-0.).extend(1.)),
+            (Bounded::from(-f64::INFINITY).extend(f64::INFINITY), Bounded::from(0.).extend(1.))
+        );
+        assert_eq!(
+            Bounded::from(2.).extend(3.).div_rem_euclid(&Bounded::from(-1.).extend(0.)),
+            (Bounded::from(-f64::INFINITY).extend(f64::INFINITY), Bounded::from(0.).extend(1.))
+        );
+        assert_eq!(
+            Bounded::from(2.).extend(3.).div_rem_euclid(&Bounded::from(-1.).extend(-0.)),
+            (Bounded::from(-f64::INFINITY).extend(-2.0), Bounded::from(0.).extend(1.))
+        );
+        assert_eq!(
+            Bounded::from(2.).extend(3.).div_rem_euclid(&Bounded::from(0.).extend(1.)),
+            (Bounded::from(2.).extend(f64::INFINITY), Bounded::from(0.).extend(1.))
+        );
+        for i in -5i64..=5 {
+            for j in -5i64..=5 {
+                for a in -5i64..=5 {
+                    for b in -5i64..=5 {
+                        if a.abs().max(b.abs()) < i.abs().max(j.abs()) {
+                            continue;
+                        }
+                        //println!("{i} {j} {a} {b}");
+                        let x = Bounded::from(a).extend(b);
+                        let d = Bounded::from(i).extend(j);
+                        if d.contains(&0) {
+                            continue;
+                        }
+                        let (q, r) = x.div_rem_euclid(&d);
+                        // for integers this is a bit off, so only test inclusion
+                        assert!((q * d + r).contains_bounded(&x), "{x} / {d}, {q} * {d} + {r} = {x}");
+                        if i != 0 || j != 0 {
+                            assert!(r.is_valid_euclid(), "({x})/({d}) -> ({q}, {r}) [numer={}, denom={}]", x * d, d.abs_sqr());
+                            // Due to the way it works for integers (assuming they are floats) this needs to be <= instead of <
+                            assert!(
+                                r.abs_sqr().upper() <= d.abs_sqr().upper(),
+                                "({x})/({d}) -> ({q}, {r}) [numer={}, denom={}]",
+                                x * d,
+                                d.abs_sqr()
+                            );
+                        } else {
+                            assert!(q.is_zero());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_split() {
+        for s in [-1., 1.] {
+            let test = |a, b, mid| {
+                let bounds = (Bounded::from(s * a).extend(s * mid), Bounded::from(s * mid).extend(s * b));
+                assert_eq!(
+                    Bounded::split_mid(Bounded::from(s * a).extend(s * b)),
+                    Some(if s > 0.0 { bounds } else { (bounds.1, bounds.0) })
+                );
+            };
+            test(0.0, 1.0, 0.5);
+            test(0.0, f64::INFINITY, 1.0);
+            test(1.0, f64::INFINITY, 3.0);
+            test(2.0, f64::INFINITY, 5.0);
+            test(-1.5, f64::INFINITY, 1.0);
+            test(-f64::INFINITY, f64::INFINITY, 0.0);
+        }
+        assert_eq!(
+            Bounded::split_mid(Bounded::from(10u64).extend(16u64)),
+            Some((Bounded::from(10u64).extend(13u64), Bounded::from(13u64).extend(16u64)))
+        );
+    }
+
+    #[test]
+    fn test_approx_float() {
+        // extensive testing of the scales for floats
+        for i in -1000..1000 {
+            let x = 2f64.powi(i);
+            let b = Bounded::from_approx(x, x / 2.).unwrap();
+            assert!(b.contains(&x));
+            assert!(b.width() <= x / 2.);
+            let x2: f64 = b.to_approx();
+            assert_eq!(x2, x); // roundtrip should be exact.
+        }
+        // not extensively testing, just checking that it works with different types.
+        #[cfg(feature = "rational")]
+        {
+            let b: Bounded<Ratio<i64>> = Bounded::from_approx(core::f64::consts::PI, 1e-4).unwrap();
+            let pi = Ratio::from_approx(core::f64::consts::PI, 1e-4).unwrap();
+            assert!(b.contains(&pi));
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn interval_test_roots() {
+        // very high number of iterations on all of these to allow
+        // them to converge to zero exactly (and test that!)
+        // In practice in some situations one would want to add
+        // rounding to the functions using +1-1 to avoid e.g. denormals.
+        use core::f64;
+        assert_eq!(
+            interval_roots(|x| x.sin(), 0.0, 10.0, 2100),
+            std::vec![
+                Bounded::from(0.0),
+                Bounded::from(core::f64::consts::PI),
+                Bounded::from(core::f64::consts::TAU),
+                Bounded::from(core::f64::consts::PI * 3.)
+            ]
+        );
+        assert_eq!(
+            interval_roots(|x| (x - &1.0) * (x + &1.0) * (x + &3.0) * (x - &5.0) * *x, -6.0, 6.0, 2000),
+            std::vec![
+                Bounded::from(-3.0),
+                Bounded::from(-1.0),
+                Bounded::from(0.0),
+                Bounded::from(1.0),
+                Bounded::from(5.0)
+            ]
+        );
+        assert_eq!(
+            interval_roots(|x| (x - &1.0) * (x + &1.0) * (x + &3.0) * (x - &5.0) * *x, -6.0, 6.0, 2000),
+            std::vec![
+                Bounded::from(-3.0),
+                Bounded::from(-1.0),
+                Bounded::from(0.0),
+                Bounded::from(1.0),
+                Bounded::from(5.0)
+            ]
+        );
+        assert_eq!(
+            interval_roots(|_| Bounded::from(0.0), -6.0, 6.0, 60),
+            std::vec![Bounded::from(-6.0).extend(6.0)]
+        );
+        assert_eq!(interval_roots(|_| Bounded::from(1.0), -6.0, 6.0, 60), std::vec![]);
+        // test infinite bounds
+        assert_eq!(
+            interval_roots(|_| Bounded::from(0.0), -f64::INFINITY, f64::INFINITY, 60),
+            std::vec![Bounded::from(-f64::INFINITY).extend(f64::INFINITY)]
+        );
+        assert_eq!(interval_roots(|_| Bounded::from(1.0), -f64::INFINITY, f64::INFINITY, 60), std::vec![]);
+        assert_eq!(
+            interval_roots(|x| x.abs_sqr() - 1.0, -f64::INFINITY, f64::INFINITY, 60),
+            std::vec![-Bounded::one(), Bounded::one()]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_global_minimize() {
+        // test interval arithmetic minimizer..
+        // ... on quadratic function
+        for r in [5., f64::INFINITY] {
+            let res = interval_minimize(|[x]| (x + &1.).abs_sqr(), [Bounded::from(-r).extend(r)], [1e-8], 0.0, 60);
+            let res = res.unwrap();
+            assert!((res[0] + 1.).abs() < 1e-8, "{res:?} != -1");
+            // this one is waaay slower due to bad bounds
+            let res = interval_minimize(
+                |[x]| (x + &2.).abs_sqr() + x.abs_sqr(),
+                [Bounded::from(-r).extend(r)],
+                [1e-8],
+                0.0,
+                100000,
+            );
+            let res = res.unwrap();
+            assert!((res[0] + 1.).abs() < 1e-8, "{res:?} != -1");
+        }
+        // ... on the Beale function
+        let res = interval_minimize(
+            |[x, y]| (&(x * y) - x + 1.5).abs_sqr() + (&(x * &y.abs_sqr()) - x + 2.25).abs_sqr() + (&(x * &y.powu(3)) - x + 2.625).abs_sqr(),
+            [Bounded::from(-4.5).extend(4.5); 2],
+            [1e-14; 2],
+            0.0,
+            2000,
+        );
+        let res = res.unwrap();
+        assert!((res[0] - 3.).abs() < 1e-14 && (res[1] - 0.5).abs() < 1e-14, "{res:?} != [3, 0.5]");
+        // ... on a perturbed version of Himmelblau's function
+        let himmelblau = |[x, y]: &[Bounded<f64>; 2]| (&x.abs_sqr() + y - 11.).abs_sqr() + (x + &y.abs_sqr() - 7.).abs_sqr() - (x + y) * 1e-10;
+        let res = interval_minimize(himmelblau, [Bounded::from(-6.).extend(6.); 2], [1e-10; 2], 0.0, 2000);
+        // It should be almost exactly [3, 2], just shifted a little bit towards ++ because of the linear term.
+        let res = res.unwrap();
+        assert!((res[0] - 3.).abs() < 1e-8 && (res[1] - 2.).abs() < 1e-8, "{res:?} != [3, 2]");
+        // also test without the tolerance -> it will error, but it will also be close!
+        let res = interval_minimize(himmelblau, [Bounded::from(-6.).extend(6.); 2], [0.0; 2], 0.0, 2000);
+        // It should be almost exactly [3, 2], just shifted a little bit towards ++ because of the linear term.
+        let res = res.unwrap_err();
+        assert!(res[0].contains(&3.) && res[1].contains(&2.), "{res:?} != [3, 2]");
+        // similarly with NaN in the bounds it should error as well
+        let _ = interval_minimize(himmelblau, [unsafe { Bounded::raw(0., f64::NAN) }; 2], [0.0; 2], 0.0, 20).unwrap_err();
+        // ... on Eggholder function
+        let res = interval_minimize(
+            |[x, y]| {
+                let y = y + &47.;
+                -y * (x / &2. + y).abs().sqrt().sin() - x * &(x - &y).abs().sqrt().sin()
+            },
+            [Bounded::from(-512.).extend(512.); 2],
+            [1e-4; 2],
+            1e-5,
+            10000,
+        );
+        let res: [f64; 2] = res.unwrap();
+        assert!(
+            (res[0] - 512.).abs() < 1e-4 && (res[1] - 404.2319).abs() < 2e-4,
+            "{res:?} != [512, 404.2319]"
+        );
+        // ... Rosenbrock function for n=2,3,4,5 (higher dimensions take too long for an unoptimized test)
+        fn test_rosenbrock<const N: usize>() {
+            // test infinite bounds as well. For this it is important, that the function is written in a way,
+            // that will give correct results for infinities. E.g. x^2 - x is not ok as it will give +-inf for inf.
+            // the rosenbrock function is strictly positive, so it is compatible with infinities.
+            for r in [6., f64::INFINITY] {
+                let res = interval_minimize(
+                    |x| {
+                        let mut r = Bounded::from(0.0);
+                        for i in 0..N - 1 {
+                            r = r + (x[i + 1] - x[i].abs_sqr()).abs_sqr() * 100. + (x[i] - 1.).abs_sqr();
+                        }
+                        r
+                    },
+                    [Bounded::from(-r).extend(r); N],
+                    [1e-8; N],
+                    1e-16,
+                    1000 * 3.powi(N as i64),
+                );
+                let res = res.unwrap();
+                assert!(res.iter().all(|x| (x - 1.0).abs() < 1e-8), "{res:?} != [1,..,1]");
+            }
+        }
+        test_rosenbrock::<2>();
+        test_rosenbrock::<3>();
+        test_rosenbrock::<4>();
+        test_rosenbrock::<5>();
+        test_rosenbrock::<6>();
+        // I stop here to not bloat the test performance too much,
+        // but I have tested it up to 14
+        //test_rosenbrock::<14>();
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_integrate() {
+        // testing integrals of x, x^2, log(x), sign(x), xy, xyz
+        let (i, bound) = interval_integral(|x| x[0], [Bounded::from(-1.0).extend(1.0)], 1e-3, 10000);
+        assert_eq!(i, 0.0);
+        assert!(bound.contains(&0.0), "solution not in {bound}");
+        assert!(bound.width() <= 1e-3, "too much error in {bound}");
+        let (i, bound) = interval_integral(|x| x[0].abs_sqr(), [Bounded::from(-1.0).extend(1.0)], 1e-3, 10000);
+        assert!(bound.contains(&(2.0 / 3.0)), "solution not in {bound}");
+        assert!(bound.contains(&i), "solution {i} not in {bound}");
+        assert!(bound.width() <= 1e-3, "too much error in {bound}");
+        assert!((i - 2.0 / 3.0).abs() < 1e-6, "solution {i} is bad");
+        // next test an unbounded function at 0, where subnormals occur!
+        let (i, bound) = interval_integral(|x| x[0].ln(), [Bounded::from(0.0).extend(1.0)], 1e-3, 10000);
+        assert!(bound.contains(&-1.0), "solution not in {bound}");
+        assert!(bound.contains(&i), "solution {i} not in {bound}");
+        assert!((i + 1.0).abs() < 1e-6, "solution {i} is bad (bound {bound})");
+        assert!(bound.width() <= 1e-3, "too much error in {bound}");
+        // test infinite integrals
+        let (i, bound) = interval_integral(
+            |x| Bounded::one() / (x[0].abs_sqr() + 1.0),
+            [Bounded::from(1.0).extend(f64::INFINITY)],
+            1e-3,
+            10000,
+        );
+        assert!(bound.contains(&core::f64::consts::FRAC_PI_4), "solution not in {bound}");
+        assert!(bound.contains(&i), "solution {i} not in {bound}");
+        assert!((i - core::f64::consts::FRAC_PI_4).abs() < 1e-4, "solution {i} is bad");
+        assert!(bound.width() <= 1e-3, "too much error in {bound}");
+        let (i, bound) = interval_integral(
+            |x| Bounded::one() / (x[0].abs_sqr() + 1.0),
+            [Bounded::from(-f64::INFINITY).extend(f64::INFINITY)],
+            2e-3,
+            30000,
+        );
+        assert!(bound.contains(&core::f64::consts::PI), "solution not in {bound}");
+        assert!(bound.contains(&i), "solution {i} not in {bound}");
+        assert!((i - core::f64::consts::PI).abs() < 1e-6, "solution {i} is bad");
+        assert!(bound.width() <= 2e-3, "too much error in {bound}");
+    }
+
+    #[test]
+    fn test_string_formatting() {
+        // Test:
+        // :b :o :x, :X, :?
+        // alternate or not (#)
+        // padding, alignment, precision
+        let x = Bounded::from(-1.01).extend(2.0);
+        let y = Bounded::from(0).extend(1);
+        let _3 = Bounded::from(3);
+        assert_fmt_eq!(format_args!("{}", _3), "3");
+        assert_fmt_eq!(format_args!("{:+}", _3), "+3");
+        assert_fmt_eq!(format_args!("{:-}", _3), "3");
+        assert_fmt_eq!(format_args!("{}", -_3), "-3");
+        assert_fmt_eq!(format_args!("{:+}", -_3), "-3");
+        assert_fmt_eq!(format_args!("{}", x), "{-1.01,2}");
+        assert_fmt_eq!(format_args!("{}", y), "{0,1}");
+        assert_fmt_eq!(format_args!("{:b}", _3), "11");
+        assert_fmt_eq!(format_args!("{:#b}", _3), "0b11");
+        assert_fmt_eq!(format_args!("{:+b}", _3), "+11");
+        assert_fmt_eq!(format_args!("{:+#b}", _3), "+0b11");
+        assert_fmt_eq!(format_args!("{:b}", y), "{0,1}");
+        assert_fmt_eq!(format_args!("{:#b}", y), "{0b0,0b1}");
+        assert_fmt_eq!(format_args!("{:+b}", y), "{+0,+1}");
+        assert_fmt_eq!(format_args!("{:+#b}", y), "{+0b0,+0b1}");
+        assert_fmt_eq!(format_args!("{:10b}", y), "     {0,1}");
+        assert_fmt_eq!(format_args!("{:10b}", _3), "        11");
+        assert_fmt_eq!(format_args!("{:#10b}", _3), "      0b11");
+        assert_fmt_eq!(format_args!("{:+10b}", _3), "       +11");
+        assert_fmt_eq!(format_args!("{:->10b}", y), "-----{0,1}");
+        assert_fmt_eq!(format_args!("{:#10b}", y), " {0b0,0b1}");
+        assert_fmt_eq!(format_args!("{:010b}", y), "     {0,1}"); // ignore 0 prefix
+        assert_fmt_eq!(format_args!("{:#010b}", y), " {0b0,0b1}");
+        assert_fmt_eq!(format_args!("{:07}", y), "  {0,1}");
+        assert_fmt_eq!(format_args!("{:7}", y), "  {0,1}");
+        assert_fmt_eq!(format_args!("{:<7}", y), "{0,1}  ");
+        assert_fmt_eq!(format_args!("{:^7}", y), " {0,1} ");
+        assert_fmt_eq!(format_args!("{:^8}", y), " {0,1}  ");
+
+        assert_fmt_eq!(format_args!("{:.2e}", x), "{-1.01e0,2.00e0}");
+        assert_fmt_eq!(format_args!("{:#.2e}", x), "{-1.01e0,2.00e0}");
+        assert_fmt_eq!(format_args!("{:+.2e}", x), "{-1.01e0,+2.00e0}");
+        assert_fmt_eq!(format_args!("{:e}", x * 1e9), "{-1.01e9,2e9}");
+        assert_fmt_eq!(format_args!("{:+e}", x * 1e9), "{-1.01e9,+2e9}");
+        assert_fmt_eq!(format_args!("{:.2e}", x * 1e-9), "{-1.01e-9,2.00e-9}");
+        assert_fmt_eq!(format_args!("{:#.2e}", x * 1e-9), "{-1.01e-9,2.00e-9}");
+        assert_fmt_eq!(format_args!("{:+.2e}", x * 1e-9), "{-1.01e-9,+2.00e-9}");
+        assert_fmt_eq!(format_args!("{:20.2e}", x), "    {-1.01e0,2.00e0}");
+        assert_fmt_eq!(format_args!("{:#20.2e}", x), "    {-1.01e0,2.00e0}");
+        assert_fmt_eq!(format_args!("{:+20.2e}", x), "   {-1.01e0,+2.00e0}");
+        assert_fmt_eq!(format_args!("{:20e}", x * 1e9), "       {-1.01e9,2e9}");
+        assert_fmt_eq!(format_args!("{:+20e}", x * 1e9), "      {-1.01e9,+2e9}");
+        assert_fmt_eq!(format_args!("{:20.2e}", x * 1e-9), "  {-1.01e-9,2.00e-9}");
+        assert_fmt_eq!(format_args!("{:#20.2e}", x * 1e-9), "  {-1.01e-9,2.00e-9}");
+        assert_fmt_eq!(format_args!("{:+20.2e}", x * 1e-9), " {-1.01e-9,+2.00e-9}");
     }
 }
 

@@ -74,8 +74,7 @@
 //!
 //! ### TODOs
 //! - `Zero`, `Conjugate` and `Euclid` should have derive macros just like `Clone`, currently there is [impl_zero_default!], [impl_conjugate_real!], [impl_euclid_field!] and [impl_num_wrapper!].
-//! - Add string parsing for complex and rational types (and hide it behind a feature flag to avoid bloat)
-//! - As an improvement, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
+//! - As an improvement to `Complex`, implement a `Gaussian` type for integral complex numbers, which uses canceling to avoid overflows.
 //! - Add a simple NonNaN type for the basic floats and ratios.
 
 #![no_std]
@@ -85,8 +84,10 @@ extern crate std;
 
 mod complex;
 mod float;
-mod fmt;
+pub mod fmt;
 mod from;
+#[cfg(feature = "interval")]
+pub mod interval;
 mod num;
 mod power;
 #[cfg(feature = "quaternion")]
@@ -113,6 +114,9 @@ pub mod rational;
 pub use continued_fractions::*;
 
 // global imports for docs and tests
+#[cfg(feature = "interval")]
+#[allow(unused_imports)]
+use self::interval::*;
 #[cfg(feature = "quaternion")]
 #[allow(unused_imports)] // they are for the docs
 use self::quaternion::*;
@@ -128,24 +132,24 @@ macro_rules! forward_assign_impl {
         $(impl<T: Clone $(+ $Cancel)? $(+ $One)? $(+ $Add2<Output = T>)*> $AddAssign for $type<T>
             where for<'a> &'a T: $Add<Output = T> $(+ $Add3<Output = T>)* $(+ $Mul<Output = T>)? {
             fn $add_assign(&mut self, rhs: $type<T>) {
-                take(self, |x| x.$add(rhs));
+                take_mut::take(self, |x| x.$add(rhs));
             }
         }
         impl<T: Clone $(+ $Cancel)? + $Add<Output = T> $(+ $Add3<Output = T>)* $(+ $Add2<Output = T>)*> $AddAssign<T> for $type<T> {
             fn $add_assign(&mut self, rhs: T) {
-                take(self, |x| x.$add(rhs));
+                take_mut::take(self, |x| x.$add(rhs));
             }
         }
         impl<'a, T: Clone $(+ $Cancel)? $(+ $One)? + $Add<Output = T> $(+ $Add3<Output = T>)* $(+ $Add2<Output = T>)*> $AddAssign<&'a $type<T>> for $type<T>
         $(where for<'b> &'b T: $Mul<Output = T>)? {
             fn $add_assign(&mut self, rhs: &'a $type<T>) {
-                take(self, |x| (&x).$add(rhs));
+                take_mut::take(self, |x| (&x).$add(rhs));
             }
         }
         impl<'a, T: Clone $(+ $Cancel)? $(+ $Add2<Output = T>)*> $AddAssign<&'a T> for $type<T>
         where for<'b> &'b T: $Add<Output = T> $(+ $Add3<Output = T>)* {
             fn $add_assign(&mut self, rhs: &'a T) {
-                take(self, |x| (&x).$add(rhs));
+                take_mut::take(self, |x| (&x).$add(rhs));
             }
         })+
     };

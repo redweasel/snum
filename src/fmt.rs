@@ -128,6 +128,56 @@ impl<T: fmt::Display> fmt::Display for Parenthesis<T> {
 }
 
 #[inline(never)]
+pub fn pad_args(f: &mut fmt::Formatter<'_>, buf_args: fmt::Arguments<'_>) -> fmt::Result {
+    if f.width().is_none() && !f.sign_plus() {
+        return write!(f, "{buf_args}");
+    }
+    // pad by doing the formatting twice
+    let mut dec = NumberDetector::new("", "");
+    write!(&mut dec, "{buf_args}")?;
+    let width = dec.width();
+
+    // The `width` field is more of a `min-width` parameter at this point.
+    let min = f.width().unwrap_or(0);
+    let align = f.align().unwrap_or(fmt::Alignment::Right);
+    if width >= min {
+        // We're over the minimum width, so then we can just write the bytes.
+        write!(f, "{buf_args}")
+    } else {
+        // Otherwise, the sign and prefix goes after the padding
+        // drop the fill character to work around precision and wrong default alignment
+        // (can't access the fill character from the public API)
+        let fill = f.fill();
+        let l = (min - width) / 2;
+        let r = (min - width).div_ceil(2);
+        match align {
+            fmt::Alignment::Right => {
+                for _ in 0..l + r {
+                    f.write_char(fill)?;
+                }
+                write!(f, "{buf_args}")?;
+            }
+            fmt::Alignment::Center => {
+                for _ in 0..l {
+                    f.write_char(fill)?;
+                }
+                write!(f, "{buf_args}")?;
+                for _ in 0..r {
+                    f.write_char(fill)?;
+                }
+            }
+            fmt::Alignment::Left => {
+                write!(f, "{buf_args}")?;
+                for _ in 0..l + r {
+                    f.write_char(fill)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[inline(never)]
 pub fn pad_expr(f: &mut fmt::Formatter<'_>, prefix: &str, buf_args: fmt::Arguments<'_>) -> fmt::Result {
     if f.width().is_none() && !f.sign_plus() {
         return write!(f, "{buf_args}");
@@ -531,8 +581,8 @@ mod rational {
                                 f,
                                 self.value.is_zero(),
                                 self.ext.is_one(),
-                                format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.value, prec = prec),
-                                format_args!(concat!("{:#.prec$", $fmt_str, "}"), self.ext, prec = prec),
+                                format_args!(concat!("{:#.1$", $fmt_str, "}"), self.value, prec),
+                                format_args!(concat!("{:#.1$", $fmt_str, "}"), self.ext, prec),
                                 format_args!(concat!("{:#", $fmt_str, "}"), E::sqr()),
                                 $prefix,
                             )
@@ -541,8 +591,8 @@ mod rational {
                                 f,
                                 self.value.is_zero(),
                                 self.ext.is_one(),
-                                format_args!(concat!("{:.prec$", $fmt_str, "}"), self.value, prec = prec),
-                                format_args!(concat!("{:.prec$", $fmt_str, "}"), self.ext, prec = prec),
+                                format_args!(concat!("{:.1$", $fmt_str, "}"), self.value, prec),
+                                format_args!(concat!("{:.1$", $fmt_str, "}"), self.ext, prec),
                                 format_args!(concat!("{:", $fmt_str, "}"), E::sqr()),
                                 $prefix,
                             )
@@ -582,4 +632,81 @@ mod rational {
     impl_formatting!(UpperHex, "0x", "X");
     impl_formatting!(LowerExp, "", "e");
     impl_formatting!(UpperExp, "", "E");
+}
+
+#[cfg(feature = "interval")]
+mod interval {
+    use super::*;
+    use crate::interval::Bounded;
+
+    #[inline(never)]
+    fn fmt_interval(f: &mut fmt::Formatter<'_>, lower_args: fmt::Arguments<'_>, upper_args: fmt::Arguments<'_>) -> fmt::Result {
+        // Need to use some bracket, which differentiates it from arrays and tuples.
+        // -> {0,1} and <0,1> are the only ones left
+        let mut lower_dec = NumberDetector::new("+-/", "");
+        write!(&mut lower_dec, "{lower_args}")?;
+        let mut upper_dec = NumberDetector::new("+-/", "");
+        write!(&mut upper_dec, "{upper_args}")?;
+        let lower_sign = if f.sign_plus() && lower_dec.sign() != Some("-") { "+" } else { "" };
+        let upper_sign = if f.sign_plus() && upper_dec.sign() != Some("-") { "+" } else { "" };
+        pad_args(f, format_args!("{{{lower_sign}{lower_args},{upper_sign}{upper_args}}}"))
+    }
+
+    // string conversions
+    macro_rules! impl_display {
+        ($Display: ident, $s: literal, $pre: literal) => {
+            impl<T: fmt::$Display + PartialEq> fmt::$Display for Bounded<T> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    if self.lower() == self.upper() {
+                        return self.lower().fmt(f);
+                    }
+                    if f.width() == None {
+                        // fastpath
+                        f.write_char('{')?;
+                        self.lower().fmt(f)?;
+                        f.write_char(',')?;
+                        self.upper().fmt(f)?;
+                        return f.write_char('}');
+                    }
+                    return if let Some(prec) = f.precision() {
+                        if f.alternate() {
+                            fmt_interval(
+                                f,
+                                format_args!(concat!("{:#.1$", $s, "}"), self.lower(), prec),
+                                format_args!(concat!("{:#.1$", $s, "}"), self.upper(), prec),
+                            )
+                        } else {
+                            fmt_interval(
+                                f,
+                                format_args!(concat!("{:.1$", $s, "}"), self.lower(), prec),
+                                format_args!(concat!("{:.1$", $s, "}"), self.upper(), prec),
+                            )
+                        }
+                    } else {
+                        if f.alternate() {
+                            fmt_interval(
+                                f,
+                                format_args!(concat!("{:#", $s, "}"), self.lower()),
+                                format_args!(concat!("{:#", $s, "}"), self.upper()),
+                            )
+                        } else {
+                            fmt_interval(
+                                f,
+                                format_args!(concat!("{:", $s, "}"), self.lower()),
+                                format_args!(concat!("{:", $s, "}"), self.upper()),
+                            )
+                        }
+                    };
+                }
+            }
+        };
+    }
+
+    impl_display!(Display, "", "");
+    impl_display!(LowerExp, "e", "");
+    impl_display!(UpperExp, "E", "");
+    impl_display!(LowerHex, "x", "0x");
+    impl_display!(UpperHex, "X", "0x");
+    impl_display!(Octal, "o", "0o");
+    impl_display!(Binary, "b", "0b");
 }

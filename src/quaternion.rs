@@ -6,7 +6,6 @@ use crate::complex::*;
 use crate::num::*;
 use core::iter::{Product, Sum};
 use core::ops::*;
-use take_mut::take;
 
 /// A quaternion defined as `q = re + im_i * i + im_j * j + im_k * k`.
 /// The quaternion group is defined by the rules `i^2=j^2=k^2=-1, ij=k`.

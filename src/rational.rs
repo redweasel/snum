@@ -6,7 +6,6 @@ use core::{
     iter::{Product, Sum},
     ops::*,
 };
-use take_mut::take;
 
 use crate::{Complex, FromU64};
 use crate::{DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDiscrete, float::ApproxFloat, num::*};
@@ -16,6 +15,13 @@ use crate::{DevelopContinuedFraction, FloatType, IntoContinuedFraction, IntoDisc
 /// and some arithmetic operations, depending on the usecase.
 ///
 /// Dividing by zero is handled without panics with Inf, -Inf and NaN just like for floats.
+///
+/// # Examples
+/// ```rust
+/// use snum::rational::*;
+/// println!("{}", Ratio::new(1, 2));
+/// assert_eq!(Ratio::new(1, 2) / Ratio::new(1, 3), Ratio::new(3, 2));
+/// ```
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct Ratio<T> {
@@ -87,9 +93,10 @@ where
 }
 impl<T: Cancel + IntoDiscrete + PartialOrd> IntoDiscrete for Ratio<T>
 where
-    <T as IntoDiscrete>::Output: Add<Output = <T as IntoDiscrete>::Output> + Div<Output = <T as IntoDiscrete>::Output>,
+    for<'a> &'a T: AddMul<Output = T>,
+    <T as IntoDiscrete>::Discrete: Into<T> + Add<Output = <T as IntoDiscrete>::Discrete> + Div<Output = <T as IntoDiscrete>::Discrete>,
 {
-    type Output = T;
+    type Discrete = T;
     /// rounds to an integer by rounding towards -∞
     ///
     /// Panics if the rational is non finite.
@@ -145,6 +152,10 @@ where
             // round down
             if ord == Ordering::Greater { t2 } else { t1 }
         }
+    }
+    fn ceil(&self) -> Self::Discrete {
+        let f = self.floor();
+        if self == &f.clone().into() { f } else { f + Self::Discrete::one() }
     }
 }
 impl<T: Zero + Euclid + PartialEq> Ratio<T> {

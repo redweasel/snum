@@ -106,8 +106,11 @@ impl<T: Cancel + IntoDiscrete> DevelopContinuedFraction<T> {
     }
 }
 
-impl<T: Cancel + IntoDiscrete> Iterator for DevelopContinuedFraction<T> {
-    type Item = <T as IntoDiscrete>::Output;
+impl<T: Cancel + IntoDiscrete> Iterator for DevelopContinuedFraction<T>
+where
+    <T as IntoDiscrete>::Discrete: Clone + Into<T>,
+{
+    type Item = <T as IntoDiscrete>::Discrete;
     fn next(&mut self) -> Option<Self::Item> {
         if self.numer.is_zero() {
             // finished
@@ -115,7 +118,7 @@ impl<T: Cancel + IntoDiscrete> Iterator for DevelopContinuedFraction<T> {
         }
         let i = self.numer.div_floor(&self.denom);
         (self.numer, self.denom) = {
-            let r = self.numer.clone() - T::from(i.clone()) * self.denom.clone();
+            let r = self.numer.clone() - i.clone().into() * self.denom.clone();
             if r.is_zero() {
                 (T::zero(), T::zero()) // end
             } else {

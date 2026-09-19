@@ -6,7 +6,6 @@ use core::hash::Hash;
 use core::iter::{Product, Sum};
 use core::marker::PhantomData;
 use core::ops::*;
-use take_mut::take;
 
 use crate::rational::Ratio;
 use crate::*;
@@ -250,7 +249,7 @@ impl<T: Zero + Num, E: SqrtConst<T>> SqrtExt<T, E> {
 
 impl<T: SafeDiv, E: SqrtConst<T>> SqrtExt<T, E>
 where
-    Self: SafeDiv + IntoDiscrete<Output = T> + PartialOrd,
+    Self: SafeDiv + IntoDiscrete<Discrete = T> + PartialOrd,
 {
     /// Returns the (positive) fundamental unit != 1 derived from [One] in `T`: x+y√N (satisfies `(x^2 - y^2 N).is_unit()`, `x,y > 0`)
     /// The number x-y√N (the generalized conjugate) is the inverse and all other units are integer powers of this one.
@@ -370,13 +369,19 @@ where
     }
 }
 
-impl<T: RealNum + Zero + One + IntoDiscrete + Sub<Output = T>, E: SqrtConst<T>> IntoDiscrete for SqrtExt<T, E>
+impl<T: Clone + RealNum + Zero + IntoDiscrete + Sub<Output = T>, E: SqrtConst<T>> IntoDiscrete for SqrtExt<T, E>
 where
-    <T as IntoDiscrete>::Output: fmt::Debug + IntoDiscrete<Output = <T as IntoDiscrete>::Output> + Zero + Div<Output = <T as IntoDiscrete>::Output>,
-    T: Cancel,
+    for<'a> &'a T: AddMulSub<Output = T>,
+    <T as IntoDiscrete>::Discrete: Clone
+        + fmt::Debug
+        + PartialEq
+        + IntoDiscrete<Discrete = <T as IntoDiscrete>::Discrete>
+        + Into<T>
+        + Zero
+        + Div<Output = <T as IntoDiscrete>::Discrete>,
 {
-    type Output = T;
-    fn div_floor(&self, div: &Self) -> Self::Output {
+    type Discrete = T;
+    fn div_floor(&self, div: &Self) -> Self::Discrete {
         if div.ext.is_zero() {
             if div.value.is_zero() {
                 panic!("division by zero");
@@ -394,7 +399,7 @@ where
         // now compute floor((a+b√N)/d) = floor(a/d) + floor(b√N/d) + k with 0 <= k <= 1 (already lost a 1)
         let value = numer.value.div_floor(&denom); // floor(a/d)
         if numer.ext.is_zero() {
-            T::from(value)
+            value.into()
         } else {
             // floor(a/d) + floor(b/d)floor(√N) <= n <= a/d + b/d √N < n+1 <= ceil(a/d) + ceil(b/d) ceil(√N) <= floor(a/d)+1 + (floor(b/d)+1) (floor(√N)+1)
             // -> compute n by bisection directly, n = a, n+1 = b
@@ -413,7 +418,7 @@ where
             if denom < T::zero() {
                 (a, b) = (b, a);
             }
-            let two = <T as IntoDiscrete>::Output::one() + <T as IntoDiscrete>::Output::one();
+            let two = <T as IntoDiscrete>::Discrete::one() + <T as IntoDiscrete>::Discrete::one();
             // bisection invariants
             debug_assert!(numer > Self::from(denom.clone() * a.clone().into()), "{numer:?} vs {denom:?}*{a:?}");
             debug_assert!(numer < Self::from(denom.clone() * b.clone().into()), "{numer:?} vs {denom:?}*{b:?}");
@@ -436,8 +441,8 @@ where
             (if denom < T::zero() { b } else { a }).into()
         }
     }
-    fn floor(&self) -> Self::Output {
-        let value = T::from(self.value.floor());
+    fn floor(&self) -> Self::Discrete {
+        let value = self.value.floor().into();
         let simple_floor = self.ext.clone() * E::floor() + value.clone();
         if self.ext.is_zero() || self.ext.is_one() || simple_floor != simple_floor {
             simple_floor
@@ -457,7 +462,7 @@ where
             let mut a = v.clone().floor();
             // Note, if ext is a non finite float, this will result in an endless loop!
             let mut b = (v + abs_ext.clone() + E::floor() - T::one()).floor();
-            let two = <T as IntoDiscrete>::Output::one() + <T as IntoDiscrete>::Output::one();
+            let two = <T as IntoDiscrete>::Discrete::one() + <T as IntoDiscrete>::Discrete::one();
             loop {
                 let n = ((a.clone() + b.clone()) / two.clone()).floor(); // this way to also handle float
                 if n != a && n != b {
@@ -476,7 +481,14 @@ where
             if positive { value + a.into() } else { value - b.into() }
         }
     }
-    fn round(&self) -> Self::Output {
+    fn ceil(&self) -> Self::Discrete {
+        if self.is_integral() {
+            self.value.clone()
+        } else {
+            self.floor() + Self::Discrete::one()
+        }
+    }
+    fn round(&self) -> Self::Discrete {
         let x1 = self.floor();
         let x2 = x1.clone() + T::one();
 
@@ -869,23 +881,23 @@ macro_rules! forward_assign_impl {
         $(impl<T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign for SqrtExt<T, E>
             where for<'a> &'a T: Sized $(+ $Add<Output = T>)+ {
             fn $add_assign(&mut self, rhs: SqrtExt<T, E>) {
-                take(self, |x| x.$add(rhs));
+                take_mut::take(self, |x| x.$add(rhs));
             }
         }
         impl<T: Num + Add<Output = T> + Sub<Output = T>, E: SqrtConst<T>> $AddAssign<T> for SqrtExt<T, E>
             where for<'a> &'a T: Add<Output = T> $(+ $Add<Output = T>)+ {
             fn $add_assign(&mut self, rhs: T) {
-                take(self, |x| x.$add(rhs));
+                take_mut::take(self, |x| x.$add(rhs));
             }
         }
         impl<'a, T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign<&'a SqrtExt<T, E>> for SqrtExt<T, E> {
             fn $add_assign(&mut self, rhs: &'a SqrtExt<T, E>) {
-                take(self, |x| (&x).$add(rhs));
+                take_mut::take(self, |x| (&x).$add(rhs));
             }
         }
         impl<'a, T: Num + Add<Output = T> + Sub<Output = T> $(+ $Owned)* $(+ $Add<Output = T>)+, E: SqrtConst<T>> $AddAssign<&'a T> for SqrtExt<T, E> {
             fn $add_assign(&mut self, rhs: &'a T) {
-                take(self, |x| (&x).$add(rhs));
+                take_mut::take(self, |x| (&x).$add(rhs));
             }
         })+
     };

@@ -150,10 +150,16 @@ where
 /// If the type `T` is complex, this method will do a line search from `a` to `b`.
 ///
 /// See: https://en.wikipedia.org/wiki/Golden-section_search
-pub fn minimize_golden<T: PartialEq + Zero + One, Q: PartialOrd>(f: impl Fn(&T) -> Q, mut a: T, mut b: T, max_iter: usize) -> Result<T, T>
+pub fn minimize_golden<T: Num + Zero + One, Q: PartialOrd>(f: impl Fn(&T) -> Q, mut a: T, mut b: T, max_iter: usize) -> Result<T, T>
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
+    // The field must support x * 5 / 8 for at least one element.
+    assert!(
+        T::CHAR == 0 || T::CHAR > 8,
+        "The finite field with characteristic {} is too small",
+        T::CHAR
+    );
     if a != a || b != b {
         return Err(a + b); // NaN values detected
     }
@@ -217,6 +223,12 @@ pub fn minimize_brent<T: Field + RealNum>(f: impl Fn(&T) -> T, mut a: T, mut b: 
 where
     for<'a> &'a T: AddMulSubDiv<Output = T>,
 {
+    // The field must support x * 2^6
+    assert!(
+        T::CHAR == 0 || T::CHAR > 1 << 6,
+        "The finite field with characteristic {} is too small",
+        T::CHAR
+    );
     if a != a || b != b {
         return Err(a + b); // NaN values detected
     }

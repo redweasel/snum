@@ -229,6 +229,11 @@ impl_conjugate_real!(ibig::IBig, ibig::UBig);
 pub trait Num: Clone + Debug + From<Self::Real> + PartialEq + Conjugate + 'static {
     type Real: Num;
     /// characteristic of a number ring. Limited to u64. If it is bigger, or not known at compile time, it's considered 0.
+    // TODO change this to CHAR-1 as the characteristic can never be 1, but the correct number is not representable for u64, i64, usize, isize, u128, i128. (would make everything except u128, i128 correct)
+    //      -> consider if a function .characteristic() would be appropriate. Would it use self?
+    // TODO decouple characteristic from MAX value (u128). If they are different, that means the type will panic on overflow! -> optimize Rational numbers for BigInt! -> all unsigned int types have CHAR = 0
+    //      -> MAX: u128 would work for types like u128 and Rational<u128>, but wouldn't work for u256 or similar.
+    //      -> maybe a flag SAFE_ADD would be appropriate to indicate, that the type can not overflow, either because it wraps, or because it uses big ints.
     const CHAR: u64;
     /// real part of the number
     #[must_use]
@@ -547,71 +552,75 @@ impl<T: Num + Cancel + Div<Output = T>> SafeDiv for T {
     }
 }
 
-pub trait IntoDiscrete: PartialEq + From<Self::Output> {
-    type Output: Clone + Zero + One;
+pub trait IntoDiscrete: One {
+    type Discrete;
     /// Divide `self/div` and round down, essentially computing `floor(self/div)` without remainder.
     #[must_use]
-    fn div_floor(&self, div: &Self) -> Self::Output;
-    /// Round to an integer by rounding towards -∞
+    fn div_floor(&self, div: &Self) -> Self::Discrete;
+    /// Round to an integer by rounding towards -∞.
     #[must_use]
-    fn floor(&self) -> Self::Output {
-        self.div_floor(&Self::Output::one().into())
+    fn floor(&self) -> Self::Discrete {
+        self.div_floor(&Self::one())
     }
-    /// Round to an integer by rounding towards ∞
+    /// Round to an integer by rounding towards ∞.
+    ///
+    /// A typical default implementation using `Self::Discrete: Clone + Into<Self>` is:
+    /// ```ignore
+    /// fn ceil(&self) -> Self::Discrete {
+    ///     let f = self.floor();
+    ///     if self == &f.clone().into() { f } else { f + Self::Discrete::one() }
+    /// }
     #[must_use]
-    fn ceil(&self) -> Self::Output {
-        let x = self.floor();
-        if self == &Self::from(x.clone()) { x } else { x + One::one() }
-    }
+    fn ceil(&self) -> Self::Discrete;
     /// Round to the closest integer, breaking ties by rounding away from zero.
     #[must_use]
-    fn round(&self) -> Self::Output;
+    fn round(&self) -> Self::Discrete;
 }
 
 impl IntoDiscrete for f32 {
-    type Output = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
+    type Discrete = f32; // has to be f32, as impl From<i128> for f32 doesn't exist (and can't exist).
     #[inline(always)]
-    fn div_floor(&self, div: &Self) -> Self::Output {
+    fn div_floor(&self, div: &Self) -> Self::Discrete {
         f32::floor(*self / *div)
     }
     #[inline(always)]
-    fn floor(&self) -> Self::Output {
+    fn floor(&self) -> Self::Discrete {
         f32::floor(*self)
     }
     #[inline(always)]
-    fn ceil(&self) -> Self::Output {
+    fn ceil(&self) -> Self::Discrete {
         f32::ceil(*self)
     }
     #[inline(always)]
-    fn round(&self) -> Self::Output {
+    fn round(&self) -> Self::Discrete {
         f32::round(*self)
     }
 }
 impl IntoDiscrete for f64 {
-    type Output = f64;
+    type Discrete = f64;
     #[inline(always)]
-    fn div_floor(&self, div: &Self) -> Self::Output {
+    fn div_floor(&self, div: &Self) -> Self::Discrete {
         f64::floor(*self / *div)
     }
     #[inline(always)]
-    fn floor(&self) -> Self::Output {
+    fn floor(&self) -> Self::Discrete {
         f64::floor(*self)
     }
     #[inline(always)]
-    fn ceil(&self) -> Self::Output {
+    fn ceil(&self) -> Self::Discrete {
         f64::ceil(*self)
     }
     #[inline(always)]
-    fn round(&self) -> Self::Output {
+    fn round(&self) -> Self::Discrete {
         f64::round(*self)
     }
 }
 macro_rules! impl_into_discrete_int {
     ($($t:ty),+) => {
         $(impl IntoDiscrete for $t {
-            type Output = Self;
+            type Discrete = Self;
             #[inline(always)]
-            fn div_floor(&self, div: &Self) -> Self::Output {
+            fn div_floor(&self, div: &Self) -> Self::Discrete {
                 if (self >= &0) != (div >= &0) {
                     if div >= &0 {
                         self.div_euclid(*div)
@@ -624,15 +633,15 @@ macro_rules! impl_into_discrete_int {
                 }
             }
             #[inline(always)]
-            fn floor(&self) -> Self::Output {
+            fn floor(&self) -> Self::Discrete {
                 self.clone()
             }
             #[inline(always)]
-            fn ceil(&self) -> Self::Output {
+            fn ceil(&self) -> Self::Discrete {
                 self.clone()
             }
             #[inline(always)]
-            fn round(&self) -> Self::Output {
+            fn round(&self) -> Self::Discrete {
                 self.clone()
             }
         })+
@@ -643,9 +652,9 @@ impl_into_discrete_int!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128,
 macro_rules! impl_into_discrete_int {
     ($($t:ty),+) => {
         $(impl IntoDiscrete for $t {
-            type Output = Self;
+            type Discrete = Self;
             #[inline(always)]
-            fn div_floor(&self, div: &Self) -> Self::Output {
+            fn div_floor(&self, div: &Self) -> Self::Discrete {
                 use ibig::ops::DivEuclid;
                 let zero = Self::zero();
                 if div >= &zero {
@@ -656,15 +665,15 @@ macro_rules! impl_into_discrete_int {
                 }
             }
             #[inline(always)]
-            fn floor(&self) -> Self::Output {
+            fn floor(&self) -> Self::Discrete {
                 self.clone()
             }
             #[inline(always)]
-            fn ceil(&self) -> Self::Output {
+            fn ceil(&self) -> Self::Discrete {
                 self.clone()
             }
             #[inline(always)]
-            fn round(&self) -> Self::Output {
+            fn round(&self) -> Self::Discrete {
                 self.clone()
             }
         })+
@@ -880,25 +889,25 @@ macro_rules! impl_num_wrapper {
                 $Wrap(self.0.copysign(&sign.0))
             }
         }
-        impl<T: Clone + PartialEq + IntoDiscrete<Output = T>> IntoDiscrete for $Wrap<T>
+        impl<T: IntoDiscrete> IntoDiscrete for $Wrap<T>
         where
-            Self: Zero + One,
+            Self: One,
         {
-            type Output = Self;
+            type Discrete = $Wrap<T::Discrete>;
             #[inline(always)]
-            fn div_floor(&self, div: &Self) -> Self::Output {
+            fn div_floor(&self, div: &Self) -> Self::Discrete {
                 $Wrap(self.0.div_floor(&div.0))
             }
             #[inline(always)]
-            fn floor(&self) -> Self::Output {
+            fn floor(&self) -> Self::Discrete {
                 $Wrap(self.0.floor())
             }
             #[inline(always)]
-            fn ceil(&self) -> Self::Output {
+            fn ceil(&self) -> Self::Discrete {
                 $Wrap(self.0.ceil())
             }
             #[inline(always)]
-            fn round(&self) -> Self::Output {
+            fn round(&self) -> Self::Discrete {
                 $Wrap(self.0.round())
             }
         }
